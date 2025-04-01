@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Walkie-Talkie</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .walkie-container {
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            border: 8px solid #444;
+            border-radius: 15px;
+            padding: 20px;
+            width: 300px;
+            height: 550px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            position: relative;
+            overflow: hidden;
+        }
+        .antenna {
+            width: 5px;
+            height: 50px;
+            background: #555;
+            position: absolute;
+            top: -50px;
+            left: 20px;
+        }
+        .screen {
+            background-color: #0a0a0a;
+            border: 2px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            color: #0f0;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        #talkButton {
+            background-color: #ff3333;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            font-size: 18px;
+            font-weight: bold;
+            border: 5px solid #555;
+            cursor: pointer;
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #talkButton:active {
+            background-color: #cc0000;
+        }
+        .volume-wrapper {
+            position: absolute;
+            right: 10px;
+            top: 100px;
+            text-align: center;
+        }
+        .volume-control {
+            writing-mode: vertical-lr;
+            appearance: slider-vertical;
+            width: 10px;
+            height: 150px;
+            transform: rotate(180deg);
+        }
+        .volume-label {
+            color: #fff;
+            font-size: 12px;
+        }
+        #muteButton {
+            background-color: #666;
+            padding: 10px;
+            width: 80px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+        }
+        #muteButton:active {
+            background-color: #444;
+        }
+        #historyButton {
+            background-color: #666;
+            padding: 10px;
+            width: 80px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+        }
+        #historyModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #333;
+            padding: 20px;
+            border-radius: 10px;
+            color: #fff;
+            width: 80%;
+            max-width: 500px;
+        }
+        h2 {
+            color: #ffeb3b;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="walkie-container">
+        <div class="antenna"></div>
+        <h2>Mensajes:</h2>
+        <div class="screen" id="messages">
+            {% for msg in today_messages %}
+                {% if msg.text %}
+                    <div>[{{ msg.timestamp }}] - {{ msg.text }}</div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <button id="talkButton">Hablar</button>
+        <div class="volume-wrapper">
+            <span class="volume-label">100%</span>
+            <input type="range" id="volumeControl" class="volume-control" min="0" max="100" value="50">
+            <span class="volume-label">0%</span>
+        </div>
+        <button id="muteButton">Mutear</button>
+        <button id="historyButton">Historial</button>
+    </div>
+
+    <div id="historyModal">
+        <div class="modal-content">
+            <h2>Historial</h2>
+            <select id="dateSelect"></select>
+            <ul id="historyList"></ul>
+            <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io.connect('http://127.0.0.1:8080'); // Cambia según tu IP
+        const talkButton = document.getElementById('talkButton');
+        const messages = document.getElementById('messages');
+        const volumeControl = document.getElementById('volumeControl');
+        const muteButton = document.getElementById('muteButton');
+        const historyButton = document.getElementById('historyButton');
+        const historyModal = document.getElementById('historyModal');
+        const dateSelect = document.getElementById('dateSelect');
+        const historyList = document.getElementById('historyList');
+        let mediaRecorder;
+        let audioStream;
+        let recognition;
+        let isMuted = false;
+        let transcribedText = "";
+
+        // Diccionario del alfabeto aeronáutico
+        const aviationAlphabet = {
+            'a': 'Alfa', 'b': 'Bravo', 'c': 'Charlie', 'd': 'Delta', 'e': 'Echo',
+            'f': 'Foxtrot', 'g': 'Golf', 'h': 'Hotel', 'i': 'India', 'j': 'Juliett',
+            'k': 'Kilo', 'l': 'Lima', 'm': 'Mike', 'n': 'November', 'o': 'Oscar',
+            'p': 'Papa', 'q': 'Quebec', 'r': 'Romeo', 's': 'Sierra', 't': 'Tango',
+            'u': 'Uniform', 'v': 'Victor', 'w': 'Whiskey', 'x': 'X-ray', 'y': 'Yankee',
+            'z': 'Zulu'
+        };
+
+        // Función para reemplazar letras por el alfabeto aeronáutico
+        function applyAviationAlphabet(text) {
+            return text.split(' ').map(word => {
+                if (word.length === 1 && aviationAlphabet[word.toLowerCase()]) {
+                    return aviationAlphabet[word.toLowerCase()];
+                }
+                return word;
+            }).join(' ');
+        }
+
+        // Inicializar SpeechRecognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.onresult = (event) => {
+                transcribedText = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcribedText += event.results[i][0].transcript + " ";
+                }
+                const processedText = applyAviationAlphabet(transcribedText.trim());
+                messages.innerHTML = messages.innerHTML.split('\n').slice(0, -1).join('\n') + 
+                    `<div>[${new Date().toLocaleTimeString()}] - ${processedText}</div>`;
+                messages.scrollTop = messages.scrollHeight;
+            };
+            recognition.onerror = (event) => {
+                console.error('Error en reconocimiento de voz:', event.error);
+                messages.innerHTML += '<div>Error en reconocimiento de voz</div>';
+            };
+        } else {
+            console.error('SpeechRecognition no soportado en este navegador');
+            messages.innerHTML += '<div>Reconocimiento de voz no soportado</div>';
+        }
+
+        muteButton.addEventListener('click', () => {
+            isMuted = !isMuted;
+            muteButton.textContent = isMuted ? 'Desmutear' : 'Mutear';
+        });
+
+        talkButton.addEventListener('mousedown', async () => {
+            await startAudio();
+            if (mediaRecorder && mediaRecorder.state !== 'recording') {
+                mediaRecorder.start(100);
+                if (recognition) recognition.start();
+                talkButton.textContent = 'Grabando...';
+                messages.innerHTML += `<div>[${new Date().toLocaleTimeString()}] - </div>`;
+                socket.emit('start_audio');
+            }
+        });
+
+        talkButton.addEventListener('mouseup', () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                if (recognition) recognition.stop();
+                audioStream.getTracks().forEach(track => track.stop()); // Apagar micrófono
+                mediaRecorder = null;
+                audioStream = null;
+                talkButton.textContent = 'Hablar';
+                const finalText = applyAviationAlphabet(transcribedText.trim());
+                socket.emit('stop_audio', { audio: transcribedText ? null : audioBlob, text: finalText });
+                transcribedText = "";
+            }
+        });
+
+        async function startAudio() {
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+                let chunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                    chunks.push(event.data);
+                    const reader = new FileReader();
+                    reader.readAsDataURL(event.data);
+                    reader.onloadend = () => {
+                        socket.emit('audio_chunk', { audio: reader.result });
+                    };
+                };
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = () => {
+                        const finalText = applyAviationAlphabet(transcribedText.trim());
+                        socket.emit('stop_audio', { audio: reader.result, text: finalText });
+                    };
+                    chunks = [];
+                };
+            } catch (err) {
+                console.error('Error al acceder al micrófono:', err);
+                messages.innerHTML += '<div>Error de micrófono</div>';
+            }
+        }
+
+        socket.on('audio_chunk', (data) => {
+            if (!isMuted) {
+                const audio = new Audio(data.audio);
+                audio.volume = volumeControl.value / 100;
+                audio.play();
+            }
+        });
+
+        socket.on('audio_stopped', (data) => {
+            if (data.text) {
+                messages.innerHTML += `<div>[${data.timestamp}] - ${data.text}</div>`;
+                messages.scrollTop = messages.scrollHeight;
+            }
+        });
+
+        historyButton.addEventListener('click', () => {
+            historyModal.style.display = 'flex';
+            loadHistory();
+        });
+
+        function loadHistory() {
+            fetch('/').then(res => res.text()).then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const history = JSON.parse(doc.querySelector('script').textContent.match(/history = ({.*});/)[1]);
+                dateSelect.innerHTML = '';
+                for (const date in history) {
+                    const option = document.createElement('option');
+                    option.value = date;
+                    option.textContent = date;
+                    dateSelect.appendChild(option);
+                }
+                dateSelect.onchange = () => {
+                    historyList.innerHTML = '';
+                    const selectedDate = dateSelect.value;
+                    history[selectedDate].forEach(item => {
+                        const li = document.createElement('li');
+                        if (item.audio) {
+                            li.innerHTML = `<audio controls src="${item.audio}"></audio> [${item.timestamp}]`;
+                        }
+                        if (item.text) {
+                            li.innerHTML += ` - ${item.text}`;
+                        }
+                        historyList.appendChild(li);
+                    });
+                };
+                dateSelect.onchange();
+            });
+        }
+    </script>
+</body>
+</html>
