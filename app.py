@@ -1,6 +1,6 @@
 import eventlet
 eventlet.monkey_patch()  # Parchea eventlet antes de cualquier otro módulo
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import os
@@ -48,6 +48,9 @@ def index():
     with app.app_context():  # Contexto de la aplicación
         today = datetime.date.today().isoformat()
         today_messages = history.get(today, [])
+        # Redirigir a HTTPS si el servidor usa SSL y la solicitud es HTTP
+        if use_ssl and request.scheme == 'http':
+            return redirect(url_for('index', _external=True, _scheme='https'))
         return render_template('index.html', today_messages=today_messages, history=history)
 
 @app.route('/talk', methods=['POST'])
