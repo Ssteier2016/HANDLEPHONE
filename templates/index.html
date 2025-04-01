@@ -159,9 +159,9 @@
     </div>
 
     <script>
-// Conexión dinámica al socket
+        // Conexión dinámica al socket
         const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        const socketUrl = isLocal ? 'http://127.0.0.1:8080' : window.location.origin;
+        const socketUrl = isLocal ? 'https://127.0.0.1:8080' : window.location.origin;
         const socket = io.connect(socketUrl);
         console.log("Conectando al socket en:", socketUrl);
 
