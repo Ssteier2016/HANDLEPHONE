@@ -159,7 +159,12 @@
     </div>
 
     <script>
-        const socket = io.connect('http://127.0.0.1:8080'); // Cambia según tu IP
+// Conexión dinámica al socket
+        const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        const socketUrl = isLocal ? 'http://127.0.0.1:8080' : window.location.origin;
+        const socket = io.connect(socketUrl);
+        console.log("Conectando al socket en:", socketUrl);
+
         const talkButton = document.getElementById('talkButton');
         const messages = document.getElementById('messages');
         const volumeControl = document.getElementById('volumeControl');
@@ -207,7 +212,7 @@
                 }
                 const processedText = applyAviationAlphabet(transcribedText.trim());
                 messages.innerHTML = messages.innerHTML.split('\n').slice(0, -1).join('\n') + 
-                    `<div>[${new Date().toLocaleTimeString()}] - ${processedText}</div>`;
+                    `<div>[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })] - ${processedText}</div>`;
                 messages.scrollTop = messages.scrollHeight;
             };
             recognition.onerror = (event) => {
@@ -219,18 +224,29 @@
             messages.innerHTML += '<div>Reconocimiento de voz no soportado</div>';
         }
 
+        // Mantener conexión activa con Service Worker (experimental, requiere registro)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(reg => console.log('Service Worker registrado', reg))
+                .catch(err => console.error('Error al registrar Service Worker', err));
+        }
+
         muteButton.addEventListener('click', () => {
             isMuted = !isMuted;
             muteButton.textContent = isMuted ? 'Desmutear' : 'Mutear';
+            if (isMuted && audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
         });
 
         talkButton.addEventListener('mousedown', async () => {
+            if (isMuted) return; // No grabar si está muteado
             await startAudio();
             if (mediaRecorder && mediaRecorder.state !== 'recording') {
                 mediaRecorder.start(100);
                 if (recognition) recognition.start();
                 talkButton.textContent = 'Grabando...';
-                messages.innerHTML += `<div>[${new Date().toLocaleTimeString()}] - </div>`;
+                messages.innerHTML += `<div>[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })] - </div>`;
                 socket.emit('start_audio');
             }
         });
@@ -244,7 +260,7 @@
                 audioStream = null;
                 talkButton.textContent = 'Hablar';
                 const finalText = applyAviationAlphabet(transcribedText.trim());
-                socket.emit('stop_audio', { audio: transcribedText ? null : audioBlob, text: finalText });
+                socket.emit('stop_audio', { audio: audioBlob, text: finalText });
                 transcribedText = "";
             }
         });
@@ -263,7 +279,7 @@
                     };
                 };
                 mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+                    audioBlob = new Blob(chunks, { type: 'audio/webm' });
                     const reader = new FileReader();
                     reader.readAsDataURL(audioBlob);
                     reader.onloadend = () => {
