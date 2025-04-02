@@ -7,16 +7,19 @@ self.addEventListener("activate", (event) => {
 });
 
 let socket;
+let isMuted = false;
 
 function connectSocket() {
     socket = new WebSocket(self.location.origin.replace(/^http/, "ws") + "/socket.io/?EIO=4&transport=websocket");
 
     socket.onmessage = (event) => {
-        self.clients.matchAll().then((clients) => {
-            clients.forEach((client) => {
-                client.postMessage({ type: "NEW_MESSAGE", data: event.data });
+        if (!isMuted) {
+            self.clients.matchAll().then((clients) => {
+                clients.forEach((client) => {
+                    client.postMessage({ type: "NEW_MESSAGE", data: event.data });
+                });
             });
-        });
+        }
     };
 
     socket.onclose = () => {
@@ -26,7 +29,6 @@ function connectSocket() {
 
 connectSocket();
 
-// Escuchar eventos del cliente para manejar grabación de audio
 self.addEventListener("message", async (event) => {
     if (event.data.type === "START_RECORDING") {
         try {
@@ -56,5 +58,7 @@ self.addEventListener("message", async (event) => {
         if (self.mediaRecorder && self.mediaRecorder.state === "recording") {
             self.mediaRecorder.stop();
         }
+    } else if (event.data.type === "TOGGLE_MUTE") {
+        isMuted = event.data.mute;
     }
 });
