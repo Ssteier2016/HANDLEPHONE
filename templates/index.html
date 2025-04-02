@@ -146,11 +146,20 @@
         <select id="dateSelect"></select>
         <ul id="historyList"></ul>
         <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
-    </div>
-</div>
+<if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+        .then((registration) => {
+            console.log("Service Worker registrado!");
+        });
 
-    <script>
-    var socket = io.connect(window.location.origin);
+    navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data.type === "NEW_MESSAGE") {
+            let messageDiv = document.getElementById('messages');
+            messageDiv.innerHTML += `<p>${event.data.data}</p>`;
+        }
+    });
+}
+    <var socket = io.connect(window.location.origin);
     
     socket.on('new_message', function(data) {
         let messageDiv = document.getElementById('messages');
