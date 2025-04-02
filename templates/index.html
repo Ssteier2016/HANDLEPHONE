@@ -167,7 +167,7 @@
             });
         }
 
-        let socket = io.connect(window.location.origin);
+        var socket = io.connect(window.location.origin);
 
         socket.on('new_message', function(data) {
             let messageDiv = document.getElementById('messages');
