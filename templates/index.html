@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html lang="es">
+<!DOCTYPE html><html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Walkie-Talkie</title>
@@ -132,13 +131,7 @@
     <div class="walkie-container">
         <div class="antenna"></div>
         <h2>Mensajes:</h2>
-        <div class="screen" id="messages">
-            {% for msg in today_messages %}
-                {% if msg.text %}
-                    <div>[{{ msg.timestamp }}] - {{ msg.text }}</div>
-                {% endif %}
-            {% endfor %}
-        </div>
+        <div class="screen" id="messages"></div>
         <button id="talkButton">Hablar</button>
         <div class="volume-wrapper">
             <span class="volume-label">100%</span>
@@ -147,202 +140,14 @@
         </div>
         <button id="muteButton">Mutear</button>
         <button id="historyButton">Historial</button>
+    </div><div id="historyModal">
+    <div class="modal-content">
+        <h2>Historial</h2>
+        <select id="dateSelect"></select>
+        <ul id="historyList"></ul>
+        <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
     </div>
+</div>
 
-    <div id="historyModal">
-        <div class="modal-content">
-            <h2>Historial</h2>
-            <select id="dateSelect"></select>
-            <ul id="historyList"></ul>
-            <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
-        </div>
-    </div>
-
-    <script>
-        // Conexión dinámica al socket
-        const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        const socketUrl = isLocal ? 'https://127.0.0.1:8080' : window.location.origin;
-        const socket = io.connect(socketUrl);
-        console.log("Conectando al socket en:", socketUrl);
-
-        const talkButton = document.getElementById('talkButton');
-        const messages = document.getElementById('messages');
-        const volumeControl = document.getElementById('volumeControl');
-        const muteButton = document.getElementById('muteButton');
-        const historyButton = document.getElementById('historyButton');
-        const historyModal = document.getElementById('historyModal');
-        const dateSelect = document.getElementById('dateSelect');
-        const historyList = document.getElementById('historyList');
-        let mediaRecorder;
-        let audioStream;
-        let recognition;
-        let isMuted = false;
-        let transcribedText = "";
-
-        // Diccionario del alfabeto aeronáutico
-        const aviationAlphabet = {
-            'a': 'Alfa', 'b': 'Bravo', 'c': 'Charlie', 'd': 'Delta', 'e': 'Echo',
-            'f': 'Foxtrot', 'g': 'Golf', 'h': 'Hotel', 'i': 'India', 'j': 'Juliett',
-            'k': 'Kilo', 'l': 'Lima', 'm': 'Mike', 'n': 'November', 'o': 'Oscar',
-            'p': 'Papa', 'q': 'Quebec', 'r': 'Romeo', 's': 'Sierra', 't': 'Tango',
-            'u': 'Uniform', 'v': 'Victor', 'w': 'Whiskey', 'x': 'X-ray', 'y': 'Yankee',
-            'z': 'Zulu'
-        };
-
-        // Función para reemplazar letras por el alfabeto aeronáutico
-        function applyAviationAlphabet(text) {
-            return text.split(' ').map(word => {
-                if (word.length === 1 && aviationAlphabet[word.toLowerCase()]) {
-                    return aviationAlphabet[word.toLowerCase()];
-                }
-                return word;
-            }).join(' ');
-        }
-
-        // Inicializar SpeechRecognition
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.onresult = (event) => {
-                transcribedText = "";
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcribedText += event.results[i][0].transcript + " ";
-                }
-                const processedText = applyAviationAlphabet(transcribedText.trim());
-                messages.innerHTML = messages.innerHTML.split('\n').slice(0, -1).join('\n') + 
-                    `<div>[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })] - ${processedText}</div>`;
-                messages.scrollTop = messages.scrollHeight;
-            };
-            recognition.onerror = (event) => {
-                console.error('Error en reconocimiento de voz:', event.error);
-                messages.innerHTML += '<div>Error en reconocimiento de voz</div>';
-            };
-        } else {
-            console.error('SpeechRecognition no soportado en este navegador');
-            messages.innerHTML += '<div>Reconocimiento de voz no soportado</div>';
-        }
-
-        // Mantener conexión activa con Service Worker (experimental, requiere registro)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js')
-                .then(reg => console.log('Service Worker registrado', reg))
-                .catch(err => console.error('Error al registrar Service Worker', err));
-        }
-
-        muteButton.addEventListener('click', () => {
-            isMuted = !isMuted;
-            muteButton.textContent = isMuted ? 'Desmutear' : 'Mutear';
-            if (isMuted && audioStream) {
-                audioStream.getTracks().forEach(track => track.stop());
-            }
-        });
-
-        talkButton.addEventListener('mousedown', async () => {
-            if (isMuted) return; // No grabar si está muteado
-            await startAudio();
-            if (mediaRecorder && mediaRecorder.state !== 'recording') {
-                mediaRecorder.start(100);
-                if (recognition) recognition.start();
-                talkButton.textContent = 'Grabando...';
-                messages.innerHTML += `<div>[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })] - </div>`;
-                socket.emit('start_audio');
-            }
-        });
-
-        talkButton.addEventListener('mouseup', () => {
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-                if (recognition) recognition.stop();
-                audioStream.getTracks().forEach(track => track.stop()); // Apagar micrófono
-                mediaRecorder = null;
-                audioStream = null;
-                talkButton.textContent = 'Hablar';
-                const finalText = applyAviationAlphabet(transcribedText.trim());
-                socket.emit('stop_audio', { audio: audioBlob, text: finalText });
-                transcribedText = "";
-            }
-        });
-
-        async function startAudio() {
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
-                let chunks = [];
-                mediaRecorder.ondataavailable = (event) => {
-                    chunks.push(event.data);
-                    const reader = new FileReader();
-                    reader.readAsDataURL(event.data);
-                    reader.onloadend = () => {
-                        socket.emit('audio_chunk', { audio: reader.result });
-                    };
-                };
-                mediaRecorder.onstop = () => {
-                    audioBlob = new Blob(chunks, { type: 'audio/webm' });
-                    const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = () => {
-                        const finalText = applyAviationAlphabet(transcribedText.trim());
-                        socket.emit('stop_audio', { audio: reader.result, text: finalText });
-                    };
-                    chunks = [];
-                };
-            } catch (err) {
-                console.error('Error al acceder al micrófono:', err);
-                messages.innerHTML += '<div>Error de micrófono</div>';
-            }
-        }
-
-        socket.on('audio_chunk', (data) => {
-            if (!isMuted) {
-                const audio = new Audio(data.audio);
-                audio.volume = volumeControl.value / 100;
-                audio.play();
-            }
-        });
-
-        socket.on('audio_stopped', (data) => {
-            if (data.text) {
-                messages.innerHTML += `<div>[${data.timestamp}] - ${data.text}</div>`;
-                messages.scrollTop = messages.scrollHeight;
-            }
-        });
-
-        historyButton.addEventListener('click', () => {
-            historyModal.style.display = 'flex';
-            loadHistory();
-        });
-
-        function loadHistory() {
-            fetch('/').then(res => res.text()).then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const history = JSON.parse(doc.querySelector('script').textContent.match(/history = ({.*});/)[1]);
-                dateSelect.innerHTML = '';
-                for (const date in history) {
-                    const option = document.createElement('option');
-                    option.value = date;
-                    option.textContent = date;
-                    dateSelect.appendChild(option);
-                }
-                dateSelect.onchange = () => {
-                    historyList.innerHTML = '';
-                    const selectedDate = dateSelect.value;
-                    history[selectedDate].forEach(item => {
-                        const li = document.createElement('li');
-                        if (item.audio) {
-                            li.innerHTML = `<audio controls src="${item.audio}"></audio> [${item.timestamp}]`;
-                        }
-                        if (item.text) {
-                            li.innerHTML += ` - ${item.text}`;
-                        }
-                        historyList.appendChild(li);
-                    });
-                };
-                dateSelect.onchange();
-            });
-        }
-    </script>
 </body>
 </html>
