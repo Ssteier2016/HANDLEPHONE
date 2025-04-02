@@ -10,30 +10,39 @@ import base64
 import speech_recognition as sr
 from pydub import AudioSegment
 import io
+import re  # Para expresiones regulares
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
+# Archivo para guardar el historial
 HISTORY_FILE = os.path.join(os.getcwd(), "history.json")
+
+# Lista de matrículas aeronáuticas argentinas (se puede ampliar con una fuente confiable)
 MATRICULAS = [
-    "LV-ABC", "LV-XYZ", "LQA-123",  # Ejemplo de matrículas argentinas (agregar más desde una fuente confiable)
-    # Podés buscar una lista completa en sitios como ANAC Argentina y agregarla aquí
+    "LV-ABC", "LV-XYZ", "LQA-123",  # Ejemplo inicial
 ]
 
+# Expresión regular para detectar matrículas aeronáuticas
+MATRICULA_REGEX = re.compile(r"LV-[A-Z]{3}|LQ[A-Z]-\d{3}")
+
 def load_history():
+    """Carga el historial desde un archivo JSON."""
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r") as file:
             return json.load(file)
     return {}
 
 def save_history(history):
+    """Guarda el historial en un archivo JSON."""
     with open(HISTORY_FILE, "w") as file:
         json.dump(history, file, indent=4)
 
 history = load_history()
 
 def transcribe_audio(audio_data):
+    """Transcribe el audio en texto y detecta matrículas aeronáuticas."""
     try:
         recognizer = sr.Recognizer()
         audio_content = base64.b64decode(audio_data.split(",")[-1])
@@ -42,10 +51,12 @@ def transcribe_audio(audio_data):
         with sr.AudioFile("temp.wav") as source:
             audio_data = recognizer.record(source)
         text = recognizer.recognize_google(audio_data, language="es-AR")  # Español argentino
-        # Detectar matrículas aeronáuticas
-        for matricula in MATRICULAS:
-            if matricula.lower() in text.lower():
-                text = text.replace(matricula.lower(), f"**{matricula}**")
+        
+        # Detectar matrículas aeronáuticas usando regex
+        matches = MATRICULA_REGEX.findall(text.upper())
+        for match in matches:
+            text = text.replace(match, f"**{match}**")
+        
         return text
     except sr.UnknownValueError:
         return "No se pudo reconocer el audio"
@@ -57,34 +68,41 @@ def transcribe_audio(audio_data):
 
 @app.route('/')
 def index():
+    """Renderiza la página principal con el historial del día."""
     today = datetime.date.today().isoformat()
     today_messages = history.get(today, [])
     return render_template('index.html', today_messages=today_messages, history=history)
 
 @app.route('/history/<date>')
 def get_history(date):
+    """Retorna los mensajes del historial para una fecha específica."""
     messages = history.get(date, [])
     return jsonify(messages)
 
 @socketio.on('start_audio')
 def handle_start_audio():
+    """Notifica a todos los clientes que el audio ha comenzado."""
     emit('audio_stream_start', broadcast=True, include_self=False)
 
 @socketio.on('audio_chunk')
 def handle_audio_chunk(data):
+    """Recibe fragmentos de audio y los retransmite a otros clientes."""
     audio_data = data.get("audio")
-    emit('audio_chunk', {"audio": audio_data}, broadcast=True, include_self=False)
+    if audio_data:
+        emit('audio_chunk', {"audio": audio_data}, broadcast=True, include_self=False)
 
 @socketio.on('stop_audio')
 def handle_stop_audio(data):
+    """Detiene el audio, transcribe y guarda el mensaje en el historial."""
     date_key = datetime.date.today().isoformat()
     display_time = datetime.datetime.now().strftime('%H:%M')
     audio_data = data.get("audio")
-    text = transcribe_audio(audio_data) if audio_data else "Sin transcripción"
-
+    
     if not audio_data or "," not in audio_data:
         print("Error: Datos de audio inválidos o vacíos")
         return
+
+    text = transcribe_audio(audio_data) if audio_data else "Sin transcripción"
 
     if date_key not in history:
         history[date_key] = []
