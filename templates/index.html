@@ -149,5 +149,22 @@
     </div>
 </div>
 
+    <script>
+    var socket = io.connect(window.location.origin);
+    
+    socket.on('new_message', function(data) {
+        let messageDiv = document.getElementById('messages');
+        messageDiv.innerHTML += `<p>${data.timestamp}: ${data.text}</p>`;
+    });
+
+    document.getElementById('talkButton').addEventListener('mousedown', function() {
+        socket.emit('start_audio');
+    });
+
+    document.getElementById('talkButton').addEventListener('mouseup', function() {
+        socket.emit('stop_audio', { text: "Audio finalizado" });
+    });
+    </script>
+
 </body>
 </html>
