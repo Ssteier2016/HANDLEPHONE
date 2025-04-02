@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="es">
+<!DOCTYPE html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Walkie-Talkie</title>
@@ -140,40 +141,46 @@
         </div>
         <button id="muteButton">Mutear</button>
         <button id="historyButton">Historial</button>
-    </div><div id="historyModal">
-    <div class="modal-content">
-        <h2>Historial</h2>
-        <select id="dateSelect"></select>
-        <ul id="historyList"></ul>
-        <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
-<if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js')
-        .then((registration) => {
-            console.log("Service Worker registrado!");
+    </div>
+    
+    <div id="historyModal">
+        <div class="modal-content">
+            <h2>Historial</h2>
+            <select id="dateSelect"></select>
+            <ul id="historyList"></ul>
+            <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then((registration) => {
+                    console.log("Service Worker registrado!");
+                });
+
+            navigator.serviceWorker.addEventListener("message", (event) => {
+                if (event.data.type === "NEW_MESSAGE") {
+                    let messageDiv = document.getElementById('messages');
+                    messageDiv.innerHTML += `<p>${event.data.data}</p>`;
+                }
+            });
+        }
+
+        let socket = io.connect(window.location.origin);
+
+        socket.on('new_message', function(data) {
+            let messageDiv = document.getElementById('messages');
+            messageDiv.innerHTML += `<p>${data.timestamp}: ${data.text}</p>`;
         });
 
-    navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data.type === "NEW_MESSAGE") {
-            let messageDiv = document.getElementById('messages');
-            messageDiv.innerHTML += `<p>${event.data.data}</p>`;
-        }
-    });
-}
-    <var socket = io.connect(window.location.origin);
-    
-    socket.on('new_message', function(data) {
-        let messageDiv = document.getElementById('messages');
-        messageDiv.innerHTML += `<p>${data.timestamp}: ${data.text}</p>`;
-    });
+        document.getElementById('talkButton').addEventListener('mousedown', function() {
+            socket.emit('start_audio');
+        });
 
-    document.getElementById('talkButton').addEventListener('mousedown', function() {
-        socket.emit('start_audio');
-    });
-
-    document.getElementById('talkButton').addEventListener('mouseup', function() {
-        socket.emit('stop_audio', { text: "Audio finalizado" });
-    });
+        document.getElementById('talkButton').addEventListener('mouseup', function() {
+            socket.emit('stop_audio', { text: "Audio finalizado" });
+        });
     </script>
-
 </body>
 </html>
