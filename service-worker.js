@@ -25,3 +25,36 @@ function connectSocket() {
 }
 
 connectSocket();
+
+// Escuchar eventos del cliente para manejar grabación de audio
+self.addEventListener("message", async (event) => {
+    if (event.data.type === "START_RECORDING") {
+        try {
+            let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            let mediaRecorder = new MediaRecorder(stream);
+            let audioChunks = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                audioChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                let audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+                let reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    socket.send(JSON.stringify({ type: "AUDIO_MESSAGE", audio: reader.result }));
+                };
+            };
+
+            mediaRecorder.start();
+            self.mediaRecorder = mediaRecorder;
+        } catch (err) {
+            console.error("Error al acceder al micrófono:", err);
+        }
+    } else if (event.data.type === "STOP_RECORDING") {
+        if (self.mediaRecorder && self.mediaRecorder.state === "recording") {
+            self.mediaRecorder.stop();
+        }
+    }
+});
