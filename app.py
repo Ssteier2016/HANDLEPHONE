@@ -90,4 +90,4 @@ def handle_stop_audio(data):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Usa el puerto de Render o 8080 por defecto
     host = '0.0.0.0'
-    socketio.run(app, host=host, port=port, debug=True, use_reloader=False)
+    socketio.run(app, host="0.0.0.0", port=port, debug=True, allow_unsafe_werkzeug=True)
