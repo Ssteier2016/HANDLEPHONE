@@ -42,3 +42,4 @@ save_history(history)
 emit('audio_stopped', {"audio": audio_data, "text": text, "timestamp": display_time}, broadcast=True)
 
 if name == 'main': port = int(os.environ.get("PORT", 8080))  # Usa el puerto de Render o 8080 por defecto host = '0.0.0.0' socketio.run(app, host=host, port=port, debug=True, use_reloader=False)
+
