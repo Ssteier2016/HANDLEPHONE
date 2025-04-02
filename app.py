@@ -7,6 +7,7 @@ import os
 import json
 import datetime
 import base64
+import speech_recognition as sr  # SpeechRecognition para transcripción de audio
 from google.cloud import speech_v1p1beta1 as speech  # Integración con Google Speech-to-Text
 
 app = Flask(__name__)
@@ -29,19 +30,20 @@ history = load_history()
 
 def transcribe_audio(audio_data):
     try:
-        client = speech.SpeechClient()
+        recognizer = sr.Recognizer()
+        # Decodificamos el audio de base64
         audio_content = base64.b64decode(audio_data.split(",")[-1])  # Extraer datos base64
-        audio = speech.RecognitionAudio(content=audio_content)
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
-            sample_rate_hertz=16000,
-            language_code="es-ES",
-        )
-        response = client.recognize(config=config, audio=audio)
-        return " ".join(result.alternatives[0].transcript for result in response.results)
-    except Exception as e:
-        print(f"Error en la transcripción: {e}")
-        return "Error en la transcripción"
+        audio_file = sr.AudioData(audio_content, 16000, 2)  # Necesitamos especificar la frecuencia de muestreo y el tipo de audio
+
+        # Usamos Sphinx para reconocer el audio
+        text = recognizer.recognize_sphinx(audio_file)
+        return text
+    except sr.UnknownValueError:
+        print("No se pudo reconocer el audio")
+        return "No se pudo reconocer el audio"
+    except sr.RequestError:
+        print("No se pudo conectar al servicio de reconocimiento")
+        return "Error en la conexión al servicio de reconocimiento"
 
 @app.route('/')
 def index():
@@ -55,14 +57,16 @@ def index():
 
 @app.route('/talk', methods=['POST'])
 def talk():
-    with app.app_context():  # Contexto de la aplicación
+    with app.app_context():  # Agregar contexto
         message = request.form.get('message', 'Hablando...')
         date_key = datetime.date.today().isoformat()
-        display_time = datetime.datetime.now().strftime('%H:%M')
+        
         if date_key not in history:
             history[date_key] = []
-        history[date_key].append({"text": message, "timestamp": display_time})
+        
+        history[date_key].append({"text": message, "timestamp": datetime.datetime.now().strftime('%H:%M')})
         save_history(history)
+        
         return jsonify({'status': 'success', 'message': message})
 
 @socketio.on('start_audio')
@@ -107,7 +111,7 @@ if __name__ == '__main__':
             'certfile': 'cert.pem'
         }
         print(f"Ejecutando en HTTPS en puerto {port}")
-        socketio.run(app, host=host, port=port, debug=True, use_reloader=False, **ssl_args)
+        socketio.run(app, host='0.0.0.0', port=8080, debug=True, use_reloader=False, **ssl_args)
     else:
         print(f"Ejecutando en HTTP en puerto {port} (SSL no disponible)")
         socketio.run(app, host=host, port=port, debug=True, use_reloader=False)
