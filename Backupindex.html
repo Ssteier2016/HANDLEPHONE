@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Walkie-Talkie</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .walkie-container {
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            border: 8px solid #444;
+            border-radius: 15px;
+            padding: 20px;
+            width: 320px;
+            height: 600px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            position: relative;
+            overflow: hidden;
+        }
+        .antenna {
+            width: 5px;
+            height: 50px;
+            background: #555;
+            position: absolute;
+            top: -50px;
+            left: 20px;
+        }
+        .screen {
+            background-color: #0a0a0a;
+            border: 2px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            height: 250px;
+            overflow-y: auto;
+            color: #0f0;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        #talkButton {
+            background-color: #ff3333;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            font-size: 18px;
+            font-weight: bold;
+            border: 5px solid #555;
+            cursor: pointer;
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: all 0.2s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        #talkButton:active {
+            background-color: #00cc00;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            transform: translateX(-50%) translateY(3px);
+        }
+        #muteButton {
+            background-color: #666;
+            padding: 10px;
+            width: 80px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            transition: all 0.2s;
+        }
+        #muteButton:active {
+            background-color: #444;
+        }
+        #historyButton {
+            background-color: #666;
+            padding: 10px;
+            width: 80px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+        }
+        #historyModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            color: #fff;
+        }
+        #historyModal select {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+        #historyContent {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="walkie-container">
+        <div class="antenna"></div>
+        <h2>Mensajes:</h2>
+        <div class="screen" id="messages"></div>
+        <button id="talkButton">Hablar</button>
+        <button id="muteButton">Mutear</button>
+        <button id="historyButton">Historial</button>
+    </div>
+    <div id="historyModal">
+        <select id="dateSelect"></select>
+        <div id="historyContent"></div>
+        <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(() => console.log("Service Worker registrado!"));
+        }
+
+        let socket = io.connect(window.location.origin);
+        let talkButton = document.getElementById("talkButton");
+        let muteButton = document.getElementById("muteButton");
+        let historyButton = document.getElementById("historyButton");
+        let messagesDiv = document.getElementById("messages");
+        let isMuted = false;
+
+        socket.on("audio_chunk", (data) => {
+            if (!isMuted) {
+                let audio = new Audio(data.audio);
+                audio.play();
+            }
+        });
+
+        socket.on("audio_stopped", (data) => {
+            messagesDiv.innerHTML += `<p>${data.timestamp}: ${data.text}</p>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        talkButton.addEventListener("mousedown", () => {
+            talkButton.innerText = "Grabando...";
+            navigator.serviceWorker.controller.postMessage({ type: "START_RECORDING" });
+        });
+
+        talkButton.addEventListener("mouseup", () => {
+            talkButton.innerText = "Hablar";
+            navigator.serviceWorker.controller.postMessage({ type: "STOP_RECORDING" });
+        });
+
+        muteButton.addEventListener("click", () => {
+            isMuted = !isMuted;
+            muteButton.innerText = isMuted ? "Desmutear" : "Mutear";
+            navigator.serviceWorker.controller.postMessage({ type: "TOGGLE_MUTE", mute: isMuted });
+        });
+
+        historyButton.addEventListener("click", () => {
+            let modal = document.getElementById("historyModal");
+            let dateSelect = document.getElementById("dateSelect");
+            dateSelect.innerHTML = "";
+            fetch('/history/' + new Date().toISOString().split('T')[0])
+                .then(res => res.json())
+                .then(todayMessages => {
+                    Object.keys(<%- JSON.stringify(history) %>).forEach(date => {
+                        let option = document.createElement("option");
+                        option.value = date;
+                        option.text = date;
+                        dateSelect.appendChild(option);
+                    });
+                    dateSelect.onchange = () => {
+                        fetch('/history/' + dateSelect.value)
+                            .then(res => res.json())
+                            .then(messages => {
+                                let content = document.getElementById("historyContent");
+                                content.innerHTML = messages.map(m => `<p>${m.timestamp}: ${m.text}</p>`).join("");
+                            });
+                    };
+                    dateSelect.value = new Date().toISOString().split('T')[0];
+                    document.getElementById("historyContent").innerHTML = todayMessages.map(m => `<p>${m.timestamp}: ${m.text}</p>`).join("");
+                    modal.style.display = "block";
+                });
+        });
+    </script>
+    <script>
+        self.addEventListener("install", (event) => {
+            self.skipWaiting();
+        });
+
+        self.addEventListener("activate", (event) => {
+            clients.claim();
+        });
+
+        let socket;
+        let isMuted = false;
+
+        function connectSocket() {
+            socket = new WebSocket(self.location.origin.replace(/^http/, "ws") + "/socket.io/?EIO=4&transport=websocket");
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (!isMuted && data.type === "AUDIO_MESSAGE") {
+                    self.clients.matchAll().then((clients) => {
+                        clients.forEach((client) => {
+                            client.postMessage({ type: "NEW_AUDIO", audio: data.audio });
+                        });
+                    });
+                }
+            };
+
+            socket.onclose = () => {
+                setTimeout(connectSocket, 3000); // Reintentar en 3 segundos
+            };
+        }
+
+        connectSocket();
+
+        self.addEventListener("message", async (event) => {
+            if (event.data.type === "START_RECORDING") {
+                try {
+                    let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    let mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+                    let audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        audioChunks.push(e.data);
+                        socket.send(JSON.stringify({ type: "AUDIO_CHUNK", audio: e.data }));
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        let audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+                        let reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            socket.send(JSON.stringify({ type: "AUDIO_MESSAGE", audio: reader.result }));
+                        };
+                        stream.getTracks().forEach(track => track.stop()); // Apagar micrófono
+                    };
+
+                    mediaRecorder.start(100); // Enviar chunks cada 100ms para tiempo real
+                    self.mediaRecorder = mediaRecorder;
+                } catch (err) {
+                    console.error("Error al acceder al micrófono:", err);
+                }
+            } else if (event.data.type === "STOP_RECORDING") {
+                if (self.mediaRecorder && self.mediaRecorder.state === "recording") {
+                    self.mediaRecorder.stop();
+                }
+            } else if (event.data.type === "TOGGLE_MUTE") {
+                isMuted = event.data.mute;
+            }
+        });
+    </script>
+</body>
+</html>
