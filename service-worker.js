@@ -1,26 +1,27 @@
-self.addEventListener('install', event => {
+self.addEventListener("install", (event) => {
     self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
+self.addEventListener("activate", (event) => {
     clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-    // Mantener conexión viva
-    if (event.request.url.includes('/socket.io/')) {
-        return;
-    }
-    event.respondWith(fetch(event.request));
-});
+let socket;
 
-// Notificaciones push (si se implementa en el futuro)
-self.addEventListener('push', event => {
-    const data = event.data ? event.data.text() : 'Mensaje nuevo';
-    event.waitUntil(
-        self.registration.showNotification('Walkie-Talkie', {
-            body: data,
-            icon: '/icon.png'
-        })
-    );
-});
+function connectSocket() {
+    socket = new WebSocket(self.location.origin.replace(/^http/, "ws") + "/socket.io/?EIO=4&transport=websocket");
+
+    socket.onmessage = (event) => {
+        self.clients.matchAll().then((clients) => {
+            clients.forEach((client) => {
+                client.postMessage({ type: "NEW_MESSAGE", data: event.data });
+            });
+        });
+    };
+
+    socket.onclose = () => {
+        setTimeout(connectSocket, 3000); // Reintentar en 3 segundos si se desconecta
+    };
+}
+
+connectSocket();
