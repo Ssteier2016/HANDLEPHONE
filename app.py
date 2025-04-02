@@ -1,6 +1,6 @@
 import eventlet
 eventlet.monkey_patch()  # Parchea eventlet antes de cualquier otro módulo
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import os
@@ -32,7 +32,7 @@ def transcribe_audio(audio_data):
         recognizer = sr.Recognizer()
         audio_content = base64.b64decode(audio_data.split(",")[-1])  # Extraer datos base64
         audio_file = sr.AudioData(audio_content, 16000, 2)  # Frecuencia de muestreo y tipo de audio
-        text = recognizer.recognize_sphinx(audio_file)
+        text = recognizer.recognize_google(audio_file)  # Usa Google para mejor precisión
         return text
     except sr.UnknownValueError:
         return "No se pudo reconocer el audio"
@@ -49,13 +49,15 @@ def index():
 def talk():
     message = request.form.get('message', 'Hablando...')
     date_key = datetime.date.today().isoformat()
+    timestamp = datetime.datetime.now().strftime('%H:%M')
     
     if date_key not in history:
         history[date_key] = []
     
-    history[date_key].append({"text": message, "timestamp": datetime.datetime.now().strftime('%H:%M')})
+    history[date_key].append({"text": message, "timestamp": timestamp})
     save_history(history)
     
+    socketio.emit('new_message', {"text": message, "timestamp": timestamp}, broadcast=True)
     return jsonify({'status': 'success', 'message': message})
 
 @socketio.on('start_audio')
@@ -70,7 +72,7 @@ def handle_audio_chunk(data):
 @socketio.on('stop_audio')
 def handle_stop_audio(data):
     date_key = datetime.date.today().isoformat()
-    display_time = datetime.datetime.now().strftime('%H:%M')  # Sin segundos
+    display_time = datetime.datetime.now().strftime('%H:%M')
     audio_data = data.get("audio")
     text = transcribe_audio(audio_data) if audio_data else data.get("text", "Sin transcripción")
 
