@@ -1,4 +1,13 @@
-import eventlet eventlet.monkey_patch()  # Parchea eventlet antes de cualquier otro módulo from flask import Flask, render_template, request, jsonify, redirect, url_for from flask_socketio import SocketIO, emit from flask_cors import CORS import os import json import datetime import base64 import speech_recognition as sr  # SpeechRecognition para transcripción de audio
+import eventlet 
+eventlet.monkey_patch()  
+from flask import Flask, render_template, request, jsonify, redirect, url_for 
+from flask_socketio import SocketIO, emit 
+from flask_cors import CORS 
+import os 
+import json 
+import datetime 
+import base64 
+import speech_recognition as sr  # SpeechRecognition para transcripción de audio
 
 app = Flask(name) CORS(app) socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')  # Usar Eventlet como motor
 
