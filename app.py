@@ -1,117 +1,45 @@
-import eventlet
-eventlet.monkey_patch()  # Parchea eventlet antes de cualquier otro módulo
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
-import os
-import json
-import datetime
-import base64
-import speech_recognition as sr  # SpeechRecognition para transcripción de audio
-from google.cloud import speech_v1p1beta1 as speech  # Integración con Google Speech-to-Text
+import eventlet eventlet.monkey_patch()  # Parchea eventlet antes de cualquier otro módulo from flask import Flask, render_template, request, jsonify, redirect, url_for from flask_socketio import SocketIO, emit from flask_cors import CORS import os import json import datetime import base64 import speech_recognition as sr  # SpeechRecognition para transcripción de audio
 
-app = Flask(__name__)
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')  # Usar Eventlet como motor
+app = Flask(name) CORS(app) socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')  # Usar Eventlet como motor
 
 HISTORY_FILE = os.path.join(os.getcwd(), "history.json")
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as file:
-            return json.load(file)
-    return {}
+def load_history(): if os.path.exists(HISTORY_FILE): with open(HISTORY_FILE, "r") as file: return json.load(file) return {}
 
-def save_history(history):
-    with open(HISTORY_FILE, "w") as file:
-        json.dump(history, file, indent=4)
+def save_history(history): with open(HISTORY_FILE, "w") as file: json.dump(history, file, indent=4)
 
 history = load_history()
 
-def transcribe_audio(audio_data):
-    try:
-        recognizer = sr.Recognizer()
-        # Decodificamos el audio de base64
-        audio_content = base64.b64decode(audio_data.split(",")[-1])  # Extraer datos base64
-        audio_file = sr.AudioData(audio_content, 16000, 2)  # Necesitamos especificar la frecuencia de muestreo y el tipo de audio
+def transcribe_audio(audio_data): try: recognizer = sr.Recognizer() audio_content = base64.b64decode(audio_data.split(",")[-1])  # Extraer datos base64 audio_file = sr.AudioData(audio_content, 16000, 2)  # Frecuencia de muestreo y tipo de audio text = recognizer.recognize_sphinx(audio_file) return text except sr.UnknownValueError: return "No se pudo reconocer el audio" except sr.RequestError: return "Error en la conexión al servicio de reconocimiento"
 
-        # Usamos Sphinx para reconocer el audio
-        text = recognizer.recognize_sphinx(audio_file)
-        return text
-    except sr.UnknownValueError:
-        print("No se pudo reconocer el audio")
-        return "No se pudo reconocer el audio"
-    except sr.RequestError:
-        print("No se pudo conectar al servicio de reconocimiento")
-        return "Error en la conexión al servicio de reconocimiento"
+@app.route('/') def index(): today = datetime.date.today().isoformat() today_messages = history.get(today, []) return render_template('index.html', today_messages=today_messages, history=history)
 
-@app.route('/')
-def index():
-    with app.app_context():  # Contexto de la aplicación
-        today = datetime.date.today().isoformat()
-        today_messages = history.get(today, [])
-        # Redirigir a HTTPS si el servidor usa SSL y la solicitud es HTTP
-        if use_ssl and request.scheme == 'http':
-            return redirect(url_for('index', _external=True, _scheme='https'))
-        return render_template('index.html', today_messages=today_messages, history=history)
+@app.route('/talk', methods=['POST']) def talk(): message = request.form.get('message', 'Hablando...') date_key = datetime.date.today().isoformat()
 
-@app.route('/talk', methods=['POST'])
-def talk():
-    with app.app_context():  # Agregar contexto
-        message = request.form.get('message', 'Hablando...')
-        date_key = datetime.date.today().isoformat()
-        
-        if date_key not in history:
-            history[date_key] = []
-        
-        history[date_key].append({"text": message, "timestamp": datetime.datetime.now().strftime('%H:%M')})
-        save_history(history)
-        
-        return jsonify({'status': 'success', 'message': message})
+if date_key not in history:
+    history[date_key] = []
 
-@socketio.on('start_audio')
-def handle_start_audio():
-    emit('audio_stream_start', broadcast=True, include_self=False)
+history[date_key].append({"text": message, "timestamp": datetime.datetime.now().strftime('%H:%M')})
+save_history(history)
 
-@socketio.on('audio_chunk')
-def handle_audio_chunk(data):
-    audio_data = data.get("audio")
-    emit('audio_chunk', {"audio": audio_data}, broadcast=True, include_self=False)
+return jsonify({'status': 'success', 'message': message})
 
-@socketio.on('stop_audio')
-def handle_stop_audio(data):
-    date_key = datetime.date.today().isoformat()
-    display_time = datetime.datetime.now().strftime('%H:%M')  # Sin segundos
-    audio_data = data.get("audio")
-    text = transcribe_audio(audio_data) if audio_data else data.get("text", "Sin transcripción")
+@socketio.on('start_audio') def handle_start_audio(): emit('audio_stream_start', broadcast=True, include_self=False)
 
-    if not audio_data or "," not in audio_data:
-        print("Error: Datos de audio inválidos o vacíos")
-        return
+@socketio.on('audio_chunk') def handle_audio_chunk(data): audio_data = data.get("audio") emit('audio_chunk', {"audio": audio_data}, broadcast=True, include_self=False)
 
-    # Guardamos el audio en base64 directamente en el historial
-    audio_content = audio_data  # String base64 completo (data:audio/webm;base64,...)
+@socketio.on('stop_audio') def handle_stop_audio(data): date_key = datetime.date.today().isoformat() display_time = datetime.datetime.now().strftime('%H:%M')  # Sin segundos audio_data = data.get("audio") text = transcribe_audio(audio_data) if audio_data else data.get("text", "Sin transcripción")
 
-    if date_key not in history:
-        history[date_key] = []
-    history[date_key].append({"audio": audio_content, "text": text, "timestamp": display_time})
-    save_history(history)
-    emit('audio_stopped', {"audio": audio_content, "text": text, "timestamp": display_time}, broadcast=True)
+if not audio_data or "," not in audio_data:
+    print("Error: Datos de audio inválidos o vacíos")
+    return
 
-if __name__ == '__main__':
-    # Configuración dinámica para local y Render
-    port = int(os.environ.get("PORT", 8080))  # Usa el puerto de Render o 8080 por defecto
-    host = '0.0.0.0'  # Accesible desde cualquier interfaz
+if date_key not in history:
+    history[date_key] = []
 
-    # Verificar si existen certificados para SSL en local
-    use_ssl = os.path.exists('key.pem') and os.path.exists('cert.pem')
-    if use_ssl:
-        ssl_args = {
-            'keyfile': 'key.pem',
-            'certfile': 'cert.pem'
-        }
-        print(f"Ejecutando en HTTPS en puerto {port}")
-        socketio.run(app, host='0.0.0.0', port=8080, debug=True, use_reloader=False, **ssl_args)
-    else:
-        print(f"Ejecutando en HTTP en puerto {port} (SSL no disponible)")
-        socketio.run(app, host=host, port=port, debug=True, use_reloader=False)
+history[date_key].append({"audio": audio_data, "text": text, "timestamp": display_time})
+save_history(history)
+emit('audio_stopped', {"audio": audio_data, "text": text, "timestamp": display_time}, broadcast=True)
+
+if name == 'main': port = int(os.environ.get("PORT", 8080))  # Usa el puerto de Render o 8080 por defecto host = '0.0.0.0' socketio.run(app, host=host, port=port, debug=True, use_reloader=False)
+
