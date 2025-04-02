@@ -92,40 +92,6 @@
         #muteButton:active {
             background-color: #444;
         }
-        #historyButton {
-            background-color: #666;
-            padding: 10px;
-            width: 80px;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-        }
-        #historyModal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-content {
-            background: #333;
-            padding: 20px;
-            border-radius: 10px;
-            color: #fff;
-            width: 80%;
-            max-width: 500px;
-        }
-        h2 {
-            color: #ffeb3b;
-            margin: 10px 0;
-        }
     </style>
 </head>
 <body>
@@ -140,46 +106,40 @@
             <span class="volume-label">0%</span>
         </div>
         <button id="muteButton">Mutear</button>
-        <button id="historyButton">Historial</button>
     </div>
     
-    <div id="historyModal">
-        <div class="modal-content">
-            <h2>Historial</h2>
-            <select id="dateSelect"></select>
-            <ul id="historyList"></ul>
-            <button onclick="document.getElementById('historyModal').style.display='none'">Cerrar</button>
-        </div>
-    </div>
-
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/service-worker.js')
-                .then((registration) => {
-                    console.log("Service Worker registrado!");
-                });
-
-            navigator.serviceWorker.addEventListener("message", (event) => {
-                if (event.data.type === "NEW_MESSAGE") {
-                    let messageDiv = document.getElementById('messages');
-                    messageDiv.innerHTML += `<p>${event.data.data}</p>`;
-                }
-            });
+                .then(() => console.log("Service Worker registrado!"));
         }
 
-        var socket = io.connect(window.location.origin);
+        let socket = io.connect(window.location.origin);
+        let talkButton = document.getElementById("talkButton");
+        let muteButton = document.getElementById("muteButton");
+        let isMuted = false;
 
-        socket.on('new_message', function(data) {
-            let messageDiv = document.getElementById('messages');
+        socket.on("new_message", function(data) {
+            let messageDiv = document.getElementById("messages");
             messageDiv.innerHTML += `<p>${data.timestamp}: ${data.text}</p>`;
         });
 
-        document.getElementById('talkButton').addEventListener('mousedown', function() {
-            socket.emit('start_audio');
+        talkButton.addEventListener("mousedown", function() {
+            talkButton.innerText = "Grabando...";
+            talkButton.style.backgroundColor = "green";
+            socket.emit("start_audio");
         });
 
-        document.getElementById('talkButton').addEventListener('mouseup', function() {
-            socket.emit('stop_audio', { text: "Audio finalizado" });
+        talkButton.addEventListener("mouseup", function() {
+            talkButton.innerText = "Hablar";
+            talkButton.style.backgroundColor = "#ff3333";
+            socket.emit("stop_audio", { text: "Audio finalizado" });
+        });
+
+        muteButton.addEventListener("click", function() {
+            isMuted = !isMuted;
+            muteButton.innerText = isMuted ? "Desmutear" : "Mutear";
+            socket.emit("toggle_mute", { mute: isMuted });
         });
     </script>
 </body>
