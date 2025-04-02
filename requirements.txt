@@ -4,4 +4,6 @@ flask-socketio>=5.3.4
 flask-cors>=3.0.10
 google-cloud-speech>=2.19.0
 gunicorn
- 
+SpeechRecognition
+pyaudio
+pydub
