@@ -1,0 +1,16 @@
+services:
+  - name: walkie-talkie
+    type: web
+    env: python
+    plan: free
+    region: oregon
+    buildCommand: |
+      apt-get update && apt-get install -y portaudio19-dev
+      pip install -r requirements.txt
+    startCommand: gunicorn -k eventlet -w 1 app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/google-credentials.json
+      - key: PORT
+        value: 8080
+    autoDeploy: true
