@@ -5,28 +5,145 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        #register, #main, #history-screen {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        input, button {
+            margin: 5px;
+            padding: 10px;
+            width: 100%;
+        }
+        #message-list, #history-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+    </style>
 </head>
 <body>
+    <!-- Pantalla de registro -->
     <div id="register">
         <input id="legajo" placeholder="Número de legajo" type="number">
         <input id="name" placeholder="Nombre o Apellido">
         <button onclick="register()">Registrarse</button>
     </div>
+
+    <!-- Pantalla principal -->
     <div id="main" style="display: none;">
+        <h2>Comunicación Aeronáutica</h2>
+        <div id="map"></div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" onclick="toggleMute()">Mutear</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <div id="users">Usuarios conectados: 0</div>
         <div id="messages">
-            <h2>Mensajes</h2>
+            <h3>Mensajes</h3>
             <div id="message-list"></div>
         </div>
     </div>
+
+    <!-- Pantalla de historial -->
     <div id="history-screen" style="display: none;">
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
     </div>
-    <script src="/templates/script.js"></script>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Variables globales
+        let isTalking = false;
+        let isMuted = false;
+        let messages = [];
+        let history = [];
+
+        // Función para registrar al usuario
+        function register() {
+            const legajo = document.getElementById('legajo').value;
+            const name = document.getElementById('name').value;
+
+            if (!legajo || !name) {
+                alert("Por favor, completa todos los campos.");
+                return;
+            }
+
+            document.getElementById('register').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+
+            // Inicializar el mapa
+            initMap();
+        }
+
+        // Inicializar el mapa
+        function initMap() {
+            var map = L.map('map').setView([40.0, -4.0], 5); // Centro inicial
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+            }).addTo(map);
+
+            // Agregar marcadores de aviones (ejemplo estático)
+            var airplaneIcon = L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                iconSize: [30, 30],
+            });
+
+            L.marker([40.4165, -3.7026], { icon: airplaneIcon }).addTo(map)
+              .bindPopup("Avión en Madrid").openPopup();
+
+            // Aquí puedes agregar lógica para cargar datos en tiempo real desde OpenSky API
+        }
+
+        // Función para alternar "Hablar"
+        function toggleTalk() {
+            isTalking = !isTalking;
+            document.getElementById('talk').innerText = isTalking ? "Dejar de hablar" : "Hablar";
+        }
+
+        // Función para alternar "Mutear"
+        function toggleMute() {
+            isMuted = !isMuted;
+            document.getElementById('mute').innerText = isMuted ? "Desmutear" : "Mutear";
+        }
+
+        // Función para mostrar el historial
+        function showHistory() {
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('history-screen').style.display = 'block';
+
+            // Mostrar el historial en la pantalla
+            const historyList = document.getElementById('history-list');
+            historyList.innerHTML = history.map(msg => `<p>${msg}</p>`).join('');
+        }
+
+        // Función para regresar a la pantalla principal
+        function backToMain() {
+            document.getElementById('history-screen').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+        }
+
+        // Simular mensajes (ejemplo básico)
+        function addMessage(message) {
+            messages.push(message);
+            const messageList = document.getElementById('message-list');
+            messageList.innerHTML = messages.map(msg => `<p>${msg}</p>`).join('');
+
+            // Guardar mensaje en el historial
+            history.push(message);
+        }
+
+        // Ejemplo de simulación de mensajes
+        setInterval(() => {
+            addMessage(`Mensaje nuevo: ${new Date().toLocaleTimeString()}`);
+        }, 5000);
+    </script>
 </body>
-</html>
+            </html>
