@@ -1,7 +1,7 @@
 body {
-    background-color: #1a1a1a; /* Negro grisáceo como un walkie-talkie */
-    font-family: 'Courier New', Courier, monospace; /* Fuente tipo máquina de escribir */
-    color: #00ff00; /* Verde brillante como pantalla LCD */
+    background-color: #1a1a1a;
+    font-family: 'Courier New', Courier, monospace;
+    color: #00ff00;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -12,13 +12,13 @@ body {
 }
 
 #register, #main, #history-screen {
-    background-color: #2e2e2e; /* Gris oscuro para el cuerpo del walkie-talkie */
-    border: 5px solid #4a4a4a; /* Borde metálico */
+    background-color: #2e2e2e;
+    border: 5px solid #4a4a4a;
     border-radius: 10px;
     padding: 20px;
     width: 300px;
     text-align: center;
-    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); /* Sombra verde tenue */
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
 }
 
 input, button {
