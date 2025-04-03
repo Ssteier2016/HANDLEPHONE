@@ -19,7 +19,7 @@ function register() {
         ws.send(JSON.stringify({ type: "register", legajo: legajo, name: name }));
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
-        initMap(); // Inicializar el mapa después de registrarse
+        initMap();
     };
     
     ws.onmessage = function(event) {
@@ -47,7 +47,7 @@ function register() {
 }
 
 function initMap() {
-    var map = L.map('map').setView([-34.5597, -58.4116], 10); // Centro en Aeroparque
+    var map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
@@ -129,4 +129,4 @@ function showHistory() {
 function backToMain() {
     document.getElementById("history-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
-        }
+}
