@@ -113,7 +113,8 @@ init_db()
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
     clients[user_id] = {"ws": websocket, "muted": False}
-    users[user_id] = {"name": user_id.split("_")[1]}
+    # Inicializar con matrícula por defecto
+    users[user_id] = {"name": user_id.split("_")[1], "matricula": "LV-000UN", "matricula_icao": to_icao("LV-000UN")}
     await broadcast_users()
     
     try:
