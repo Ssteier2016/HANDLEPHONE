@@ -11,7 +11,34 @@ import wave
 import speech_recognition as sr
 import logging
 from pydub import AudioSegment
+import requests
 
+# Credenciales de OpenSky Network
+username = "TU_USUARIO"
+password = "TU_CONTRASEÑA"
+
+# Endpoint de la API
+url = "https://opensky-network.org/api/states/all"
+
+# Parámetros opcionales (ejemplo: filtrar por región geográfica)
+params = {
+    "lamin": 36.0,  # Latitud mínima
+    "lamax": 42.0,  # Latitud máxima
+    "lomin": -12.0, # Longitud mínima
+    "lomax": 5.0    # Longitud máxima
+}
+
+# Autenticación y solicitud
+response = requests.get(url, auth=(username, password), params=params)
+
+if response.status_code == 200:
+    data = response.json()
+    print("Datos recibidos:")
+    for state in data["states"]:
+        print(f"ICAO24: {state[0]}, Llamada: {state[1]}, Latitud: {state[6]}, Longitud: {state[5]}")
+else:
+    print(f"Error: {response.status_code}")
+    
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
