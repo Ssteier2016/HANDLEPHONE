@@ -1,9 +1,10 @@
 # Usar una imagen base de Python 3.11
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para PyAudio
+# Instalar dependencias del sistema necesarias para PyAudio y compilación
 RUN apt-get update && apt-get install -y \
     portaudio19-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -15,7 +16,7 @@ COPY . .
 # Instalar las dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Exponer el puerto (Render lo asigna automáticamente, pero lo especificamos por claridad)
+# Exponer el puerto
 EXPOSE 8000
 
 # Comando para iniciar la aplicación
