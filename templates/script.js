@@ -33,6 +33,29 @@ function register() {
     };
 }
 
+// Inicializar el mapa
+            initMap();
+        }
+
+        // Inicializar el mapa
+        function initMap() {
+            var map = L.map('map').setView([40.0, -4.0], 5); // Centro inicial
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+            }).addTo(map);
+
+            // Agregar marcadores de aviones (ejemplo estático)
+            var airplaneIcon = L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                iconSize: [30, 30],
+            });
+
+            L.marker([40.4165, -3.7026], { icon: airplaneIcon }).addTo(map)
+              .bindPopup("Aeroparque").openPopup();
+
+            // Aquí puedes agregar lógica para cargar datos en tiempo real desde OpenSky API
+        }
+
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (talkButton.textContent === "Grabando...") {
