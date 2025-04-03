@@ -19,10 +19,6 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@app.get("/")
-async def root():
-    return {"message": "HANDLEPHONE is running"}
-
 # Alfabeto ICAO
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
@@ -35,19 +31,19 @@ ICAO_ALPHABET = {
 
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
-    
-    
-# Configuración de audio
+
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 
-# Lista de clientes conectados
 clients = {}
 users = {}
 
-# Funciones de base de datos
+@app.get("/")
+async def root():
+    return {"message": "HANDLEPHONE is running"}
+
 def init_db():
     conn = sqlite3.connect("history.db")
     c = conn.cursor()
@@ -74,53 +70,18 @@ def get_history():
     return [{"user_id": row[0], "audio": base64.b64encode(row[1]).decode('utf-8'), 
              "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
-# Funciones de audio
-def record_audio(filename, duration=None):
-    p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-    frames = []
-    if duration:
-        for _ in range(0, int(RATE / CHUNK * duration)):
-            data = stream.read(CHUNK)
-            frames.append(data)
-    else:
-        while True:
-            data = stream.read(CHUNK)
-            frames.append(data)
-            break  # Simplificado para este ejemplo, controlado por frontend
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-    wf = wave.open(filename, 'wb')
-    wf.setnchannels(CHANNELS)
-    wf.setsampwidth(p.get_sample_size(FORMAT))
-    wf.setframerate(RATE)
-    wf.writeframes(b''.join(frames))
-    wf.close()
-
-def play_audio(data):
-    p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True)
-    stream.write(data)
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-
-# Inicializar base de datos
-init_db()
-
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
+    logger.info(f"Cliente conectado: {user_id}")
     clients[user_id] = {"ws": websocket, "muted": False}
-    # Inicializar con matrícula por defecto
     users[user_id] = {"name": user_id.split("_")[1], "matricula": "LV-000UN", "matricula_icao": to_icao("LV-000UN")}
     await broadcast_users()
     
     try:
         while True:
             data = await websocket.receive_text()
-            logger.info(f"Mensaje recibido: {data}")
+            logger.info(f"Mensaje recibido de {user_id}: {data}")
             message = json.loads(data)
             
             if message["type"] == "register":
@@ -141,12 +102,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             elif message["type"] == "audio":
                 try:
                     audio_data = base64.b64decode(message["data"])
-                    raw_audio_file = "raw_temp.webm"  # Guardar el audio crudo recibido
-                    wav_audio_file = "temp.wav"       # Convertir a WAV
+                    timestamp = datetime.utcnow().strftime("%H:%M")
+                    raw_audio_file = "raw_temp.webm"
+                    wav_audio_file = "temp.wav"
                     with open(raw_audio_file, "wb") as f:
                         f.write(audio_data)
                     
-                    # Convertir a WAV usando pydub
                     audio = AudioSegment.from_file(raw_audio_file)
                     audio.export(wav_audio_file, format="wav")
                     
@@ -155,10 +116,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         audio = recognizer.record(source)
                     try:
                         text = recognizer.recognize_sphinx(audio)
-                        logger.info(f"Texto transcrito: {text}")
+                        logger.info(f"Texto transcrito para {user_id}: {text}")
                     except sr.UnknownValueError:
                         text = "No se pudo transcribir"
-                        logger.info("Error: No se pudo transcribir el audio")
+                        logger.info(f"Error: No se pudo transcribir el audio para {user_id}")
                     
                     os.remove(raw_audio_file)
                     os.remove(wav_audio_file)
@@ -177,7 +138,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "matricula_icao": users[user_id]["matricula_icao"]
                             }))
                 except Exception as e:
-                    logger.error(f"Error procesando audio: {str(e)}")
+                    logger.error(f"Error procesando audio para {user_id}: {str(e)}")
             
             elif message["type"] == "mute":
                 clients[user_id]["muted"] = True
@@ -188,8 +149,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         del clients[user_id]
         del users[user_id]
         await broadcast_users()
+        logger.info(f"Cliente desconectado: {user_id}")
     except Exception as e:
-        logger.error(f"Error en WebSocket: {str(e)}")
+        logger.error(f"Error en WebSocket para {user_id}: {str(e)}")
 
 async def broadcast_users():
     user_count = len(clients)
@@ -215,6 +177,7 @@ async def clear_messages():
 
 @app.on_event("startup")
 async def startup_event():
+    init_db()
     asyncio.create_task(clear_messages())
 
 if __name__ == "__main__":
