@@ -1,104 +1,96 @@
 let ws;
-let recording = false;
-let mediaRecorder;
 let userId;
+let mediaRecorder;
+let audioChunks = [];
 
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
-    if (legajo && name) {
-        userId = `${legajo}_${name}`;
-        ws = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-        ws.onopen = () => {
-            ws.send(JSON.stringify({ type: "register", name }));
-            document.getElementById("register").style.display = "none";
-            document.getElementById("main").style.display = "block";
-        };
-        ws.onmessage = handleMessage;
-    }
+    userId = `${legajo}_${name}`;
+    ws = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+    
+    ws.onopen = function() {
+        ws.send(JSON.stringify({ type: "register", legajo: legajo, name: name }));
+        document.getElementById("register").style.display = "none";
+        document.getElementById("main").style.display = "block";
+    };
+    
+    ws.onmessage = function(event) {
+        const message = JSON.parse(event.data);
+        if (message.type === "audio") {
+            const audio = new Audio(`data:audio/wav;base64,${message.data}`);
+            audio.play();
+            const messageList = document.getElementById("message-list");
+            const msgDiv = document.createElement("div");
+            msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+            messageList.appendChild(msgDiv);
+        } else if (message.type === "users") {
+            document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+        }
+    };
 }
 
 function toggleTalk() {
-    const talkBtn = document.getElementById("talk");
-    if (!recording) {
-        talkBtn.textContent = "Grabando...";
-        talkBtn.classList.add("recording");
-        startRecording();
+    const talkButton = document.getElementById("talk");
+    if (talkButton.style.backgroundColor === "green") {
+        mediaRecorder.stop();
+        talkButton.style.backgroundColor = "red";
     } else {
-        talkBtn.textContent = "Hablar";
-        talkBtn.classList.remove("recording");
-        stopRecording();
-    }
-    recording = !recording;
-}
-
-function startRecording() {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => {
-            e.data.arrayBuffer().then(buffer => {
-                const reader = new FileReader();
-                reader.readAsDataURL(e.data);
-                reader.onloadend = () => {
-                    const base64data = reader.result.split(',')[1];
-                    ws.send(JSON.stringify({ type: "audio", data: base64data }));
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                // Especificar formato WAV si es posible (depende del navegador)
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=pcm' }); // Intentamos PCM
+                audioChunks = [];
+                mediaRecorder.ondataavailable = function(event) {
+                    audioChunks.push(event.data);
                 };
-            });
-        };
-        mediaRecorder.start(100); // Enviar datos cada 100ms para tiempo real
-    });
-}
-
-function stopRecording() {
-    mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                mediaRecorder.onstop = function() {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = function() {
+                        const base64data = reader.result.split(',')[1];
+                        ws.send(JSON.stringify({ type: "audio", data: base64data }));
+                    };
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                mediaRecorder.start();
+                talkButton.style.backgroundColor = "green";
+            })
+            .catch(err => console.error("Error al acceder al micrófono:", err));
+    }
 }
 
 function toggleMute() {
-    const muteBtn = document.getElementById("mute");
-    if (muteBtn.textContent === "Mutear") {
-        muteBtn.textContent = "Desmutear";
-        muteBtn.classList.add("muted");
-        ws.send(JSON.stringify({ type: "mute" }));
-    } else {
-        muteBtn.textContent = "Mutear";
-        muteBtn.classList.remove("muted");
+    const muteButton = document.getElementById("mute");
+    if (muteButton.style.backgroundColor === "red") {
         ws.send(JSON.stringify({ type: "unmute" }));
+        muteButton.style.backgroundColor = "green";
+    } else {
+        ws.send(JSON.stringify({ type: "mute" }));
+        muteButton.style.backgroundColor = "red";
     }
 }
 
 function showHistory() {
-    document.getElementById("main").style.display = "none";
-    document.getElementById("history-screen").style.display = "block";
-    fetch("/history").then(res => res.json()).then(data => {
-        const historyList = document.getElementById("history-list");
-        historyList.innerHTML = "";
-        data.forEach(msg => {
-            historyList.innerHTML += `
-                <p>${msg.date} ${msg.timestamp} - ${msg.user_id.split("_")[1]}: ${msg.text}
-                <button onclick="playAudio('${msg.audio}')">Reproducir</button></p>`;
+    fetch('/history')
+        .then(response => response.json())
+        .then(data => {
+            const historyList = document.getElementById("history-list");
+            historyList.innerHTML = "";
+            data.forEach(msg => {
+                const msgDiv = document.createElement("div");
+                msgDiv.textContent = `${msg.date} ${msg.timestamp} - ${msg.user_id}: ${msg.text}`;
+                const audio = new Audio(`data:audio/wav;base64,${msg.audio}`);
+                msgDiv.onclick = () => audio.play();
+                historyList.appendChild(msgDiv);
+            });
+            document.getElementById("main").style.display = "none";
+            document.getElementById("history-screen").style.display = "block";
         });
-    });
 }
 
 function backToMain() {
-    document.getElementById("main").style.display = "block";
     document.getElementById("history-screen").style.display = "none";
-}
-
-function handleMessage(event) {
-    const data = JSON.parse(event.data);
-    if (data.type === "audio") {
-        const audio = new Audio(`data:audio/wav;base64,${data.data}`);
-        audio.play();
-        const messageList = document.getElementById("message-list");
-        messageList.innerHTML += `<p>${data.timestamp} - ${data.sender}: ${data.text}</p>`;
-    } else if (data.type === "users") {
-        document.getElementById("users").textContent = `Usuarios conectados: ${data.count} (${data.list.join(", ")})`;
-    }
-}
-
-function playAudio(base64data) {
-    const audio = new Audio(`data:audio/wav;base64,${base64data}`);
-    audio.play();
+    document.getElementById("main").style.display = "block";
 }
