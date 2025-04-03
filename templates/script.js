@@ -6,13 +6,20 @@ let audioChunks = [];
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
+    if (!legajo || !name) {
+        alert("Por favor, ingresa un legajo y un nombre.");
+        return;
+    }
     userId = `${legajo}_${name}`;
+    console.log(`Intentando conectar WebSocket para ${userId} a wss://${window.location.host}/ws/${userId}`);
     ws = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
     
     ws.onopen = function() {
+        console.log("WebSocket conectado exitosamente");
         ws.send(JSON.stringify({ type: "register", legajo: legajo, name: name }));
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
+        initMap(); // Inicializar el mapa después de registrarse
     };
     
     ws.onmessage = function(event) {
@@ -28,33 +35,32 @@ function register() {
             document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
         }
     };
+    
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
+        alert("No se pudo conectar al servidor. Revisa la consola para más detalles.");
+    };
+    
+    ws.onclose = function() {
+        console.log("WebSocket cerrado");
     };
 }
 
-// Inicializar el mapa
-            initMap();
-        }
+function initMap() {
+    var map = L.map('map').setView([-34.5597, -58.4116], 10); // Centro en Aeroparque
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
 
-        // Inicializar el mapa
-        function initMap() {
-            var map = L.map('map').setView([40.0, -4.0], 5); // Centro inicial
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-            }).addTo(map);
+    var airplaneIcon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+        iconSize: [30, 30],
+    });
 
-            // Agregar marcadores de aviones (ejemplo estático)
-            var airplaneIcon = L.icon({
-                iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
-                iconSize: [30, 30],
-            });
-
-            L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
-              .bindPopup("Aeroparque").openPopup();
-
-            // Aquí puedes agregar lógica para cargar datos en tiempo real desde OpenSky API
-        }
+    L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
+        .bindPopup("Aeroparque").openPopup();
+}
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
@@ -123,4 +129,4 @@ function showHistory() {
 function backToMain() {
     document.getElementById("history-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
-}
+        }
