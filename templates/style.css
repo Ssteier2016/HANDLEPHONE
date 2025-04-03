@@ -1,29 +1,82 @@
 body {
-    font-family: Arial, sans-serif;
+    background-color: #1a1a1a; /* Negro grisáceo como un walkie-talkie */
+    font-family: 'Courier New', Courier, monospace; /* Fuente tipo máquina de escribir */
+    color: #00ff00; /* Verde brillante como pantalla LCD */
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     align-items: center;
+    height: 100vh;
+    margin: 0;
     padding: 20px;
+    box-sizing: border-box;
 }
-button {
-    padding: 10px 20px;
-    margin: 5px;
+
+#register, #main, #history-screen {
+    background-color: #2e2e2e; /* Gris oscuro para el cuerpo del walkie-talkie */
+    border: 5px solid #4a4a4a; /* Borde metálico */
+    border-radius: 10px;
+    padding: 20px;
+    width: 300px;
+    text-align: center;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); /* Sombra verde tenue */
+}
+
+input, button {
+    font-family: 'Courier New', Courier, monospace;
     font-size: 16px;
+    margin: 10px 0;
+    padding: 10px;
+    width: 80%;
+    border: 2px solid #00ff00;
+    background-color: #1a1a1a;
+    color: #00ff00;
+    border-radius: 5px;
     cursor: pointer;
 }
-#talk { background-color: red; color: white; }
-#talk.recording { background-color: green; }
-#mute { background-color: green; color: white; }
-#mute.muted { background-color: red; }
-#history { background-color: yellow; }
+
+button {
+    background-color: #4a4a4a;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #00ff00;
+    color: #1a1a1a;
+}
+
+#talk {
+    background-color: red;
+}
+
+#mute {
+    background-color: green;
+}
+
+#users {
+    margin-top: 10px;
+    font-size: 14px;
+}
+
 #messages, #history-screen {
     margin-top: 20px;
-    width: 100%;
-    max-width: 600px;
 }
+
 #message-list, #history-list {
-    border: 1px solid #ccc;
-    padding: 10px;
-    max-height: 300px;
+    max-height: 200px;
     overflow-y: auto;
+    text-align: left;
+    padding: 10px;
+    background-color: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 5px;
+}
+
+#message-list div, #history-list div {
+    margin: 5px 0;
+    cursor: pointer;
+}
+
+h2 {
+    font-size: 18px;
+    margin: 10px 0;
 }
