@@ -1,0 +1,29 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+button {
+    padding: 10px 20px;
+    margin: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+#talk { background-color: red; color: white; }
+#talk.recording { background-color: green; }
+#mute { background-color: green; color: white; }
+#mute.muted { background-color: red; }
+#history { background-color: yellow; }
+#messages, #history-screen {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 600px;
+}
+#message-list, #history-list {
+    border: 1px solid #ccc;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
