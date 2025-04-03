@@ -67,12 +67,14 @@ function toggleTalk() {
 
 function toggleMute() {
     const muteButton = document.getElementById("mute");
-    if (muteButton.style.backgroundColor === "red") {
-        ws.send(JSON.stringify({ type: "unmute" }));
-        muteButton.style.backgroundColor = "green";
-    } else {
+    if (muteButton.textContent === "Mutear") {
         ws.send(JSON.stringify({ type: "mute" }));
+        muteButton.textContent = "Desmutear";
         muteButton.style.backgroundColor = "red";
+    } else {
+        ws.send(JSON.stringify({ type: "unmute" }));
+        muteButton.textContent = "Mutear";
+        muteButton.style.backgroundColor = "green";
     }
 }
 
