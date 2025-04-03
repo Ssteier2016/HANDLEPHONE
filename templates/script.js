@@ -50,7 +50,7 @@ function register() {
                 iconSize: [30, 30],
             });
 
-            L.marker([40.4165, -3.7026], { icon: airplaneIcon }).addTo(map)
+            L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
               .bindPopup("Aeroparque").openPopup();
 
             // Aquí puedes agregar lógica para cargar datos en tiempo real desde OpenSky API
