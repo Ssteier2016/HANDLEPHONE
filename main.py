@@ -13,6 +13,10 @@ import speech_recognition as sr
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
+@app.get("/")
+async def root():
+    return {"message": "HANDLEPHONE is running"}
+    
 # Configuración de audio
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
