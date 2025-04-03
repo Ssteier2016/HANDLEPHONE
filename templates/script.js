@@ -32,8 +32,10 @@ function register() {
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
-    if (talkButton.style.backgroundColor === "green") {
+    if (talkButton.style.backgroundColor === "green";
+        talkButton.textContent === "Grabando...") {
         mediaRecorder.stop();
+        talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     } else {
         navigator.mediaDevices.getUserMedia({ audio: true })
@@ -55,6 +57,7 @@ function toggleTalk() {
                     stream.getTracks().forEach(track => track.stop());
                 };
                 mediaRecorder.start();
+                talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
             .catch(err => console.error("Error al acceder al micrófono:", err));
