@@ -16,7 +16,8 @@ body {
     border: 5px solid #4a4a4a;
     border-radius: 10px;
     padding: 20px;
-    width: 300px;
+    max-width: 600px; /* Tomado de tu nuevo index.html */
+    margin: 0 auto; /* Centrado horizontal */
     text-align: center;
     box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
 }
@@ -24,9 +25,9 @@ body {
 input, button {
     font-family: 'Courier New', Courier, monospace;
     font-size: 16px;
-    margin: 10px 0;
+    margin: 5px; /* Tomado de tu nuevo index.html */
     padding: 10px;
-    width: 80%;
+    width: 100%; /* Tomado de tu nuevo index.html */
     border: 2px solid #00ff00;
     background-color: #1a1a1a;
     color: #00ff00;
@@ -67,7 +68,7 @@ button:hover {
     text-align: left;
     padding: 10px;
     background-color: #1a1a1a;
-    border: 2px solid #00ff00;
+    border: 2px solid #00ff00; /* Ajustado para coincidir con el tema */
     border-radius: 5px;
 }
 
@@ -79,4 +80,16 @@ button:hover {
 h2 {
     font-size: 18px;
     margin: 10px 0;
+}
+
+h3 {
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+#map {
+    height: 400px; /* Tomado de tu nuevo index.html */
+    margin-bottom: 20px; /* Tomado de tu nuevo index.html */
+    border: 2px solid #00ff00;
+    border-radius: 5px;
 }
