@@ -9,13 +9,33 @@ from fastapi.staticfiles import StaticFiles
 import pyaudio
 import wave
 import speech_recognition as sr
+import logging
+from pydub import AudioSegment
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 @app.get("/")
 async def root():
     return {"message": "HANDLEPHONE is running"}
+
+# Alfabeto ICAO
+ICAO_ALPHABET = {
+    'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
+    'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliett',
+    'K': 'Kilo', 'L': 'Lima', 'M': 'Mike', 'N': 'November', 'O': 'Oscar',
+    'P': 'Papa', 'Q': 'Quebec', 'R': 'Romeo', 'S': 'Sierra', 'T': 'Tango',
+    'U': 'Uniform', 'V': 'Victor', 'W': 'Whiskey', 'X': 'X-ray', 'Y': 'Yankee',
+    'Z': 'Zulu'
+}
+
+def to_icao(text):
+    return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
+    
     
 # Configuración de audio
 CHUNK = 1024
@@ -99,42 +119,64 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     try:
         while True:
             data = await websocket.receive_text()
+            logger.info(f"Mensaje recibido: {data}")
             message = json.loads(data)
             
             if message["type"] == "register":
-                users[user_id]["name"] = message["name"]
-                await broadcast_users()
+                try:
+                    legajo = message.get("legajo", "000")
+                    name = message.get("name", "Unknown")
+                    matricula = f"LV-{str(legajo)[:3]}{name[:2].upper()}"
+                    users[user_id] = {
+                        "name": name,
+                        "matricula": matricula,
+                        "matricula_icao": to_icao(matricula)
+                    }
+                    logger.info(f"Usuario registrado: {user_id} - {matricula}")
+                    await broadcast_users()
+                except Exception as e:
+                    logger.error(f"Error en registro: {str(e)}")
             
             elif message["type"] == "audio":
-                audio_data = base64.b64decode(message["data"])
-                timestamp = datetime.utcnow().strftime("%H:%M")
-                
-                # Speech-to-Text con CMU Sphinx
-                recognizer = sr.Recognizer()
-                audio_file = "temp.wav"
-                with open(audio_file, "wb") as f:
-                    f.write(audio_data)
-                with sr.AudioFile(audio_file) as source:
-                    audio = recognizer.record(source)
                 try:
-                    text = recognizer.recognize_sphinx(audio)
-                except sr.UnknownValueError:
-                    text = "No se pudo transcribir"
-                os.remove(audio_file)
-                
-                # Guardar en base de datos
-                save_message(user_id, audio_data, text, timestamp)
-                
-                # Enviar a todos los clientes no muteados
-                for client_id, client in clients.items():
-                    if client_id != user_id and not client["muted"]:
-                        await client["ws"].send_text(json.dumps({
-                            "type": "audio",
-                            "data": message["data"],
-                            "text": text,
-                            "timestamp": timestamp,
-                            "sender": users[user_id]["name"]
-                        }))
+                    audio_data = base64.b64decode(message["data"])
+                    raw_audio_file = "raw_temp.webm"  # Guardar el audio crudo recibido
+                    wav_audio_file = "temp.wav"       # Convertir a WAV
+                    with open(raw_audio_file, "wb") as f:
+                        f.write(audio_data)
+                    
+                    # Convertir a WAV usando pydub
+                    audio = AudioSegment.from_file(raw_audio_file)
+                    audio.export(wav_audio_file, format="wav")
+                    
+                    recognizer = sr.Recognizer()
+                    with sr.AudioFile(wav_audio_file) as source:
+                        audio = recognizer.record(source)
+                    try:
+                        text = recognizer.recognize_sphinx(audio)
+                        logger.info(f"Texto transcrito: {text}")
+                    except sr.UnknownValueError:
+                        text = "No se pudo transcribir"
+                        logger.info("Error: No se pudo transcribir el audio")
+                    
+                    os.remove(raw_audio_file)
+                    os.remove(wav_audio_file)
+                    
+                    save_message(user_id, audio_data, text, timestamp)
+                    
+                    for client_id, client in clients.items():
+                        if client_id != user_id and not client["muted"]:
+                            await client["ws"].send_text(json.dumps({
+                                "type": "audio",
+                                "data": message["data"],
+                                "text": text,
+                                "timestamp": timestamp,
+                                "sender": users[user_id]["name"],
+                                "matricula": users[user_id]["matricula"],
+                                "matricula_icao": users[user_id]["matricula_icao"]
+                            }))
+                except Exception as e:
+                    logger.error(f"Error procesando audio: {str(e)}")
             
             elif message["type"] == "mute":
                 clients[user_id]["muted"] = True
@@ -145,10 +187,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         del clients[user_id]
         del users[user_id]
         await broadcast_users()
+    except Exception as e:
+        logger.error(f"Error en WebSocket: {str(e)}")
 
 async def broadcast_users():
     user_count = len(clients)
-    user_list = [users[uid]["name"] for uid in users]
+    user_list = [f"{users[uid]['name']} ({users[uid]['matricula']})" for uid in users]
     for client in clients.values():
         await client["ws"].send_text(json.dumps({
             "type": "users",
