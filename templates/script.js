@@ -28,20 +28,21 @@ function register() {
             document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
         }
     };
+    ws.onerror = function(error) {
+        console.error("Error en WebSocket:", error);
+    };
 }
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
-    if (talkButton.style.backgroundColor === "green";
-        talkButton.textContent === "Grabando...") {
+    if (talkButton.textContent === "Grabando...") {
         mediaRecorder.stop();
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     } else {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                // Especificar formato WAV si es posible (depende del navegador)
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=pcm' }); // Intentamos PCM
+                mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(event) {
                     audioChunks.push(event.data);
@@ -90,7 +91,8 @@ function showHistory() {
             });
             document.getElementById("main").style.display = "none";
             document.getElementById("history-screen").style.display = "block";
-        });
+        })
+        .catch(err => console.error("Error al cargar historial:", err));
 }
 
 function backToMain() {
