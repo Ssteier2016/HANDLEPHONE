@@ -11,7 +11,7 @@ import wave
 import speech_recognition as sr
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
 # Configuración de audio
 CHUNK = 1024
