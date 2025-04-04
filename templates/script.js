@@ -2,6 +2,7 @@ let ws;
 let userId;
 let mediaRecorder;
 let stream;
+let map;
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -21,8 +22,7 @@ function register() {
         document.getElementById("main").style.display = "block";
         initMap();
         updateOpenSkyData();
-        // Desbloquear audio con interacción inicial
-        document.body.addEventListener('click', unlockAudio, { once: true });
+        document.body.addEventListener('touchstart', unlockAudio, { once: true }); // Para celulares
     };
     
     ws.onmessage = function(event) {
@@ -37,6 +37,7 @@ function register() {
                     console.log("Audio reproducido exitosamente de", message.sender);
                 }).catch(err => {
                     console.error("Error reproduciendo audio:", err);
+                    alert("No se pudo reproducir el audio. Hacé clic en la pantalla primero.");
                 });
                 const messageList = document.getElementById("message-list");
                 const msgDiv = document.createElement("div");
@@ -44,6 +45,7 @@ function register() {
                 messageList.appendChild(msgDiv);
             } catch (err) {
                 console.error("Error procesando audio:", err);
+                alert("Error procesando el audio recibido.");
             }
         } else if (message.type === "users") {
             document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
@@ -52,7 +54,7 @@ function register() {
     
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
-        alert("No se pudo conectar al servidor. Revisa la consola para más detalles.");
+        alert("No se pudo conectar al servidor.");
     };
     
     ws.onclose = function() {
@@ -60,15 +62,15 @@ function register() {
     };
 }
 
-// Desbloquear audio para evitar bloqueo de reproducción automática
 function unlockAudio() {
     const audio = new Audio();
-    audio.play().catch(() => {}); // Reproducir un audio vacío para desbloquear
+    audio.play().catch(() => {});
     console.log("Audio desbloqueado tras interacción");
+    alert("Audio desbloqueado. Probá hablar ahora.");
 }
 
 function initMap() {
-    var map = L.map('map').setView([-34.5597, -58.4116], 10);
+    map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
@@ -88,6 +90,9 @@ function updateOpenSkyData() {
         .then(response => response.json())
         .then(data => {
             const messageList = document.getElementById("message-list");
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker) map.removeLayer(layer);
+            });
             data.forEach(state => {
                 const lat = state[6];
                 const lon = state[5];
@@ -95,17 +100,6 @@ function updateOpenSkyData() {
                     const flightDiv = document.createElement("div");
                     flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
                     messageList.appendChild(flightDiv);
-                }
-            });
-            const map = L.map('map').setView([-34.5597, -58.4116], 10); // Esto recrea el mapa
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
-            data.forEach(state => {
-                const lat = state[6];
-                const lon = state[5];
-                if (lat && lon) {
                     L.marker([lat, lon], { 
                         icon: L.icon({
                             iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
