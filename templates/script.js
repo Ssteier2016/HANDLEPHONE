@@ -97,6 +97,24 @@ function updateOpenSkyData() {
                     messageList.appendChild(flightDiv);
                 }
             });
+            const map = L.map('map').setView([-34.5597, -58.4116], 10); // Esto recrea el mapa
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            data.forEach(state => {
+                const lat = state[6];
+                const lon = state[5];
+                if (lat && lon) {
+                    L.marker([lat, lon], { 
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                            iconSize: [30, 30]
+                        })
+                    }).addTo(map)
+                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1]}`);
+                }
+            });
         })
         .catch(err => console.error("Error al cargar datos de OpenSky:", err));
     setTimeout(updateOpenSkyData, 60000);
