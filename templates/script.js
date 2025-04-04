@@ -1,5 +1,7 @@
 let ws;
 let userId;
+let audioChunks = [];
+let audioContext = new (window.AudioContext || window.webkitAudioContext)();
 let mediaRecorder;
 let stream;
 let map;
@@ -39,10 +41,12 @@ function register() {
                     console.error("Error reproduciendo audio:", err);
                     alert("No se pudo reproducir el audio. Hacé clic en la pantalla primero.");
                 });
-                const messageList = document.getElementById("message-list");
+                // Agregar a la ventana de chat
+                const chatList = document.getElementById("chat-list");
                 const msgDiv = document.createElement("div");
                 msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
-                messageList.appendChild(msgDiv);
+                chatList.appendChild(msgDiv);
+                chatList.scrollTop = chatList.scrollHeight; // Auto-scroll
             } catch (err) {
                 console.error("Error procesando audio:", err);
                 alert("Error procesando el audio recibido.");
@@ -59,6 +63,7 @@ function register() {
     
     ws.onclose = function() {
         console.log("WebSocket cerrado");
+        // No reconectamos automáticamente para persistir hasta logout
     };
 }
 
@@ -90,6 +95,7 @@ function updateOpenSkyData() {
         .then(response => response.json())
         .then(data => {
             const messageList = document.getElementById("message-list");
+            messageList.innerHTML = ""; // Limpiar para evitar duplicados
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) map.removeLayer(layer);
             });
@@ -106,9 +112,10 @@ function updateOpenSkyData() {
                             iconSize: [30, 30]
                         })
                     }).addTo(map)
-                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1]}`);
+                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1] || 'N/A'}`);
                 }
             });
+            messageList.scrollTop = messageList.scrollHeight; // Auto-scroll
         })
         .catch(err => console.error("Error al cargar datos de OpenSky:", err));
     setTimeout(updateOpenSkyData, 60000);
@@ -128,18 +135,21 @@ function toggleTalk() {
             .then(audioStream => {
                 stream = audioStream;
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
                 mediaRecorder.ondataavailable = function(event) {
+                    audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = function() {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     const reader = new FileReader();
-                    reader.readAsDataURL(event.data);
+                    reader.readAsDataURL(audioBlob);
                     reader.onloadend = function() {
                         const base64data = reader.result.split(',')[1];
                         ws.send(JSON.stringify({ type: "audio", data: base64data }));
                     };
-                };
-                mediaRecorder.onstop = function() {
                     console.log("Grabación detenida");
                 };
-                mediaRecorder.start(100);
+                mediaRecorder.start(100); // Grabar en intervalos de 100ms
                 talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
@@ -160,6 +170,19 @@ function toggleMute() {
     }
 }
 
+function logout() {
+    if (ws) {
+        ws.send(JSON.stringify({ type: "logout" }));
+        ws.close();
+    }
+    document.getElementById("register").style.display = "block";
+    document.getElementById("main").style.display = "none";
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+    console.log("Sesión cerrada");
+}
+
 function showHistory() {
     fetch('/history')
         .then(response => response.json())
@@ -169,7 +192,7 @@ function showHistory() {
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
                 msgDiv.textContent = `${msg.date} ${msg.timestamp} - ${msg.user_id}: ${msg.text}`;
-                const audio = new Audio(`data:audio/wav;base64,${msg.audio}`);
+                const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
                 msgDiv.onclick = () => audio.play();
                 historyList.appendChild(msgDiv);
             });
@@ -193,3 +216,8 @@ function base64ToBlob(base64, mime) {
     }
     return new Blob([uint8Array], { type: mime });
 }
+
+// Event listeners
+document.getElementById("talk").addEventListener("click", toggleTalk);
+document.getElementById("mute").addEventListener("click", toggleMute);
+document.getElementById("logout-btn").addEventListener("click", logout);
