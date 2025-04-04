@@ -123,14 +123,8 @@ function updateOpenSkyData() {
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
-    if (talkButton.textContent === "Grabando...") {
-        mediaRecorder.stop();
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
-        talkButton.textContent = "Hablar";
-        talkButton.style.backgroundColor = "red";
-    } else {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        // Iniciar grabación
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(audioStream => {
                 stream = audioStream;
@@ -148,12 +142,23 @@ function toggleTalk() {
                         ws.send(JSON.stringify({ type: "audio", data: base64data }));
                     };
                     console.log("Grabación detenida");
+                    // Limpiar stream y audioChunks
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
+                    }
+                    audioChunks = [];
                 };
                 mediaRecorder.start(100); // Grabar en intervalos de 100ms
                 talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
             .catch(err => console.error("Error al acceder al micrófono:", err));
+    } else if (mediaRecorder.state === "recording") {
+        // Detener grabación
+        mediaRecorder.stop();
+        talkButton.textContent = "Hablar";
+        talkButton.style.backgroundColor = "red";
     }
 }
 
