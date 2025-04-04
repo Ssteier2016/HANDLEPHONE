@@ -1,7 +1,6 @@
 let ws;
 let userId;
 let mediaRecorder;
-let audioChunks = [];
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -20,12 +19,15 @@ function register() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
+        loadOpenSkyData(); // Añadido de mi versión
     };
     
     ws.onmessage = function(event) {
         const message = JSON.parse(event.data);
         if (message.type === "audio") {
-            const audio = new Audio(`data:audio/wav;base64,${message.data}`);
+            const audioBlob = base64ToBlob(message.data, 'audio/webm'); // Adaptado para streaming
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
             audio.play();
             const messageList = document.getElementById("message-list");
             const msgDiv = document.createElement("div");
@@ -62,6 +64,32 @@ function initMap() {
         .bindPopup("Aeroparque").openPopup();
 }
 
+function loadOpenSkyData() {
+    fetch('/opensky')
+        .then(response => response.json())
+        .then(data => {
+            const map = L.map('map').setView([-34.5597, -58.4116], 10); // Reusamos el mapa existente
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            data.forEach(state => {
+                const lat = state[6];
+                const lon = state[5];
+                if (lat && lon) {
+                    L.marker([lat, lon], { 
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                            iconSize: [30, 30]
+                        })
+                    }).addTo(map)
+                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1]}`);
+                }
+            });
+        })
+        .catch(err => console.error("Error al cargar datos de OpenSky:", err));
+}
+
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (talkButton.textContent === "Grabando...") {
@@ -71,23 +99,17 @@ function toggleTalk() {
     } else {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 mediaRecorder.ondataavailable = function(event) {
-                    audioChunks.push(event.data);
-                };
-                mediaRecorder.onstop = function() {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                     const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
+                    reader.readAsDataURL(event.data);
                     reader.onloadend = function() {
                         const base64data = reader.result.split(',')[1];
                         ws.send(JSON.stringify({ type: "audio", data: base64data }));
                     };
-                    stream.getTracks().forEach(track => track.stop());
                 };
-                mediaRecorder.start();
-                talkButton.textContent = "Grabando...";
+                mediaRecorder.start(100); // Streaming cada 100ms
+                talkButton.textContent = "Grabando..."; // Mantengo tu texto
                 talkButton.style.backgroundColor = "green";
             })
             .catch(err => console.error("Error al acceder al micrófono:", err));
@@ -129,4 +151,14 @@ function showHistory() {
 function backToMain() {
     document.getElementById("history-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
+}
+
+function base64ToBlob(base64, mime) {
+    const byteString = atob(base64);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const uint8Array = new Uint8Array(arrayBuffer);
+    for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([uint8Array], { type: mime });
 }
