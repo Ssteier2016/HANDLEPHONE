@@ -16,13 +16,13 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Credenciales de OpenSky Network (reemplazá con las tuyas)
+# Configuración de OpenSky Network (modo anónimo)
 url = "https://opensky-network.org/api/states/all"
 params = {
-    "lamin": -40.0,  # Latitud mínima (ajustado para Argentina)
-    "lamax": -20.0,  # Latitud máxima
-    "lomin": -70.0,  # Longitud mínima
-    "lomax": -50.0   # Longitud máxima
+    "lamin": -55.0,  # Latitud mínima (Tierra del Fuego)
+    "lamax": -22.0,  # Latitud máxima (norte de Argentina)
+    "lomin": -73.0,  # Longitud mínima (oeste)
+    "lomax": -53.0   # Longitud máxima (este)
 }
 
 # Alfabeto ICAO
@@ -47,10 +47,10 @@ async def get_opensky_data():
         response = requests.get(url, params=params)
         if response.status_code == 200:
             data = response.json()
-            logger.info("Datos de OpenSky obtenidos correctamente")
+            logger.info("Datos de OpenSky obtenidos correctamente (anónimo)")
             return data["states"]
         else:
-           logger.error(f"Error en OpenSky API: {response.status_code}")
+            logger.error(f"Error en OpenSky API: {response.status_code}")
             return {"error": f"Error: {response.status_code}"}
     except Exception as e:
         logger.error(f"Error al obtener datos de OpenSky: {str(e)}")
@@ -90,8 +90,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     users[user_id] = {"name": user_id.split("_")[1], "matricula": "00000", "matricula_icao": to_icao("LV-00000")}
     await broadcast_users()
     
-    recognizer = KaldiRecognizer(model, 16000)  # 16kHz para streaming
-    
     try:
         while True:
             data = await websocket.receive_text()
@@ -117,15 +115,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 try:
                     audio_data = base64.b64decode(message["data"])
                     timestamp = datetime.utcnow().strftime("%H:%M")
-                    
-                    # Procesar audio con Vosk
-                    if recognizer.AcceptWaveform(audio_data):
-                        result = json.loads(recognizer.Result())
-                        text = result.get("text", "No se pudo transcribir")
-                        logger.info(f"Texto transcrito para {user_id}: {text}")
-                    else:
-                        partial = json.loads(recognizer.PartialResult())
-                        text = partial.get("partial", "")
+                    text = "Sin transcripción"  # Sin Vosk por ahora
                     
                     # Guardar en historial
                     save_message(user_id, audio_data, text, timestamp)
