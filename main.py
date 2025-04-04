@@ -8,6 +8,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 import logging
 import requests
+from vosk import Model, KaldiRecognizer
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -28,6 +29,13 @@ ICAO_ALPHABET = {
     'U': 'Uniform', 'V': 'Victor', 'W': 'Whiskey', 'X': 'X-ray', 'Y': 'Yankee',
     'Z': 'Zulu'
 }
+
+# Intentar cargar el modelo Vosk (requiere carpeta /model en el repositorio)
+try:
+    model = Model("model")  # Subí vosk-model-es-0.42 a /model
+except Exception as e:
+    logger.error(f"No se pudo cargar el modelo Vosk: {str(e)}")
+    model = None
 
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
@@ -87,6 +95,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         active_sessions[user_id] = True
     await broadcast_users()
     
+    recognizer = KaldiRecognizer(model, 16000) if model else None
+    
     try:
         while True:
             data = await websocket.receive_text()
@@ -109,7 +119,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             elif message["type"] == "audio":
                 audio_data = base64.b64decode(message["data"])
                 timestamp = datetime.utcnow().strftime("%H:%M")
-                text = "Sin transcripción"  # Placeholder hasta agregar Vosk
+                text = "Sin transcripción"
+                if recognizer and recognizer.AcceptWaveform(audio_data):
+                    result = json.loads(recognizer.Result())
+                    text = result.get("text", "No se pudo transcribir")
                 
                 save_message(user_id, audio_data, text, timestamp)
                 
@@ -143,7 +156,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     except WebSocketDisconnect:
         if user_id in clients:
             del clients[user_id]
-        # No eliminamos de users/active_sessions para persistir la sesión
         logger.info(f"Cliente desconectado: {user_id}, sesión sigue activa")
         await broadcast_users()
 
