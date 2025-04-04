@@ -1,6 +1,7 @@
 let ws;
 let userId;
 let mediaRecorder;
+let stream; // Para manejar el flujo de audio
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -19,13 +20,13 @@ function register() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
-        loadOpenSkyData(); // Añadido de mi versión
+        updateOpenSkyData(); // Iniciar actualización periódica
     };
     
     ws.onmessage = function(event) {
         const message = JSON.parse(event.data);
         if (message.type === "audio") {
-            const audioBlob = base64ToBlob(message.data, 'audio/webm'); // Adaptado para streaming
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
             audio.play();
@@ -64,11 +65,22 @@ function initMap() {
         .bindPopup("Aeroparque").openPopup();
 }
 
-function loadOpenSkyData() {
+function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
         .then(data => {
-            const map = L.map('map').setView([-34.5597, -58.4116], 10); // Reusamos el mapa existente
+            const messageList = document.getElementById("message-list");
+            data.forEach(state => {
+                const lat = state[6];
+                const lon = state[5];
+                if (lat && lon) {
+                    const flightDiv = document.createElement("div");
+                    flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
+                    messageList.appendChild(flightDiv);
+                }
+            });
+            // Actualizar el mapa también (opcional)
+            const map = L.map('map').setView([-34.5597, -58.4116], 10);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '© OpenStreetMap'
@@ -88,17 +100,22 @@ function loadOpenSkyData() {
             });
         })
         .catch(err => console.error("Error al cargar datos de OpenSky:", err));
+    setTimeout(updateOpenSkyData, 60000); // Actualizar cada 60 segundos
 }
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (talkButton.textContent === "Grabando...") {
         mediaRecorder.stop();
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop()); // Detener el micrófono
+        }
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     } else {
         navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
+            .then(audioStream => {
+                stream = audioStream; // Guardar el stream para detenerlo
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 mediaRecorder.ondataavailable = function(event) {
                     const reader = new FileReader();
@@ -108,8 +125,11 @@ function toggleTalk() {
                         ws.send(JSON.stringify({ type: "audio", data: base64data }));
                     };
                 };
+                mediaRecorder.onstop = function() {
+                    console.log("Grabación detenida");
+                };
                 mediaRecorder.start(100); // Streaming cada 100ms
-                talkButton.textContent = "Grabando..."; // Mantengo tu texto
+                talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
             .catch(err => console.error("Error al acceder al micrófono:", err));
