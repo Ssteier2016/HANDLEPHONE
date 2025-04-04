@@ -48,12 +48,17 @@ users = {}
 MODEL_PATH = "vosk-model-small-es-0.42"
 if not os.path.exists(MODEL_PATH):
     logger.info("Descargando modelo Vosk para español...")
-    os.system("wget https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip")
-    os.system("unzip vosk-model-small-es-0.42.zip")
-    os.remove("vosk-model-small-es-0.42.zip")
+    try:
+        os.system("wget https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip -O vosk-model.zip")
+        os.system("unzip vosk-model.zip -d .")
+        os.rename("vosk-model-small-es-0.42", MODEL_PATH)  # Asegurar nombre correcto
+        os.remove("vosk-model.zip")
+    except Exception as e:
+        logger.error(f"No se pudo descargar o descomprimir el modelo Vosk: {str(e)}")
+        raise RuntimeError("Falta el modelo Vosk y no se pudo descargar")
 model = Model(MODEL_PATH)
-
 @app.get("/")
+
 async def root():
     return {"message": "HANDLEPHONE is running"}
 
@@ -103,7 +108,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
     logger.info(f"Cliente conectado: {user_id}")
     clients[user_id] = {"ws": websocket, "muted": False}
-    users[user_id] = {"name": user_id.split("_")[1], "matricula": "LV-00000", "matricula_icao": to_icao("LV-00000")}
+    users[user_id] = {"name": user_id.split("_")[1], "matricula": "00000", "matricula_icao": to_icao("LV-00000")}
     await broadcast_users()
     
     recognizer = KaldiRecognizer(model, 16000)  # 16kHz para streaming
@@ -118,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 try:
                     legajo = message.get("legajo", "00000")
                     name = message.get("name", "Unknown")
-                    matricula = f"LV-{str(legajo)[:5]}"
+                    matricula = f"{str(legajo)[:5]}"
                     users[user_id] = {
                         "name": name,
                         "matricula": matricula,
