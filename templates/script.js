@@ -25,11 +25,12 @@ function register() {
     
     ws.onmessage = function(event) {
         const message = JSON.parse(event.data);
+        console.log("Mensaje recibido:", message); // Depuración
         if (message.type === "audio") {
             const audioBlob = base64ToBlob(message.data, 'audio/webm');
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
-            audio.play();
+            audio.play().catch(err => console.error("Error reproduciendo audio:", err)); // Manejo de errores
             const messageList = document.getElementById("message-list");
             const msgDiv = document.createElement("div");
             msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
