@@ -1,7 +1,7 @@
 # Usar una imagen base de Python 3.11
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para PyAudio, compilación y descarga de Vosk
+# Instalar dependencias del sistema necesarias para PyAudio, Vosk y herramientas adicionales
 RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     gcc \
@@ -13,13 +13,16 @@ RUN apt-get update && apt-get install -y \
 # Establecer el directorio de trabajo
 WORKDIR /app
 
-# Copiar todos los archivos del proyecto
-COPY . .
+# Copiar requirements.txt primero para aprovechar el cache de Docker
+COPY requirements.txt .
 
 # Instalar las dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Exponer el puerto
+# Copiar el resto de los archivos del proyecto
+COPY . .
+
+# Exponer el puerto (opcional, pero buena práctica)
 EXPOSE 8000
 
 # Comando para iniciar la aplicación
