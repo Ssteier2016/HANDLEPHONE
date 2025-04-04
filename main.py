@@ -12,6 +12,7 @@ import speech_recognition as sr
 import logging
 from pydub import AudioSegment
 import requests
+import vosk import Model, KaldiRecognizer
 
 # Credenciales de OpenSky Network
 username = "TU_USUARIO"
@@ -67,6 +68,16 @@ RATE = 44100
 clients = {}
 users = {}
 
+# Configurar modelo Vosk
+MODEL_PATH = "vosk-model-small-es-0.42"
+if not os.path.exists(MODEL_PATH):
+    logger.info("Descargando modelo Vosk para español...")
+    os.system("wget https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip")
+    os.system("unzip vosk-model-small-es-0.42.zip")
+    os.remove("vosk-model-small-es-0.42.zip")
+model = Model(MODEL_PATH)
+recognizer = None  # Se inicializará por conexión
+
 @app.get("/")
 async def root():
     return {"message": "HANDLEPHONE is running"}
@@ -99,23 +110,27 @@ def get_history():
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    global recognizer
     await websocket.accept()
     logger.info(f"Cliente conectado: {user_id}")
     clients[user_id] = {"ws": websocket, "muted": False}
-    users[user_id] = {"name": user_id.split("_")[1], "matricula": "LV-000UN", "matricula_icao": to_icao("LV-000UN")}
+    users[user_id] = {"name": user_id.split("_")[1], "matricula": "00000", "matricula_icao": to_icao("00000")}
     await broadcast_users()
+
+      # Inicializar reconocedor para este usuario
+    recognizer = KaldiRecognizer(model, 16000)  # 16kHz es estándar para streaming
     
     try:
         while True:
             data = await websocket.receive_text()
-            logger.info(f"Mensaje recibido de {user_id}: {data}")
+            logger.info(f"Mensaje recibido de {user_id}: {data[:50]}...")
             message = json.loads(data)
             
             if message["type"] == "register":
                 try:
                     legajo = message.get("legajo", "00000")
                     name = message.get("name", "Unknown")
-                    matricula = f"{str(legajo)[:5]}{name[:5].upper()}"
+                    matricula = f"{str(legajo)[:5]}{name[:0].upper()}"
                     users[user_id] = {
                         "name": name,
                         "matricula": matricula,
@@ -125,7 +140,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     await broadcast_users()
                 except Exception as e:
                     logger.error(f"Error en registro: {str(e)}")
-            
+                    
+            elif message["type"] == "audio":
+                try:
+                    audio_data = base64.b64decode(message["data"])
+                    # Procesar audio con Vosk
+                    if recognizer.AcceptWaveform(audio_data):
+                        result = json.loads(recognizer.Result())
+                        text = result.get("text", "No se pudo transcribir")
+                        logger.info(f"Texto transcrito para {user_id}: {text}")
+                    else:
+                        partial = json.loads(recognizer.PartialResult())
+                        text = partial.get("partial", "")
+
+                    # Retransmitir audio y texto en tiempo real
+                    for client_id, client in clients.items():
+                        if client_id != user_id and not client["muted"]:
+                            await client["ws"].send_text(json.dumps({
+                                "type": "audio",
+                                "data": message["data"],
+                                "text": text
+                            }))
+                except Exception as e:
+                    logger.error(f"Error procesando audio para {user_id}: {str(e)}")
             elif message["type"] == "audio":
                 try:
                     audio_data = base64.b64decode(message["data"])
