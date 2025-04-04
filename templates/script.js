@@ -21,21 +21,30 @@ function register() {
         document.getElementById("main").style.display = "block";
         initMap();
         updateOpenSkyData();
+        // Desbloquear audio con interacción inicial
+        document.body.addEventListener('click', unlockAudio, { once: true });
     };
     
     ws.onmessage = function(event) {
         const message = JSON.parse(event.data);
-        console.log("Mensaje recibido:", message); // Depuración
+        console.log("Mensaje recibido:", message);
         if (message.type === "audio") {
-            const audioBlob = base64ToBlob(message.data, 'audio/webm');
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.play().catch(err => console.error("Error reproduciendo audio:", err));
-            console.log("Reproduciendo audio de", message.sender); // Log extra para depurar
-            const messageList = document.getElementById("message-list");
-            const msgDiv = document.createElement("div");
-            msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
-            messageList.appendChild(msgDiv);
+            try {
+                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                audio.play().then(() => {
+                    console.log("Audio reproducido exitosamente de", message.sender);
+                }).catch(err => {
+                    console.error("Error reproduciendo audio:", err);
+                });
+                const messageList = document.getElementById("message-list");
+                const msgDiv = document.createElement("div");
+                msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+                messageList.appendChild(msgDiv);
+            } catch (err) {
+                console.error("Error procesando audio:", err);
+            }
         } else if (message.type === "users") {
             document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
         }
@@ -49,6 +58,13 @@ function register() {
     ws.onclose = function() {
         console.log("WebSocket cerrado");
     };
+}
+
+// Desbloquear audio para evitar bloqueo de reproducción automática
+function unlockAudio() {
+    const audio = new Audio();
+    audio.play().catch(() => {}); // Reproducir un audio vacío para desbloquear
+    console.log("Audio desbloqueado tras interacción");
 }
 
 function initMap() {
@@ -79,25 +95,6 @@ function updateOpenSkyData() {
                     const flightDiv = document.createElement("div");
                     flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
                     messageList.appendChild(flightDiv);
-                }
-            });
-            // Actualizar el mapa también
-            const map = L.map('map').setView([-34.5597, -58.4116], 10);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
-            data.forEach(state => {
-                const lat = state[6];
-                const lon = state[5];
-                if (lat && lon) {
-                    L.marker([lat, lon], { 
-                        icon: L.icon({
-                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
-                            iconSize: [30, 30]
-                        })
-                    }).addTo(map)
-                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1]}`);
                 }
             });
         })
