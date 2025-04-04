@@ -6,6 +6,11 @@
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 400px; }
+        #message-list, #chat-list { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+        #main, #history-screen { display: none; }
+    </style>
 </head>
 <body>
     <!-- Pantalla de registro -->
@@ -16,21 +21,26 @@
     </div>
 
     <!-- Pantalla principal -->
-    <div id="main" style="display: none;">
+    <div id="main">
         <h2>Comunicación Aeronáutica</h2>
         <div id="map"></div>
+        <div id="flights-window">
+            <h3>Datos de Vuelos</h3>
+            <div id="message-list"></div>
+        </div>
+        <div id="chat-window">
+            <h3>Conversación</h3>
+            <div id="chat-list"></div>
+        </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" onclick="toggleMute()">Mutear</button>
         <button id="history" onclick="showHistory()">Historial</button>
+        <button id="logout-btn">Cerrar Sesión</button>
         <div id="users">Usuarios conectados: 0</div>
-        <div id="messages">
-            <h3>Mensajes</h3>
-            <div id="message-list"></div>
-        </div>
     </div>
 
     <!-- Pantalla de historial -->
-    <div id="history-screen" style="display: none;">
+    <div id="history-screen">
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
