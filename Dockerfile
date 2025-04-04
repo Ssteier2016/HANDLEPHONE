@@ -1,11 +1,13 @@
 # Usar una imagen base de Python 3.11
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para PyAudio y compilación
+# Instalar dependencias del sistema necesarias para PyAudio, compilación y descarga de Vosk
 RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     gcc \
     ffmpeg \
+    wget \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
