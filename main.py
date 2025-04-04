@@ -113,9 +113,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             
             if message["type"] == "register":
                 try:
-                    legajo = message.get("legajo", "000")
+                    legajo = message.get("legajo", "00000")
                     name = message.get("name", "Unknown")
-                    matricula = f"LV-{str(legajo)[:3]}{name[:2].upper()}"
+                    matricula = f"{str(legajo)[:5]}{name[:5].upper()}"
                     users[user_id] = {
                         "name": name,
                         "matricula": matricula,
@@ -142,7 +142,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     with sr.AudioFile(wav_audio_file) as source:
                         audio = recognizer.record(source)
                     try:
-                        text = recognizer.recognize_sphinx(audio)
+                        text = recognizer.recognize_sphinx(audio, language="es-ES")
                         logger.info(f"Texto transcrito para {user_id}: {text}")
                     except sr.UnknownValueError:
                         text = "No se pudo transcribir"
