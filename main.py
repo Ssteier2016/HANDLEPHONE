@@ -8,7 +8,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 import logging
 import requests
-from vosk import Model, KaldiRecognizer
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -41,25 +40,6 @@ def to_icao(text):
 
 clients = {}
 users = {}
-model = Model("model")
-
-# Configurar modelo Vosk
-MODEL_PATH = "vosk-model-small-es-0.42"
-if not os.path.exists(MODEL_PATH):
-    logger.info("Descargando modelo Vosk para español...")
-    try:
-        os.system("wget https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip -O vosk-model.zip")
-        os.system("unzip vosk-model.zip -d .")
-        os.rename("vosk-model-small-es-0.42", MODEL_PATH)  # Asegurar nombre correcto
-        os.remove("vosk-model.zip")
-    except Exception as e:
-        logger.error(f"No se pudo descargar o descomprimir el modelo Vosk: {str(e)}")
-        raise RuntimeError("Falta el modelo Vosk y no se pudo descargar")
-model = Model(MODEL_PATH)
-@app.get("/")
-
-async def root():
-    return {"message": "HANDLEPHONE is running"}
 
 @app.get("/opensky")
 async def get_opensky_data():
@@ -70,7 +50,7 @@ async def get_opensky_data():
             logger.info("Datos de OpenSky obtenidos correctamente")
             return data["states"]
         else:
-            logger.error(f"Error en OpenSky API: {response.status_code}")
+           logger.error(f"Error en OpenSky API: {response.status_code}")
             return {"error": f"Error: {response.status_code}"}
     except Exception as e:
         logger.error(f"Error al obtener datos de OpenSky: {str(e)}")
