@@ -1,7 +1,7 @@
 let ws;
 let userId;
 let mediaRecorder;
-let stream; // Para manejar el flujo de audio
+let stream;
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -20,7 +20,7 @@ function register() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
-        updateOpenSkyData(); // Iniciar actualización periódica
+        updateOpenSkyData();
     };
     
     ws.onmessage = function(event) {
@@ -30,7 +30,8 @@ function register() {
             const audioBlob = base64ToBlob(message.data, 'audio/webm');
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
-            audio.play().catch(err => console.error("Error reproduciendo audio:", err)); // Manejo de errores
+            audio.play().catch(err => console.error("Error reproduciendo audio:", err));
+            console.log("Reproduciendo audio de", message.sender); // Log extra para depurar
             const messageList = document.getElementById("message-list");
             const msgDiv = document.createElement("div");
             msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
@@ -80,7 +81,7 @@ function updateOpenSkyData() {
                     messageList.appendChild(flightDiv);
                 }
             });
-            // Actualizar el mapa también (opcional)
+            // Actualizar el mapa también
             const map = L.map('map').setView([-34.5597, -58.4116], 10);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
@@ -101,7 +102,7 @@ function updateOpenSkyData() {
             });
         })
         .catch(err => console.error("Error al cargar datos de OpenSky:", err));
-    setTimeout(updateOpenSkyData, 60000); // Actualizar cada 60 segundos
+    setTimeout(updateOpenSkyData, 60000);
 }
 
 function toggleTalk() {
@@ -109,14 +110,14 @@ function toggleTalk() {
     if (talkButton.textContent === "Grabando...") {
         mediaRecorder.stop();
         if (stream) {
-            stream.getTracks().forEach(track => track.stop()); // Detener el micrófono
+            stream.getTracks().forEach(track => track.stop());
         }
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     } else {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(audioStream => {
-                stream = audioStream; // Guardar el stream para detenerlo
+                stream = audioStream;
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 mediaRecorder.ondataavailable = function(event) {
                     const reader = new FileReader();
@@ -129,7 +130,7 @@ function toggleTalk() {
                 mediaRecorder.onstop = function() {
                     console.log("Grabación detenida");
                 };
-                mediaRecorder.start(100); // Streaming cada 100ms
+                mediaRecorder.start(100);
                 talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
