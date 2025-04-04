@@ -18,8 +18,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Credenciales de OpenSky Network (reemplazá con las tuyas)
-username = "TU_USUARIO"
-password = "TU_CONTRASEÑA"
+username = "rodrigo.n.arena@hotmail.com"
+password = "Olivera505%"
 url = "https://opensky-network.org/api/states/all"
 params = {
     "lamin": -40.0,  # Latitud mínima (ajustado para Argentina)
