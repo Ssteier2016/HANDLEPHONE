@@ -220,9 +220,4 @@ function base64ToBlob(base64, mime) {
         uint8Array[i] = byteString.charCodeAt(i);
     }
     return new Blob([uint8Array], { type: mime });
-}
-
-// Event listeners
-document.getElementById("talk").addEventListener("click", toggleTalk);
-document.getElementById("mute").addEventListener("click", toggleMute);
-document.getElementById("logout-btn").addEventListener("click", logout);
+        }
