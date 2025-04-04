@@ -163,6 +163,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "matricula": users[user_id]["matricula"],
                                 "matricula_icao": users[user_id]["matricula_icao"]
                             }))
+                            logger.info(f"Audio retransmitido a {client_id}")
                 except Exception as e:
                     logger.error(f"Error procesando audio para {user_id}: {str(e)}")
             
