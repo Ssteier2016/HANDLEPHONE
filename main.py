@@ -18,8 +18,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Credenciales de OpenSky Network (reemplazá con las tuyas)
-username = "rodrigo.n.arena@hotmail.com"
-password = "Olivera505%"
 url = "https://opensky-network.org/api/states/all"
 params = {
     "lamin": -40.0,  # Latitud mínima (ajustado para Argentina)
@@ -43,6 +41,7 @@ def to_icao(text):
 
 clients = {}
 users = {}
+model = Model("model")
 
 # Configurar modelo Vosk
 MODEL_PATH = "vosk-model-small-es-0.42"
@@ -65,7 +64,7 @@ async def root():
 @app.get("/opensky")
 async def get_opensky_data():
     try:
-        response = requests.get(url, auth=(username, password), params=params)
+        response = requests.get(url, params=params)
         if response.status_code == 200:
             data = response.json()
             logger.info("Datos de OpenSky obtenidos correctamente")
