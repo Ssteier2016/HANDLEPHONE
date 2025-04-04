@@ -1,10 +1,11 @@
 fastapi
 uvicorn
 websockets
-pyaudio
 speechrecognition
 pocketsphinx
 pydub
 requests==2.31.0
 flask==2.3.2
+sqlite3
+pyaudio==0.2.14
 vosk
