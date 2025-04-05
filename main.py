@@ -18,24 +18,24 @@ import zipfile
 
 MODEL_FOLDER = "Model/vosk-model-es-0.42"
 MODEL_ZIP = "Model/vosk-model-es-0.42.zip"
-# Reemplazá este link con el tuyo (id real del archivo en Drive)
-GOOGLE_DRIVE_URL = "https://drive.google.com/file/d/1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd/view?usp=drive_link"
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd"  # URL directa para gdown
 
 if not os.path.exists(MODEL_FOLDER):
-    print("Modelo Vosk no encontrado. Descargando desde Google Drive...")
+    print("🛠️ Modelo Vosk no encontrado. Descargando desde Google Drive...")
     os.makedirs("Model", exist_ok=True)
-   gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False, fuzzy=True)
+    gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False)
 
-    print("Descomprimiendo modelo...")
+    print("📦 Descomprimiendo modelo...")
     if zipfile.is_zipfile(MODEL_ZIP):
-    with zipfile.ZipFile(MODEL_ZIP, 'r') as zip_ref:
-        zip_ref.extractall(MODEL_DIR)
+        with zipfile.ZipFile(MODEL_ZIP, 'r') as zip_ref:
+            zip_ref.extractall("Model")
+        print("✅ Modelo descargado y descomprimido correctamente.")
+    else:
+        print("❌ El archivo descargado no es un zip válido.")
+        exit(1)
 else:
-    print("❌ El archivo descargado no es un zip válido.")
-    exit(1)
-
+    print("✅ Modelo Vosk ya está disponible.")
 # ↑↑↑ FIN BLOQUE DE DESCARGA ↑↑↑
-
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
