@@ -9,16 +9,17 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import logging
-import aiohttp  # Reemplazamos requests por aiohttp para Airplanes.Live
+import aiohttp
 from vosk import Model, KaldiRecognizer
-
-# ↓↓↓ AGREGADO PARA DESCARGA AUTOMÁTICA DEL MODELO ↓↓↓
+import requests
+from bs4 import BeautifulSoup
 import gdown
 import zipfile
 
+# Descarga automática del modelo Vosk
 MODEL_FOLDER = "Model/vosk-model-es-0.42"
 MODEL_ZIP = "Model/vosk-model-es-0.42.zip"
-GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd"  # URL directa para gdown
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd"
 
 if not os.path.exists(MODEL_FOLDER):
     print("🛠️ Modelo Vosk no encontrado. Descargando desde Google Drive...")
@@ -35,7 +36,6 @@ if not os.path.exists(MODEL_FOLDER):
         exit(1)
 else:
     print("✅ Modelo Vosk ya está disponible.")
-# ↑↑↑ FIN BLOQUE DE DESCARGA ↑↑↑
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -61,7 +61,7 @@ ICAO_ALPHABET = {
 }
 
 try:
-    model = Model("C:/Users/Georgiana/Desktop/PROYECTO HANDY HANLDE/Model/vosk-model-es-0.42")
+    model = Model("Model/vosk-model-es-0.42")  # Ajustado al directorio correcto
 except Exception as e:
     logger.error(f"No se pudo cargar el modelo Vosk: {str(e)}")
     model = None
@@ -76,9 +76,9 @@ audio_queue = asyncio.Queue()
 
 last_request_time = 0
 cached_data = None
-CACHE_DURATION = 15  # Aumentado a 15 segundos para evitar saturación
+CACHE_DURATION = 15  # 15 segundos para evitar saturación
 
-@app.get("/opensky")
+# Función para obtener datos de Airplanes.Live
 async def get_airplanes_live_data():
     global last_request_time, cached_data
     current_time = time.time()
@@ -101,6 +101,80 @@ async def get_airplanes_live_data():
     except Exception as e:
         logger.error(f"Error al obtener datos de Airplanes.Live: {str(e)}")
         return {"error": str(e)}
+
+# Función para hacer web scraping de TAMS
+def scrape_tams_data():
+    url = "http://www.tams.com.ar/organismos/vuelos.aspx"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Buscar la tabla de vuelos (ajustar según HTML real)
+        flights = []
+        table = soup.find('table')  # Esto es un placeholder, ajustar según inspección
+        if table:
+            for row in table.find_all('tr')[1:]:  # Saltar encabezado
+                cols = row.find_all('td')
+                if len(cols) >= 6:  # Ajustar según columnas reales
+                    flight_number = cols[0].text.strip()  # Número de vuelo
+                    airline = cols[1].text.strip()  # Aerolínea
+                    origin_dest = cols[2].text.strip()  # Origen o destino
+                    scheduled_time = cols[3].text.strip()  # Hora programada
+                    estimated_time = cols[4].text.strip()  # Hora estimada
+                    status = cols[5].text.strip()  # Estado
+
+                    # Filtrar solo Aerolíneas Argentinas y Aeroparque (AEP)
+                    if "Aerolíneas Argentinas" in airline and "AEP" in origin_dest:
+                        flights.append({
+                            "flight": flight_number,
+                            "origin_dest": origin_dest,
+                            "scheduled": scheduled_time,
+                            "estimated": estimated_time,
+                            "status": status
+                        })
+        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos encontrados")
+        return flights
+    except Exception as e:
+        logger.error(f"Error al scrapear TAMS: {e}")
+        return {"error": str(e)}
+
+@app.get("/opensky")
+async def get_opensky_data():
+    airplanes_data = await get_airplanes_live_data()
+    tams_data = scrape_tams_data()
+    
+    # Combinar datos (priorizar TAMS cuando coincidan vuelos)
+    if isinstance(airplanes_data, list) and isinstance(tams_data, list):
+        combined_data = []
+        for plane in airplanes_data:
+            flight = plane.get("flight", "").strip()
+            if flight and flight.startswith(("ARG", "AEP")):  # Solo Aerolíneas Argentinas
+                plane_info = {
+                    "lat": plane.get("lat"),
+                    "lon": plane.get("lon"),
+                    "flight": flight,
+                    "hex": plane.get("hex"),
+                    "gs": plane.get("gs"),
+                    "alt_geom": plane.get("alt_geom"),
+                    "vert_rate": plane.get("vert_rate")
+                }
+                # Buscar coincidencia en TAMS
+                for tams_flight in tams_data:
+                    if tams_flight["flight"] == flight:
+                        plane_info["origin_dest"] = tams_flight["origin_dest"]
+                        plane_info["scheduled"] = tams_flight["scheduled"]
+                        plane_info["estimated"] = tams_flight["estimated"]
+                        break
+                combined_data.append(plane_info)
+        return combined_data
+    elif isinstance(airplanes_data, dict) and "error" in airplanes_data:
+        return airplanes_data
+    else:
+        return {"error": "Datos inválidos"}
 
 def init_db():
     conn = sqlite3.connect("history.db")
