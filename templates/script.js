@@ -47,28 +47,30 @@ function register() {
     };
     
     ws.onmessage = function(event) {
-        const message = JSON.parse(event.data);
-        console.log("Mensaje recibido:", message);
-        if (message.type === "audio") {
-            try {
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                audioQueue.push(audio);
-                playNextAudio();
-                const chatList = document.getElementById("chat-list");
-                const msgDiv = document.createElement("div");
-                msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-            } catch (err) {
-                console.error("Error procesando audio:", err);
-                alert("Error procesando el audio recibido.");
-            }
-        } else if (message.type === "users") {
-            document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+    const message = JSON.parse(event.data);
+    console.log("Mensaje recibido:", message);
+    if (message.type === "audio") {
+        try {
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            audioQueue.push(audio);
+            playNextAudio();
+            const chatList = document.getElementById("chat-list");
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message"; // Clase para estilizar
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+            msgDiv.onclick = () => audio.play(); // Reproducir al hacer clic
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+        } catch (err) {
+            console.error("Error procesando audio:", err);
+            alert("Error procesando el audio recibido.");
         }
-    };
+    } else if (message.type === "users") {
+        document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+    }
+};
     
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
