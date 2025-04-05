@@ -113,30 +113,39 @@ def scrape_tams_data():
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Buscar la tabla de vuelos (ajustar según HTML real)
-        flights = []
-        table = soup.find('table')  # Esto es un placeholder, ajustar según inspección
-        if table:
-            for row in table.find_all('tr')[1:]:  # Saltar encabezado
-                cols = row.find_all('td')
-                if len(cols) >= 6:  # Ajustar según columnas reales
-                    flight_number = cols[0].text.strip()  # Número de vuelo
-                    airline = cols[1].text.strip()  # Aerolínea
-                    origin_dest = cols[2].text.strip()  # Origen o destino
-                    scheduled_time = cols[3].text.strip()  # Hora programada
-                    estimated_time = cols[4].text.strip()  # Hora estimada
-                    status = cols[5].text.strip()  # Estado
+        # Buscar todos los <span> que contienen datos
+        spans = soup.find_all('span')
+        flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
 
-                    # Filtrar solo Aerolíneas Argentinas y Aeroparque (AEP)
-                    if "Aerolíneas Argentinas" in airline and "AEP" in origin_dest:
-                        flights.append({
-                            "flight": flight_number,
-                            "origin_dest": origin_dest,
-                            "scheduled": scheduled_time,
-                            "estimated": estimated_time,
-                            "status": status
-                        })
-        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos encontrados")
+        # Agrupar en filas (cada fila tiene 17 elementos)
+        flights = []
+        for i in range(0, len(flight_data), 17):
+            row = flight_data[i:i+17]
+            if len(row) < 17:
+                continue  # Saltar filas incompletas
+
+            airline = row[1]           # "AR" para Aerolíneas Argentinas
+            flight_number = row[2]     # Ej. "1881"
+            scheduled_time = row[3]    # Ej. "05/04 17:05"
+            registration = row[4]      # Ej. "LVGKU"
+            estimated_time = row[6]    # Ej. "16:51"
+            operation_type = row[8]    # "A" (arribo) o "N" (salida)
+            origin_dest = row[11]      # Ej. "USH"
+            status = row[13]           # Ej. "EST"
+
+            # Filtrar por Aerolíneas Argentinas y Aeroparque (AEP)
+            if airline == "AR" and "AEP" in origin_dest:
+                flights.append({
+                    "flight": f"AR{flight_number}",  # Número de vuelo completo
+                    "registration": registration,    # Matrícula
+                    "scheduled": scheduled_time,     # Fecha/Hora programada
+                    "estimated": estimated_time if estimated_time != " " else None,  # Hora estimada
+                    "status": status,                # Estado
+                    "type": "Arrival" if operation_type == "A" else "Departure",  # Tipo de operación
+                    "origin_dest": origin_dest       # Origen/Destino
+                })
+
+        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas con AEP encontrados")
         return flights
     except Exception as e:
         logger.error(f"Error al scrapear TAMS: {e}")
@@ -147,34 +156,53 @@ async def get_opensky_data():
     airplanes_data = await get_airplanes_live_data()
     tams_data = scrape_tams_data()
     
-    # Combinar datos (priorizar TAMS cuando coincidan vuelos)
-    if isinstance(airplanes_data, list) and isinstance(tams_data, list):
-        combined_data = []
-        for plane in airplanes_data:
-            flight = plane.get("flight", "").strip()
-            if flight and flight.startswith(("ARG", "AEP")):  # Solo Aerolíneas Argentinas
-                plane_info = {
-                    "lat": plane.get("lat"),
-                    "lon": plane.get("lon"),
-                    "flight": flight,
-                    "hex": plane.get("hex"),
-                    "gs": plane.get("gs"),
-                    "alt_geom": plane.get("alt_geom"),
-                    "vert_rate": plane.get("vert_rate")
-                }
-                # Buscar coincidencia en TAMS
-                for tams_flight in tams_data:
-                    if tams_flight["flight"] == flight:
-                        plane_info["origin_dest"] = tams_flight["origin_dest"]
-                        plane_info["scheduled"] = tams_flight["scheduled"]
-                        plane_info["estimated"] = tams_flight["estimated"]
-                        break
-                combined_data.append(plane_info)
-        return combined_data
-    elif isinstance(airplanes_data, dict) and "error" in airplanes_data:
+    if isinstance(airplanes_data, dict) and "error" in airplanes_data:
         return airplanes_data
-    else:
-        return {"error": "Datos inválidos"}
+    if isinstance(tams_data, dict) and "error" in tams_data:
+        return tams_data
+
+    combined_data = []
+    for plane in airplanes_data:
+        flight = plane.get("flight", "").strip()
+        registration = plane.get("r", "").strip()  # Matrícula desde Airplanes.Live
+        if flight and flight.startswith("ARG"):  # Solo vuelos de Aerolíneas Argentinas
+            plane_info = {
+                "flight": flight,                # Número de vuelo
+                "registration": registration,    # Matrícula
+                "lat": plane.get("lat"),         # Latitud (en tiempo real)
+                "lon": plane.get("lon"),         # Longitud (en tiempo real)
+                "alt_geom": plane.get("alt_geom"),  # Altitud (en tiempo real)
+                "gs": plane.get("gs"),           # Velocidad en tierra (en tiempo real)
+                "vert_rate": plane.get("vert_rate")  # Tasa vertical (en tiempo real)
+            }
+            # Buscar coincidencia en TAMS por matrícula
+            for tams_flight in tams_data:
+                if tams_flight["registration"] == registration:
+                    plane_info.update({
+                        "scheduled": tams_flight["scheduled"],    # Fecha/Hora programada
+                        "estimated": tams_flight["estimated"],    # Hora estimada
+                        "status": tams_flight["status"],          # Estado
+                        "type": tams_flight["type"],              # Tipo (Arrival/Departure)
+                        "origin_dest": tams_flight["origin_dest"]  # Origen/Destino
+                    })
+                    break
+            combined_data.append(plane_info)
+    
+    # Si no hay coincidencia en tiempo real, incluir todos los vuelos de TAMS
+    for tams_flight in tams_data:
+        if not any(plane["registration"] == tams_flight["registration"] for plane in combined_data):
+            combined_data.append({
+                "flight": tams_flight["flight"],
+                "registration": tams_flight["registration"],
+                "scheduled": tams_flight["scheduled"],
+                "estimated": tams_flight["estimated"],
+                "status": tams_flight["status"],
+                "type": tams_flight["type"],
+                "origin_dest": tams_flight["origin_dest"],
+                "lat": None, "lon": None, "alt_geom": None, "gs": None, "vert_rate": None
+            })
+
+    return combined_data
 
 def init_db():
     conn = sqlite3.connect("history.db")
@@ -273,7 +301,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             
             elif message["type"] == "mute":
                 clients[user_id]["muted"] = True
-            elif message["type"] == "unmute":
+            elif message["type"] == "mute":
                 clients[user_id]["muted"] = False
             
     except WebSocketDisconnect:
