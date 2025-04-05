@@ -16,8 +16,15 @@ function register() {
         return;
     }
     userId = `${legajo}_${name}`;
-    console.log(`Intentando conectar WebSocket para ${userId} a wss://${window.location.host}/ws/${userId}`);
-    ws = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+    const wsUrl = `wss://${window.location.host}/ws/${userId}`;
+    console.log(`Intentando conectar WebSocket a: ${wsUrl}`);
+    try {
+        ws = new WebSocket(wsUrl);
+    } catch (err) {
+        console.error("Error al crear WebSocket:", err);
+        alert("Error al intentar conectar con el servidor.");
+        return;
+    }
     
     ws.onopen = function() {
         console.log("WebSocket conectado exitosamente");
@@ -56,7 +63,7 @@ function register() {
     
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
-        alert("No se pudo conectar al servidor.");
+        alert("No se pudo conectar al servidor. Revisá la consola para más detalles.");
     };
     
     ws.onclose = function() {
@@ -124,7 +131,7 @@ function updateOpenSkyData() {
             console.error("Error al cargar datos de OpenSky:", err);
             document.getElementById("message-list").textContent = "Error al conectar con OpenSky";
         });
-    setTimeout(updateOpenSkyData, 15000); // 15 segundos para evitar 429
+    setTimeout(updateOpenSkyData, 15000);
 }
 
 function toggleTalk() {
@@ -176,7 +183,7 @@ function toggleMute() {
         muteButton.textContent = "Desmutear";
         muteButton.style.backgroundColor = "red";
     } else {
-        if (ws && ws.readyState === WebSocket.OPEN unhist) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "unmute" }));
         }
         muteButton.textContent = "Mutear";
