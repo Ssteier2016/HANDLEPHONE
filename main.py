@@ -27,9 +27,13 @@ if not os.path.exists(MODEL_FOLDER):
     gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False)gdown.download(url, MODEL_ZIP, quiet=False, fuzzy=True)
 
     print("Descomprimiendo modelo...")
+    if zipfile.is_zipfile(MODEL_ZIP):
     with zipfile.ZipFile(MODEL_ZIP, 'r') as zip_ref:
-        zip_ref.extractall("Model")
-    print("Modelo listo.")
+        zip_ref.extractall(MODEL_DIR)
+else:
+    print("❌ El archivo descargado no es un zip válido.")
+    exit(1)
+
 # ↑↑↑ FIN BLOQUE DE DESCARGA ↑↑↑
 
 
