@@ -41,7 +41,7 @@ ICAO_ALPHABET = {
 }
 
 try:
-    model = Model("vosk-model-small-es-0.42")  # Subí vosk-model-es-0.42 a /model
+    model = Model("C:/Users/Georgiana/Desktop/PROYECTO HANDY HANLDE/Model/vosk-model-es-0.42")
 except Exception as e:
     logger.error(f"No se pudo cargar el modelo Vosk: {str(e)}")
     model = None
