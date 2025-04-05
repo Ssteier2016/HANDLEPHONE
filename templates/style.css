@@ -20,7 +20,7 @@ body {
     margin: 0 auto;
     text-align: center;
     box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-    display: none; /* Ocultar por defecto todas las pantallas */
+    display: none; /* Ocultar todas por defecto */
 }
 
 #register {
