@@ -5,7 +5,7 @@ speechrecognition
 pocketsphinx
 pydub
 gdown
-requests==2.31.0
 flask==2.3.2
 pyaudio==0.2.14
 vosk
+aiohttp
