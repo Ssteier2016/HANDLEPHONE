@@ -59,7 +59,12 @@ function register() {
             const chatList = document.getElementById("chat-list");
             const msgDiv = document.createElement("div");
             msgDiv.className = "chat-message"; // Clase para estilizar
-            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+            // Ajustar la hora recibida (UTC) a la hora local
+            const utcTime = message.timestamp.split(":"); // Ej. ["22", "21"]
+            const utcDate = new Date();
+            utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
+            const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
             msgDiv.onclick = () => audio.play(); // Reproducir al hacer clic
             chatList.appendChild(msgDiv);
             chatList.scrollTop = chatList.scrollHeight;
