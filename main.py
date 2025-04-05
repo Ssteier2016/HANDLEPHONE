@@ -10,32 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import logging
 import aiohttp
-from vosk import Model, KaldiRecognizer
 import requests
 from bs4 import BeautifulSoup
-import gdown
-import zipfile
-
-# Descarga automática del modelo Vosk
-MODEL_FOLDER = "Model/vosk-model-es-0.42"
-MODEL_ZIP = "Model/vosk-model-es-0.42.zip"
-GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd"
-
-if not os.path.exists(MODEL_FOLDER):
-    print("🛠️ Modelo Vosk no encontrado. Descargando desde Google Drive...")
-    os.makedirs("Model", exist_ok=True)
-    gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False)
-
-    print("📦 Descomprimiendo modelo...")
-    if zipfile.is_zipfile(MODEL_ZIP):
-        with zipfile.ZipFile(MODEL_ZIP, 'r') as zip_ref:
-            zip_ref.extractall("Model")
-        print("✅ Modelo descargado y descomprimido correctamente.")
-    else:
-        print("❌ El archivo descargado no es un zip válido.")
-        exit(1)
-else:
-    print("✅ Modelo Vosk ya está disponible.")
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -59,12 +35,6 @@ ICAO_ALPHABET = {
     'U': 'Uniform', 'V': 'Victor', 'W': 'Whiskey', 'X': 'X-ray', 'Y': 'Yankee',
     'Z': 'Zulu'
 }
-
-try:
-    model = Model("Model/vosk-model-es-0.42")  # Ajustado al directorio correcto
-except Exception as e:
-    logger.error(f"No se pudo cargar el modelo Vosk: {str(e)}")
-    model = None
 
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
@@ -113,36 +83,33 @@ def scrape_tams_data():
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Buscar todos los <span> que contienen datos
         spans = soup.find_all('span')
         flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
 
-        # Agrupar en filas (cada fila tiene 17 elementos)
         flights = []
         for i in range(0, len(flight_data), 17):
             row = flight_data[i:i+17]
             if len(row) < 17:
-                continue  # Saltar filas incompletas
+                continue
 
-            airline = row[1]           # "AR" para Aerolíneas Argentinas
-            flight_number = row[2]     # Ej. "1881"
-            scheduled_time = row[3]    # Ej. "05/04 17:05"
-            registration = row[4]      # Ej. "LVGKU"
-            estimated_time = row[6]    # Ej. "16:51"
-            operation_type = row[8]    # "A" (arribo) o "N" (salida)
-            origin_dest = row[11]      # Ej. "USH"
-            status = row[13]           # Ej. "EST"
+            airline = row[1]
+            flight_number = row[2]
+            scheduled_time = row[3]
+            registration = row[4]
+            estimated_time = row[6]
+            operation_type = row[8]
+            origin_dest = row[11]
+            status = row[13]
 
-            # Filtrar por Aerolíneas Argentinas y Aeroparque (AEP)
             if airline == "AR" and "AEP" in origin_dest:
                 flights.append({
-                    "flight": f"AR{flight_number}",  # Número de vuelo completo
-                    "registration": registration,    # Matrícula
-                    "scheduled": scheduled_time,     # Fecha/Hora programada
-                    "estimated": estimated_time if estimated_time != " " else None,  # Hora estimada
-                    "status": status,                # Estado
-                    "type": "Arrival" if operation_type == "A" else "Departure",  # Tipo de operación
-                    "origin_dest": origin_dest       # Origen/Destino
+                    "flight": f"AR{flight_number}",
+                    "registration": registration,
+                    "scheduled": scheduled_time,
+                    "estimated": estimated_time if estimated_time != " " else None,
+                    "status": status,
+                    "type": "Arrival" if operation_type == "A" else "Departure",
+                    "origin_dest": origin_dest
                 })
 
         logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas con AEP encontrados")
@@ -164,31 +131,29 @@ async def get_opensky_data():
     combined_data = []
     for plane in airplanes_data:
         flight = plane.get("flight", "").strip()
-        registration = plane.get("r", "").strip()  # Matrícula desde Airplanes.Live
-        if flight and flight.startswith("ARG"):  # Solo vuelos de Aerolíneas Argentinas
+        registration = plane.get("r", "").strip()
+        if flight and flight.startswith("ARG"):
             plane_info = {
-                "flight": flight,                # Número de vuelo
-                "registration": registration,    # Matrícula
-                "lat": plane.get("lat"),         # Latitud (en tiempo real)
-                "lon": plane.get("lon"),         # Longitud (en tiempo real)
-                "alt_geom": plane.get("alt_geom"),  # Altitud (en tiempo real)
-                "gs": plane.get("gs"),           # Velocidad en tierra (en tiempo real)
-                "vert_rate": plane.get("vert_rate")  # Tasa vertical (en tiempo real)
+                "flight": flight,
+                "registration": registration,
+                "lat": plane.get("lat"),
+                "lon": plane.get("lon"),
+                "alt_geom": plane.get("alt_geom"),
+                "gs": plane.get("gs"),
+                "vert_rate": plane.get("vert_rate")
             }
-            # Buscar coincidencia en TAMS por matrícula
             for tams_flight in tams_data:
                 if tams_flight["registration"] == registration:
                     plane_info.update({
-                        "scheduled": tams_flight["scheduled"],    # Fecha/Hora programada
-                        "estimated": tams_flight["estimated"],    # Hora estimada
-                        "status": tams_flight["status"],          # Estado
-                        "type": tams_flight["type"],              # Tipo (Arrival/Departure)
-                        "origin_dest": tams_flight["origin_dest"]  # Origen/Destino
+                        "scheduled": tams_flight["scheduled"],
+                        "estimated": tams_flight["estimated"],
+                        "status": tams_flight["status"],
+                        "type": tams_flight["type"],
+                        "origin_dest": tams_flight["origin_dest"]
                     })
                     break
             combined_data.append(plane_info)
     
-    # Si no hay coincidencia en tiempo real, incluir todos los vuelos de TAMS
     for tams_flight in tams_data:
         if not any(plane["registration"] == tams_flight["registration"] for plane in combined_data):
             combined_data.append({
@@ -213,7 +178,7 @@ def init_db():
     conn.close()
 
 def save_message(user_id, audio_data, text, timestamp):
-    date = datetime.utcnow().strftime("%Y-%m-%d")
+    date = datetime.utcnow().strftime("%Y-%m-d")
     conn = sqlite3.connect("history.db")
     c = conn.cursor()
     c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
@@ -231,15 +196,10 @@ def get_history():
              "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
 async def process_audio_queue():
-    recognizer = KaldiRecognizer(model, 16000) if model else None
     while True:
         user_id, audio_data, message = await audio_queue.get()
         timestamp = datetime.utcnow().strftime("%H:%M")
-        text = "Sin transcripción"
-        if recognizer and recognizer.AcceptWaveform(audio_data):
-            result = json.loads(recognizer.Result())
-            text = result.get("text", "No se pudo transcribir")
-        
+        text = "Sin transcripción"  # Sin Vosk, no hay transcripción
         save_message(user_id, audio_data, text, timestamp)
         
         for client_id, client in list(clients.items()):
@@ -301,7 +261,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             
             elif message["type"] == "mute":
                 clients[user_id]["muted"] = True
-            elif message["type"] == "mute":
+            elif message["type"] == "unmute":  # Corregido de "mute" duplicado a "unmute"
                 clients[user_id]["muted"] = False
             
     except WebSocketDisconnect:
