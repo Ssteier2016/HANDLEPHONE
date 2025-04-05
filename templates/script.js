@@ -5,6 +5,8 @@ let audioContext = new (window.AudioContext || window.webkitAudioContext)();
 let mediaRecorder;
 let stream;
 let map;
+let audioQueue = []; // Cola para los audios
+let isPlaying = false; // Bandera para controlar reproducción
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -35,12 +37,8 @@ function register() {
                 const audioBlob = base64ToBlob(message.data, 'audio/webm');
                 const audioUrl = URL.createObjectURL(audioBlob);
                 const audio = new Audio(audioUrl);
-                audio.play().then(() => {
-                    console.log("Audio reproducido exitosamente de", message.sender);
-                }).catch(err => {
-                    console.error("Error reproduciendo audio:", err);
-                    alert("No se pudo reproducir el audio. Hacé clic en la pantalla primero.");
-                });
+                audioQueue.push(audio); // Agregar audio a la cola
+                playNextAudio(); // Reproducir el siguiente audio si no hay uno en curso
                 // Agregar a la ventana de chat
                 const chatList = document.getElementById("chat-list");
                 const msgDiv = document.createElement("div");
@@ -220,4 +218,21 @@ function base64ToBlob(base64, mime) {
         uint8Array[i] = byteString.charCodeAt(i);
     }
     return new Blob([uint8Array], { type: mime });
-        }
+}
+
+// Función para reproducir audios en cola
+function playNextAudio() {
+    if (audioQueue.length === 0 || isPlaying) return;
+    isPlaying = true;
+    const audio = audioQueue.shift();
+    audio.play().then(() => {
+        console.log("Audio reproducido exitosamente");
+        isPlaying = false;
+        playNextAudio();
+    }).catch(err => {
+        console.error("Error reproduciendo audio:", err);
+        alert("No se pudo reproducir el audio. Hacé clic en la pantalla primero.");
+        isPlaying = false;
+        playNextAudio();
+    });
+}
