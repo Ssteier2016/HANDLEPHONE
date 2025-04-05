@@ -282,7 +282,13 @@ function showHistory() {
             historyList.innerHTML = "";
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
-                msgDiv.textContent = `${msg.date} ${msg.timestamp} - ${msg.user_id}: ${msg.text}`;
+                msgDiv.className = "chat-message"; // Misma clase que en chat-list
+                // Ajustar la hora recibida (UTC) a la hora local
+                const utcTime = msg.timestamp.split(":"); // Ej. ["22", "21"]
+                const utcDate = new Date();
+                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
+                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
                 const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
                 msgDiv.onclick = () => audio.play();
                 historyList.appendChild(msgDiv);
