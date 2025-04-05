@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import time
 from datetime import datetime, timedelta
 import sqlite3
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -30,7 +31,7 @@ ICAO_ALPHABET = {
     'Z': 'Zulu'
 }
 
-# Intentar cargar el modelo Vosk (requiere carpeta /model en el repositorio)
+# Intentar cargar el modelo Vosk
 try:
     model = Model("model")  # Subí vosk-model-es-0.42 a /model
 except Exception as e:
@@ -42,16 +43,31 @@ def to_icao(text):
 
 clients = {}  # {user_id: {"ws": WebSocket, "muted": bool}}
 users = {}   # {user_id: {"name": str, "matricula": str, "matricula_icao": str, "logged_in": bool}}
-active_sessions = {}  # Para persistir sesiones
+active_sessions = {}
+audio_queue = asyncio.Queue()  # Cola para procesar audios
+
+# Caché para OpenSky
+last_request_time = 0
+cached_data = None
+CACHE_DURATION = 5  # segundos
 
 @app.get("/opensky")
 async def get_opensky_data():
+    global last_request_time, cached_data
+    current_time = time.time()
+    if current_time - last_request_time < CACHE_DURATION and cached_data:
+        logger.info("Devolviendo datos en caché")
+        return cached_data
     try:
         response = requests.get(OPENSKY_URL, params=OPENSKY_PARAMS)
         if response.status_code == 200:
-            data = response.json()
+            cached_data = response.json()["states"]
+            last_request_time = current_time
             logger.info("Datos de OpenSky obtenidos correctamente (anónimo)")
-            return data["states"]
+            return cached_data
+        elif response.status_code == 429:
+            logger.error("Error 429: demasiadas solicitudes a OpenSky")
+            return {"error": "Too many requests, please wait"}
         else:
             logger.error(f"Error en OpenSky API: {response.status_code}")
             return {"error": f"Error: {response.status_code}"}
@@ -85,6 +101,32 @@ def get_history():
     return [{"user_id": row[0], "audio": base64.b64encode(row[1]).decode('utf-8'), 
              "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
+async def process_audio_queue():
+    recognizer = KaldiRecognizer(model, 16000) if model else None
+    while True:
+        user_id, audio_data, message = await audio_queue.get()
+        timestamp = datetime.utcnow().strftime("%H:%M")
+        text = "Sin transcripción"
+        if recognizer and recognizer.AcceptWaveform(audio_data):
+            result = json.loads(recognizer.Result())
+            text = result.get("text", "No se pudo transcribir")
+        
+        save_message(user_id, audio_data, text, timestamp)
+        
+        for client_id, client in list(clients.items()):
+            if client_id != user_id and not client["muted"] and users[client_id]["logged_in"]:
+                await client["ws"].send_text(json.dumps({
+                    "type": "audio",
+                    "data": message["data"],
+                    "text": text,
+                    "timestamp": timestamp,
+                    "sender": users[user_id]["name"],
+                    "matricula": users[user_id]["matricula"],
+                    "matricula_icao": users[user_id]["matricula_icao"]
+                }))
+                logger.info(f"Audio retransmitido a {client_id}")
+        audio_queue.task_done()
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
@@ -94,8 +136,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         users[user_id] = {"name": user_id.split("_")[1], "matricula": "00000", "matricula_icao": to_icao("LV-00000"), "logged_in": True}
         active_sessions[user_id] = True
     await broadcast_users()
-    
-    recognizer = KaldiRecognizer(model, 16000) if model else None
     
     try:
         while True:
@@ -118,31 +158,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             
             elif message["type"] == "audio":
                 audio_data = base64.b64decode(message["data"])
-                timestamp = datetime.utcnow().strftime("%H:%M")
-                text = "Sin transcripción"
-                if recognizer and recognizer.AcceptWaveform(audio_data):
-                    result = json.loads(recognizer.Result())
-                    text = result.get("text", "No se pudo transcribir")
-                
-                save_message(user_id, audio_data, text, timestamp)
-                
-                for client_id, client in list(clients.items()):
-                    if client_id != user_id and not client["muted"] and users[client_id]["logged_in"]:
-                        await client["ws"].send_text(json.dumps({
-                            "type": "audio",
-                            "data": message["data"],
-                            "text": text,
-                            "timestamp": timestamp,
-                            "sender": users[user_id]["name"],
-                            "matricula": users[user_id]["matricula"],
-                            "matricula_icao": users[user_id]["matricula_icao"]
-                        }))
-                        logger.info(f"Audio retransmitido a {client_id}")
+                await audio_queue.put((user_id, audio_data, message))
             
             elif message["type"] == "logout":
                 users[user_id]["logged_in"] = False
                 active_sessions[user_id] = False
-                del clients[user_id]
+                if user_id in clients:
+                    del clients[user_id]
                 await broadcast_users()
                 await websocket.close()
                 logger.info(f"Usuario {user_id} cerró sesión")
@@ -156,7 +178,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     except WebSocketDisconnect:
         if user_id in clients:
             del clients[user_id]
-        logger.info(f"Cliente desconectado: {user_id}, sesión sigue activa")
+        users[user_id]["logged_in"] = False
+        active_sessions[user_id] = False
+        logger.info(f"Cliente desconectado: {user_id}, sesión cerrada")
         await broadcast_users()
 
 async def broadcast_users():
@@ -185,6 +209,7 @@ async def clear_messages():
 async def startup_event():
     init_db()
     asyncio.create_task(clear_messages())
+    asyncio.create_task(process_audio_queue())
 
 if __name__ == "__main__":
     import uvicorn
