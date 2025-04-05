@@ -12,6 +12,27 @@ import logging
 import requests
 from vosk import Model, KaldiRecognizer
 
+# ↓↓↓ AGREGADO PARA DESCARGA AUTOMÁTICA DEL MODELO ↓↓↓
+import gdown
+import zipfile
+
+MODEL_FOLDER = "Model/vosk-model-es-0.42"
+MODEL_ZIP = "Model/vosk-model-es-0.42.zip"
+# Reemplazá este link con el tuyo (id real del archivo en Drive)
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=TU_ID_DEL_MODELO"
+
+if not os.path.exists(MODEL_FOLDER):
+    print("Modelo Vosk no encontrado. Descargando desde Google Drive...")
+    os.makedirs("Model", exist_ok=True)
+    gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False)
+
+    print("Descomprimiendo modelo...")
+    with zipfile.ZipFile(MODEL_ZIP, 'r') as zip_ref:
+        zip_ref.extractall("Model")
+    print("Modelo listo.")
+# ↑↑↑ FIN BLOQUE DE DESCARGA ↑↑↑
+
+
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
