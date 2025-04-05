@@ -9,6 +9,5 @@ flask==2.3.2
 pyaudio==0.2.14
 vosk
 aiohttp
-sqlite3
 requests
 beautifulsoup4
