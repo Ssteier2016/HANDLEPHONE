@@ -8,6 +8,21 @@ let map;
 let audioQueue = [];
 let isPlaying = false;
 
+// Mapeo de prefijos de callsign a nombres de aerolíneas
+const AIRLINE_MAPPING = {
+    "ARG": "Aerolíneas Argentinas",
+    "LAN": "LATAM Airlines",
+    "GLO": "Gol Linhas Aéreas",
+    "AZU": "Azul Linhas Aéreas",
+    "UAL": "United Airlines",
+    "AAL": "American Airlines",
+    "DAL": "Delta Air Lines",
+    "AEP": "Aerolíneas Argentinas" // Agregado para tu ejemplo
+};
+
+// Letras permitidas para matrículas argentinas (A-Z)
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
@@ -95,6 +110,48 @@ function initMap() {
         .bindPopup("Aeroparque").openPopup();
 }
 
+// Función para calcular la distancia en millas náuticas entre dos puntos
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 3440.07; // Radio de la Tierra en millas náuticas
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Función para estimar la hora de llegada
+function estimateArrivalTime(lat, lon, speed) {
+    const aeroparqueLat = -34.5597;
+    const aeroparqueLon = -58.4116;
+    const distance = calculateDistance(lat, lon, aeroparqueLat, aeroparqueLon);
+    if (!speed || speed <= 0) return "N/A";
+    const timeHours = distance / speed;
+    const now = new Date();
+    const arrivalTime = new Date(now.getTime() + timeHours * 60 * 60 * 1000);
+    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Función para generar una matrícula ficticia argentina (LV- + 3 letras)
+function generateArgentineRegistration(hex) {
+    if (!hex) return "LV-XXX";
+    // Tomamos el ICAO24 (hex) y derivamos 3 letras
+    const hexPart = hex.slice(-6, -1).toUpperCase(); // Últimos 5 caracteres antes del final
+    let letters = "";
+    for (let i = 0; letters.length < 3 && i < hexPart.length; i++) {
+        const charCode = parseInt(hexPart[i], 16); // Convertimos cada dígito hex a decimal
+        const letterIndex = charCode % 26; // Mapeamos a 0-25 (A-Z)
+        letters += LETTERS[letterIndex];
+    }
+    // Si faltan letras, completamos con 'X'
+    while (letters.length < 3) {
+        letters += "X";
+    }
+    return `LV-${letters}`; // Ejemplo: "LV-KKD"
+}
+
 function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
@@ -112,21 +169,28 @@ function updateOpenSkyData() {
                 messageList.textContent = "Esperando datos de Airplanes.Live...";
             } else {
                 data.forEach(state => {
-                    const lat = state.lat;  // Airplanes.Live usa "lat"
-                    const lon = state.lon;  // Airplanes.Live usa "lon"
-                    const hex = state.hex;  // ICAO24
-                    const flight = state.flight || 'N/A';  // Callsign
+                    const lat = state.lat;
+                    const lon = state.lon;
+                    const flight = state.flight ? state.flight.trim() : 'N/A';
+                    const hex = state.hex;
+                    const speed = state.gs;
                     if (lat && lon) {
+                        const prefix = flight.slice(0, 3).toUpperCase();
+                        const airline = AIRLINE_MAPPING[prefix] || "Desconocida";
+                        const registration = generateArgentineRegistration(hex);
+                        const arrivalTime = estimateArrivalTime(lat, lon, speed);
+
                         const flightDiv = document.createElement("div");
-                        flightDiv.textContent = `Vuelo ${flight} (ICAO24: ${hex}) - Lat: ${lat}, Lon: ${lon}`;
+                        flightDiv.textContent = `Vuelo ${flight} / ${registration} ${airline} arribando ${arrivalTime}hr`;
                         messageList.appendChild(flightDiv);
+
                         L.marker([lat, lon], { 
                             icon: L.icon({
                                 iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
                                 iconSize: [30, 30]
                             })
                         }).addTo(map)
-                          .bindPopup(`ICAO24: ${hex}, Llamada: ${flight}`);
+                          .bindPopup(`Vuelo: ${flight} / ${registration} ${airline}`);
                     }
                 });
                 messageList.scrollTop = messageList.scrollHeight;
@@ -259,4 +323,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                                }
+                }
