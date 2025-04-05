@@ -11,7 +11,7 @@ let isPlaying = false;
 // Mapeo de prefijos de callsign a nombres de aerolíneas (solo Aerolíneas Argentinas)
 const AIRLINE_MAPPING = {
     "AR": "Aerolíneas Argentinas",
-    "AEP": "Aeroparque"
+    "AEP": "AEP"
 };
 
 // Letras permitidas para matrículas argentinas (A-Z)
@@ -125,23 +125,7 @@ function estimateArrivalTime(lat, lon, speed) {
     const timeHours = distance / speed;
     const now = new Date();
     const arrivalTime = new Date(now.getTime() + timeHours * 60 * 60 * 1000);
-    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// Función para generar una matrícula ficticia argentina (LV- + 3 letras)
-function generateArgentineRegistration(hex) {
-    if (!hex) return "LV-XXX";
-    const hexPart = hex.slice(-6, -1).toUpperCase();
-    let letters = "";
-    for (let i = 0; letters.length < 3 && i < hexPart.length; i++) {
-        const charCode = parseInt(hexPart[i], 16);
-        const letterIndex = charCode % 26;
-        letters += LETTERS[letterIndex];
-    }
-    while (letters.length < 3) {
-        letters += "X";
-    }
-    return `LV-${letters}`;
+    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(":", ""); // Ej. "0526 p.m."
 }
 
 // Función para determinar el estado del vuelo
@@ -173,30 +157,31 @@ function updateOpenSkyData() {
                     const lat = state.lat;
                     const lon = state.lon;
                     const flight = state.flight ? state.flight.trim() : 'N/A';
-                    const hex = state.hex;
+                    const registration = state.registration || "LV-XXX"; // Usar matrícula real de TAMS o fallback
                     const speed = state.gs;
                     const altitude = state.alt_geom || 0; // Altitud en pies
                     const verticalRate = state.vert_rate || 0; // Tasa vertical en pies/minuto
 
-                    const prefix = flight.slice(0, 3).toUpperCase();
                     // Filtrar solo vuelos de Aerolíneas Argentinas
-                    if (["ARG", "AEP"].includes(prefix) && lat && lon) {
-                        const airline = AIRLINE_MAPPING[prefix];
-                        const registration = generateArgentineRegistration(hex);
-                        const arrivalTime = estimateArrivalTime(lat, lon, speed);
+                    if (flight.startsWith("AR") || flight.startsWith("ARG")) {
+                        const flightNumber = flight.replace("ARG", "").replace("AR", ""); // Extraer número
+                        const displayFlight = `AEP${flightNumber}`; // Usar "AEP" como prefijo
                         const status = getFlightStatus(altitude, speed, verticalRate);
+                        const arrivalTime = estimateArrivalTime(lat, lon, speed);
 
                         const flightDiv = document.createElement("div");
-                        flightDiv.textContent = `Vuelo ${flight} / ${registration} ${airline} ${status} ${arrivalTime}hr`;
+                        flightDiv.textContent = `Aerolíneas Argentinas ${displayFlight} / ${registration} ${status} ${arrivalTime}`;
                         messageList.appendChild(flightDiv);
 
-                        L.marker([lat, lon], { 
-                            icon: L.icon({
-                                iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
-                                iconSize: [30, 30]
-                            })
-                        }).addTo(map)
-                          .bindPopup(`Vuelo: ${flight} / ${registration} ${airline} (${status})`);
+                        if (lat && lon) {
+                            L.marker([lat, lon], { 
+                                icon: L.icon({
+                                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                                    iconSize: [30, 30]
+                                })
+                            }).addTo(map)
+                              .bindPopup(`Vuelo: ${displayFlight} / ${registration} (${status})`);
+                        }
                     }
                 });
                 messageList.scrollTop = messageList.scrollHeight;
@@ -329,4 +314,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                            }
+                                        }
