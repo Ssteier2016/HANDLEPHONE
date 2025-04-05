@@ -9,7 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import logging
-import requests
+import aiohttp  # Reemplazamos requests por aiohttp para Airplanes.Live
 from vosk import Model, KaldiRecognizer
 
 # ↓↓↓ AGREGADO PARA DESCARGA AUTOMÁTICA DEL MODELO ↓↓↓
@@ -51,11 +51,6 @@ async def read_root():
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OPENSKY_URL = "https://opensky-network.org/api/states/all"
-OPENSKY_PARAMS = {
-    "lamin": -55.0, "lamax": -22.0, "lomin": -73.0, "lomax": -53.0
-}
-
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
     'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliett',
@@ -81,30 +76,30 @@ audio_queue = asyncio.Queue()
 
 last_request_time = 0
 cached_data = None
-CACHE_DURATION = 15  # Aumentado a 15 segundos para evitar Error 429
+CACHE_DURATION = 15  # Aumentado a 15 segundos para evitar saturación
 
 @app.get("/opensky")
-async def get_opensky_data():
+async def get_airplanes_live_data():
     global last_request_time, cached_data
     current_time = time.time()
     if current_time - last_request_time < CACHE_DURATION and cached_data:
         logger.info("Devolviendo datos en caché")
         return cached_data
     try:
-        response = requests.get(OPENSKY_URL, params=OPENSKY_PARAMS)
-        if response.status_code == 200:
-            cached_data = response.json()["states"]
-            last_request_time = current_time
-            logger.info("Datos de OpenSky obtenidos correctamente (anónimo)")
-            return cached_data
-        elif response.status_code == 429:
-            logger.error("Error 429: demasiadas solicitudes a OpenSky")
-            return {"error": "Too many requests, please wait"}
-        else:
-            logger.error(f"Error en OpenSky API: {response.status_code}")
-            return {"error": f"Error: {response.status_code}"}
+        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    cached_data = data.get("ac", [])  # Lista de aviones
+                    last_request_time = current_time
+                    logger.info("Datos de Airplanes.Live obtenidos correctamente")
+                    return cached_data
+                else:
+                    logger.error(f"Error al obtener datos de Airplanes.Live: {response.status}")
+                    return {"error": f"Error: {response.status}"}
     except Exception as e:
-        logger.error(f"Error al obtener datos de OpenSky: {str(e)}")
+        logger.error(f"Error al obtener datos de Airplanes.Live: {str(e)}")
         return {"error": str(e)}
 
 def init_db():
