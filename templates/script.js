@@ -96,7 +96,7 @@ function initMap() {
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'temolates/airport.png', // Ícono de aeropuerto más claro
+        iconUrl: 'templates/airport.png', // Ícono de aeropuerto más claro
         iconSize: [30, 30],
     });
 
