@@ -96,7 +96,7 @@ function initMap() {
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149498.png', // Ícono de avión más claro
+        iconUrl: 'temolates/airport.png', // Ícono de aeropuerto más claro
         iconSize: [30, 30],
     });
 
@@ -177,7 +177,7 @@ function updateOpenSkyData() {
                         if (lat && lon) {
                             L.marker([lat, lon], { 
                                 icon: L.icon({
-                                    iconUrl: '/templates/aircraft.png', // Ícono local en el repositorio Ícono de avión
+                                    iconUrl: '/templates/aero.png', // Ícono local en el repositorio Ícono de avión
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
