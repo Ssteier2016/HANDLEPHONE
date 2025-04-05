@@ -22,6 +22,7 @@ function register() {
     ws.onopen = function() {
         console.log("WebSocket conectado exitosamente");
         ws.send(JSON.stringify({ type: "register", legajo: legajo, name: name }));
+        console.log("Ocultando #register y mostrando #main");
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
@@ -123,7 +124,7 @@ function updateOpenSkyData() {
             console.error("Error al cargar datos de OpenSky:", err);
             document.getElementById("message-list").textContent = "Error al conectar con OpenSky";
         });
-    setTimeout(updateOpenSkyData, 10000);
+    setTimeout(updateOpenSkyData, 15000); // 15 segundos para evitar 429
 }
 
 function toggleTalk() {
@@ -175,7 +176,7 @@ function toggleMute() {
         muteButton.textContent = "Desmutear";
         muteButton.style.backgroundColor = "red";
     } else {
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN unhist) {
             ws.send(JSON.stringify({ type: "unmute" }));
         }
         muteButton.textContent = "Mutear";
@@ -188,6 +189,7 @@ function logout() {
         ws.send(JSON.stringify({ type: "logout" }));
         ws.close();
     }
+    console.log("Mostrando #register y ocultando #main y #history-screen");
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
     document.getElementById("history-screen").style.display = "none";
@@ -245,4 +247,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-            }
+}
