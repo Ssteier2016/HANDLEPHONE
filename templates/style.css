@@ -82,24 +82,7 @@ button:hover {
     cursor: pointer;
 }
 
-h2 {
-    font-size: 18px;
-    margin: 10px 0;
-}
-
-h3 {
-    font-size: 16px;
-    margin: 10px 0;
-}
-
-#map {
-    height: 400px;
-    margin-bottom: 20px;
-    border: 2px solid #00ff00;
-    border-radius: 5px;
-}
-
-/* Estilos agregados para el chat */
+/* Estilos agregados para el chat y el historial */
 #chat-list {
     max-height: 200px;
     overflow-y: auto;
@@ -124,3 +107,20 @@ h3 {
     font-size: 12px; /* Ícono pequeño y discreto */
     color: #00cc00; /* Verde un poco más oscuro para no llamar mucho la atención */
 }
+
+h2 {
+    font-size: 18px;
+    margin: 10px 0;
+}
+
+h3 {
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+#map {
+    height: 400px;
+    margin-bottom: 20px;
+    border: 2px solid #00ff00;
+    border-radius: 5px;
+    }
