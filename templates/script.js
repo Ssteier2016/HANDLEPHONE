@@ -5,8 +5,8 @@ let audioContext = new (window.AudioContext || window.webkitAudioContext)();
 let mediaRecorder;
 let stream;
 let map;
-let audioQueue = []; // Cola para los audios
-let isPlaying = false; // Bandera para controlar reproducción
+let audioQueue = [];
+let isPlaying = false;
 
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -25,8 +25,8 @@ function register() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
-        updateOpenSkyData(); // Iniciar actualización de datos
-        document.body.addEventListener('touchstart', unlockAudio, { once: true }); // Para celulares
+        updateOpenSkyData();
+        document.body.addEventListener('touchstart', unlockAudio, { once: true });
     };
     
     ws.onmessage = function(event) {
@@ -37,14 +37,13 @@ function register() {
                 const audioBlob = base64ToBlob(message.data, 'audio/webm');
                 const audioUrl = URL.createObjectURL(audioBlob);
                 const audio = new Audio(audioUrl);
-                audioQueue.push(audio); // Agregar audio a la cola
-                playNextAudio(); // Reproducir el siguiente audio si no hay uno en curso
-                // Agregar a la ventana de chat
+                audioQueue.push(audio);
+                playNextAudio();
                 const chatList = document.getElementById("chat-list");
                 const msgDiv = document.createElement("div");
                 msgDiv.textContent = `${message.timestamp} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
                 chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight; // Auto-scroll
+                chatList.scrollTop = chatList.scrollHeight;
             } catch (err) {
                 console.error("Error procesando audio:", err);
                 alert("Error procesando el audio recibido.");
@@ -61,7 +60,7 @@ function register() {
     
     ws.onclose = function() {
         console.log("WebSocket cerrado");
-        logout(); // Asegurar que la UI refleje el cierre
+        logout();
     };
 }
 
@@ -93,7 +92,7 @@ function updateOpenSkyData() {
         .then(response => response.json())
         .then(data => {
             const messageList = document.getElementById("message-list");
-            messageList.innerHTML = ""; // Limpiar para evitar duplicados
+            messageList.innerHTML = "";
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) map.removeLayer(layer);
             });
@@ -117,20 +116,19 @@ function updateOpenSkyData() {
                           .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1] || 'N/A'}`);
                     }
                 });
-                messageList.scrollTop = messageList.scrollHeight; // Auto-scroll
+                messageList.scrollTop = messageList.scrollHeight;
             }
         })
         .catch(err => {
             console.error("Error al cargar datos de OpenSky:", err);
             document.getElementById("message-list").textContent = "Error al conectar con OpenSky";
         });
-    setTimeout(updateOpenSkyData, 10000); // Actualizar cada 10 segundos
+    setTimeout(updateOpenSkyData, 10000);
 }
 
 function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        // Iniciar grabación
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(audioStream => {
                 stream = audioStream;
@@ -150,20 +148,18 @@ function toggleTalk() {
                         }
                     };
                     console.log("Grabación detenida");
-                    // Limpiar stream y audioChunks
                     if (stream) {
                         stream.getTracks().forEach(track => track.stop());
                         stream = null;
                     }
                     audioChunks = [];
                 };
-                mediaRecorder.start(100); // Grabar en intervalos de 100ms
+                mediaRecorder.start(100);
                 talkButton.textContent = "Grabando...";
                 talkButton.style.backgroundColor = "green";
             })
             .catch(err => console.error("Error al acceder al micrófono:", err));
     } else if (mediaRecorder.state === "recording") {
-        // Detener grabación
         mediaRecorder.stop();
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
@@ -194,6 +190,7 @@ function logout() {
     }
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
+    document.getElementById("history-screen").style.display = "none";
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
     }
@@ -248,4 +245,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-        }
+            }
