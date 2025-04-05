@@ -8,16 +8,10 @@ let map;
 let audioQueue = [];
 let isPlaying = false;
 
-// Mapeo de prefijos de callsign a nombres de aerolíneas
+// Mapeo de prefijos de callsign a nombres de aerolíneas (solo Aerolíneas Argentinas)
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
-    "LAN": "LATAM Airlines",
-    "GLO": "Gol Linhas Aéreas",
-    "AZU": "Azul Linhas Aéreas",
-    "UAL": "United Airlines",
-    "AAL": "American Airlines",
-    "DAL": "Delta Air Lines",
-    "AEP": "Aerolíneas Argentinas" // Agregado para tu ejemplo
+    "AEP": "AEP"
 };
 
 // Letras permitidas para matrículas argentinas (A-Z)
@@ -137,19 +131,26 @@ function estimateArrivalTime(lat, lon, speed) {
 // Función para generar una matrícula ficticia argentina (LV- + 3 letras)
 function generateArgentineRegistration(hex) {
     if (!hex) return "LV-XXX";
-    // Tomamos el ICAO24 (hex) y derivamos 3 letras
-    const hexPart = hex.slice(-6, -1).toUpperCase(); // Últimos 5 caracteres antes del final
+    const hexPart = hex.slice(-6, -1).toUpperCase();
     let letters = "";
     for (let i = 0; letters.length < 3 && i < hexPart.length; i++) {
-        const charCode = parseInt(hexPart[i], 16); // Convertimos cada dígito hex a decimal
-        const letterIndex = charCode % 26; // Mapeamos a 0-25 (A-Z)
+        const charCode = parseInt(hexPart[i], 16);
+        const letterIndex = charCode % 26;
         letters += LETTERS[letterIndex];
     }
-    // Si faltan letras, completamos con 'X'
     while (letters.length < 3) {
         letters += "X";
     }
-    return `LV-${letters}`; // Ejemplo: "LV-KKD"
+    return `LV-${letters}`;
+}
+
+// Función para determinar el estado del vuelo
+function getFlightStatus(altitude, speed, verticalRate) {
+    if (altitude < 100 && speed < 50) return "En tierra";
+    if (altitude >= 100 && altitude <= 2000 && speed > 50) return "Despegando";
+    if (altitude > 2000 && verticalRate < 0) return "Arribando";
+    if (altitude > 2000) return "En vuelo";
+    return "Desconocido"; // Fallback
 }
 
 function updateOpenSkyData() {
@@ -161,7 +162,7 @@ function updateOpenSkyData() {
             messageList.innerHTML = "";
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
-                    map.removeLayer(layer); // Solo elimina marcadores de vuelos, no Aeroparque
+                    map.removeLayer(layer);
                 }
             });
             if (data.error) {
@@ -174,14 +175,19 @@ function updateOpenSkyData() {
                     const flight = state.flight ? state.flight.trim() : 'N/A';
                     const hex = state.hex;
                     const speed = state.gs;
-                    if (lat && lon) {
-                        const prefix = flight.slice(0, 3).toUpperCase();
-                        const airline = AIRLINE_MAPPING[prefix] || "Desconocida";
+                    const altitude = state.alt_geom || 0; // Altitud en pies
+                    const verticalRate = state.vert_rate || 0; // Tasa vertical en pies/minuto
+
+                    const prefix = flight.slice(0, 3).toUpperCase();
+                    // Filtrar solo vuelos de Aerolíneas Argentinas
+                    if (["ARG", "AEP"].includes(prefix) && lat && lon) {
+                        const airline = AIRLINE_MAPPING[prefix];
                         const registration = generateArgentineRegistration(hex);
                         const arrivalTime = estimateArrivalTime(lat, lon, speed);
+                        const status = getFlightStatus(altitude, speed, verticalRate);
 
                         const flightDiv = document.createElement("div");
-                        flightDiv.textContent = `Vuelo ${flight} / ${registration} ${airline} arribando ${arrivalTime}hr`;
+                        flightDiv.textContent = `Vuelo ${flight} / ${registration} ${airline} ${status} ${arrivalTime}hr`;
                         messageList.appendChild(flightDiv);
 
                         L.marker([lat, lon], { 
@@ -190,7 +196,7 @@ function updateOpenSkyData() {
                                 iconSize: [30, 30]
                             })
                         }).addTo(map)
-                          .bindPopup(`Vuelo: ${flight} / ${registration} ${airline}`);
+                          .bindPopup(`Vuelo: ${flight} / ${registration} ${airline} (${status})`);
                     }
                 });
                 messageList.scrollTop = messageList.scrollHeight;
@@ -200,7 +206,7 @@ function updateOpenSkyData() {
             console.error("Error al cargar datos de Airplanes.Live:", err);
             document.getElementById("message-list").textContent = "Error al conectar con Airplanes.Live";
         });
-    setTimeout(updateOpenSkyData, 15000); // Mantenemos tus 15 segundos
+    setTimeout(updateOpenSkyData, 15000);
 }
 
 function toggleTalk() {
@@ -323,4 +329,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                }
+                            }
