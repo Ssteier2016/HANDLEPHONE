@@ -29,3 +29,30 @@ Esta es una aplicación web que simula un walkie-talkie en tiempo real, permitie
    ```bash
    git clone https://github.com/Ssteier2016/handlephone.git
    cd handlephone
+   ```
+
+## 🔊 Modelo de voz para Vosk (Español)
+
+Para que la funcionalidad de transcripción de voz a texto funcione correctamente, es necesario descargar manualmente el modelo de voz de Vosk en español.
+
+📅 **[Descargar modelo Vosk ES desde Google Drive](https://drive.google.com/file/d/1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd/view?usp=drive_link)**
+
+> 🔐 El modelo no está incluido en este repositorio por su gran tamaño (más de 1 GB).
+
+### Instrucciones:
+
+1. Hacé clic en el enlace de descarga: https://drive.google.com/file/d/1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd/view?usp=drive_link
+2. Descomprimí el archivo `.zip`.
+3. Colocá la carpeta `vosk-model-es-0.42` dentro de la carpeta `Model` en el mismo directorio del proyecto.
+
+La estructura debe quedar así:
+
+```
+handlephone/
+│
+├── Model/
+│   └── vosk-model-es-0.42/
+│       ├── am/
+│       ├── conf/
+│       ├── graph/
+│       └── ...
