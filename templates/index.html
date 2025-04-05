@@ -6,24 +6,14 @@
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        #map { height: 400px; }
-        #message-list, #chat-list { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
-        #main, #history-screen { display: none; }
-        button { margin: 5px; padding: 10px; }
-        #talk { background-color: red; }
-        #mute { background-color: green; }
-    </style>
 </head>
 <body>
-    <!-- Pantalla de registro -->
     <div id="register">
         <input id="legajo" placeholder="Número de legajo" type="number">
         <input id="name" placeholder="Nombre o Apellido">
         <button onclick="register()">Registrarse</button>
     </div>
 
-    <!-- Pantalla principal -->
     <div id="main">
         <h2>Comunicación Aeronáutica</h2>
         <div id="map"></div>
@@ -32,7 +22,7 @@
             <div id="message-list"></div>
         </div>
         <div id="chat-window">
-            <h3>Conversación</justice
+            <h3>Conversación</h3>
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
@@ -42,7 +32,6 @@
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
-    <!-- Pantalla de historial -->
     <div id="history-screen">
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
