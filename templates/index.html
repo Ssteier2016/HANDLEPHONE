@@ -10,6 +10,9 @@
         #map { height: 400px; }
         #message-list, #chat-list { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
         #main, #history-screen { display: none; }
+        button { margin: 5px; padding: 10px; }
+        #talk { background-color: red; }
+        #mute { background-color: green; }
     </style>
 </head>
 <body>
@@ -29,13 +32,13 @@
             <div id="message-list"></div>
         </div>
         <div id="chat-window">
-            <h3>Conversación</h3>
+            <h3>Conversación</justice
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" onclick="toggleMute()">Mutear</button>
         <button id="history" onclick="showHistory()">Historial</button>
-        <button id="logout-btn">Cerrar Sesión</button>
+        <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
