@@ -24,7 +24,7 @@ GOOGLE_DRIVE_URL = "https://drive.google.com/file/d/1A5Coj8R7G0gA9FYF8HdGq5f67TJ
 if not os.path.exists(MODEL_FOLDER):
     print("Modelo Vosk no encontrado. Descargando desde Google Drive...")
     os.makedirs("Model", exist_ok=True)
-    gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False)gdown.download(url, MODEL_ZIP, quiet=False, fuzzy=True)
+   gdown.download(GOOGLE_DRIVE_URL, MODEL_ZIP, quiet=False, fuzzy=True)
 
     print("Descomprimiendo modelo...")
     if zipfile.is_zipfile(MODEL_ZIP):
