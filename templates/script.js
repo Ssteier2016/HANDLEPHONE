@@ -99,21 +99,26 @@ function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
         .then(data => {
+            console.log("Datos recibidos de /opensky:", data); // Para depurar
             const messageList = document.getElementById("message-list");
             messageList.innerHTML = "";
             map.eachLayer(layer => {
-                if (layer instanceof L.Marker) map.removeLayer(layer);
+                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
+                    map.removeLayer(layer); // Solo elimina marcadores de vuelos, no Aeroparque
+                }
             });
             if (data.error) {
-                console.warn("Error en OpenSky:", data.error);
-                messageList.textContent = "Esperando datos de OpenSky...";
+                console.warn("Error en Airplanes.Live:", data.error);
+                messageList.textContent = "Esperando datos de Airplanes.Live...";
             } else {
                 data.forEach(state => {
-                    const lat = state[6];
-                    const lon = state[5];
+                    const lat = state.lat;  // Airplanes.Live usa "lat"
+                    const lon = state.lon;  // Airplanes.Live usa "lon"
+                    const hex = state.hex;  // ICAO24
+                    const flight = state.flight || 'N/A';  // Callsign
                     if (lat && lon) {
                         const flightDiv = document.createElement("div");
-                        flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
+                        flightDiv.textContent = `Vuelo ${flight} (ICAO24: ${hex}) - Lat: ${lat}, Lon: ${lon}`;
                         messageList.appendChild(flightDiv);
                         L.marker([lat, lon], { 
                             icon: L.icon({
@@ -121,17 +126,17 @@ function updateOpenSkyData() {
                                 iconSize: [30, 30]
                             })
                         }).addTo(map)
-                          .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1] || 'N/A'}`);
+                          .bindPopup(`ICAO24: ${hex}, Llamada: ${flight}`);
                     }
                 });
                 messageList.scrollTop = messageList.scrollHeight;
             }
         })
         .catch(err => {
-            console.error("Error al cargar datos de OpenSky:", err);
-            document.getElementById("message-list").textContent = "Error al conectar con OpenSky";
+            console.error("Error al cargar datos de Airplanes.Live:", err);
+            document.getElementById("message-list").textContent = "Error al conectar con Airplanes.Live";
         });
-    setTimeout(updateOpenSkyData, 15000);
+    setTimeout(updateOpenSkyData, 15000); // Mantenemos tus 15 segundos
 }
 
 function toggleTalk() {
@@ -254,4 +259,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-}
+                                }
