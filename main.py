@@ -19,7 +19,7 @@ import zipfile
 MODEL_FOLDER = "Model/vosk-model-es-0.42"
 MODEL_ZIP = "Model/vosk-model-es-0.42.zip"
 # Reemplazá este link con el tuyo (id real del archivo en Drive)
-GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=TU_ID_DEL_MODELO"
+GOOGLE_DRIVE_URL = "https://drive.google.com/file/d/1A5Coj8R7G0gA9FYF8HdGq5f67TJuePAd/view?usp=drive_link"
 
 if not os.path.exists(MODEL_FOLDER):
     print("Modelo Vosk no encontrado. Descargando desde Google Drive...")
