@@ -10,7 +10,7 @@ let isPlaying = false;
 
 // Mapeo de prefijos de callsign a nombres de aerolíneas (solo Aerolíneas Argentinas)
 const AIRLINE_MAPPING = {
-    "AR": "Aerolíneas Argentinas",
+    "ARG": "Aerolíneas Argentinas",
     "AEP": "AEP"
 };
 
