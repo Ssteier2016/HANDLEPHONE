@@ -4,10 +4,8 @@ websockets
 speechrecognition
 pocketsphinx
 pydub
-gdown
 flask==2.3.2
 pyaudio==0.2.14
-vosk
 aiohttp
 requests
 beautifulsoup4
