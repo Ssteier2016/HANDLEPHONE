@@ -96,7 +96,7 @@ function initMap() {
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149498.png', // Ícono de avión más claro
         iconSize: [30, 30],
     });
 
@@ -157,10 +157,11 @@ function updateOpenSkyData() {
                     const lat = state.lat;
                     const lon = state.lon;
                     const flight = state.flight ? state.flight.trim() : 'N/A';
-                    const registration = state.registration || "LV-XXX"; // Usar matrícula real de TAMS o fallback
+                    const registration = state.registration || "LV-XXX"; // Matrícula real de TAMS
                     const speed = state.gs;
                     const altitude = state.alt_geom || 0; // Altitud en pies
                     const verticalRate = state.vert_rate || 0; // Tasa vertical en pies/minuto
+                    const originDest = state.origin_dest || "N/A"; // Origen/Destino de TAMS
 
                     // Filtrar solo vuelos de Aerolíneas Argentinas
                     if (flight.startsWith("AR") || flight.startsWith("ARG")) {
@@ -176,11 +177,11 @@ function updateOpenSkyData() {
                         if (lat && lon) {
                             L.marker([lat, lon], { 
                                 icon: L.icon({
-                                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149498.png', // Ícono de avión
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
-                              .bindPopup(`Vuelo: ${displayFlight} / ${registration} (${status})`);
+                              .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
                         }
                     }
                 });
@@ -314,4 +315,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                                        }
+}
