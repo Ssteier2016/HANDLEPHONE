@@ -25,7 +25,7 @@ function register() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         initMap();
-        updateOpenSkyData();
+        updateOpenSkyData(); // Iniciar actualización de datos
         document.body.addEventListener('touchstart', unlockAudio, { once: true }); // Para celulares
     };
     
@@ -61,7 +61,7 @@ function register() {
     
     ws.onclose = function() {
         console.log("WebSocket cerrado");
-        // No reconectamos automáticamente para persistir hasta logout
+        logout(); // Asegurar que la UI refleje el cierre
     };
 }
 
@@ -97,26 +97,34 @@ function updateOpenSkyData() {
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) map.removeLayer(layer);
             });
-            data.forEach(state => {
-                const lat = state[6];
-                const lon = state[5];
-                if (lat && lon) {
-                    const flightDiv = document.createElement("div");
-                    flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
-                    messageList.appendChild(flightDiv);
-                    L.marker([lat, lon], { 
-                        icon: L.icon({
-                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
-                            iconSize: [30, 30]
-                        })
-                    }).addTo(map)
-                      .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1] || 'N/A'}`);
-                }
-            });
-            messageList.scrollTop = messageList.scrollHeight; // Auto-scroll
+            if (data.error) {
+                console.warn("Error en OpenSky:", data.error);
+                messageList.textContent = "Esperando datos de OpenSky...";
+            } else {
+                data.forEach(state => {
+                    const lat = state[6];
+                    const lon = state[5];
+                    if (lat && lon) {
+                        const flightDiv = document.createElement("div");
+                        flightDiv.textContent = `Vuelo ${state[1] || 'N/A'} (ICAO24: ${state[0]}) - Lat: ${lat}, Lon: ${lon}`;
+                        messageList.appendChild(flightDiv);
+                        L.marker([lat, lon], { 
+                            icon: L.icon({
+                                iconUrl: 'https://cdn-icons-png.flaticon.com/512/892/892227.png',
+                                iconSize: [30, 30]
+                            })
+                        }).addTo(map)
+                          .bindPopup(`ICAO24: ${state[0]}, Llamada: ${state[1] || 'N/A'}`);
+                    }
+                });
+                messageList.scrollTop = messageList.scrollHeight; // Auto-scroll
+            }
         })
-        .catch(err => console.error("Error al cargar datos de OpenSky:", err));
-    setTimeout(updateOpenSkyData, 60000);
+        .catch(err => {
+            console.error("Error al cargar datos de OpenSky:", err);
+            document.getElementById("message-list").textContent = "Error al conectar con OpenSky";
+        });
+    setTimeout(updateOpenSkyData, 10000); // Actualizar cada 10 segundos
 }
 
 function toggleTalk() {
@@ -137,7 +145,9 @@ function toggleTalk() {
                     reader.readAsDataURL(audioBlob);
                     reader.onloadend = function() {
                         const base64data = reader.result.split(',')[1];
-                        ws.send(JSON.stringify({ type: "audio", data: base64data }));
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: "audio", data: base64data }));
+                        }
                     };
                     console.log("Grabación detenida");
                     // Limpiar stream y audioChunks
@@ -163,18 +173,22 @@ function toggleTalk() {
 function toggleMute() {
     const muteButton = document.getElementById("mute");
     if (muteButton.textContent === "Mutear") {
-        ws.send(JSON.stringify({ type: "mute" }));
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "mute" }));
+        }
         muteButton.textContent = "Desmutear";
         muteButton.style.backgroundColor = "red";
     } else {
-        ws.send(JSON.stringify({ type: "unmute" }));
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "unmute" }));
+        }
         muteButton.textContent = "Mutear";
         muteButton.style.backgroundColor = "green";
     }
 }
 
 function logout() {
-    if (ws) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
         ws.close();
     }
@@ -220,7 +234,6 @@ function base64ToBlob(base64, mime) {
     return new Blob([uint8Array], { type: mime });
 }
 
-// Función para reproducir audios en cola
 function playNextAudio() {
     if (audioQueue.length === 0 || isPlaying) return;
     isPlaying = true;
@@ -235,4 +248,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-}
+        }
