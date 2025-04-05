@@ -98,3 +98,29 @@ h3 {
     border: 2px solid #00ff00;
     border-radius: 5px;
 }
+
+/* Estilos agregados para el chat */
+#chat-list {
+    max-height: 200px;
+    overflow-y: auto;
+    text-align: left;
+    padding: 10px;
+    background-color: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 5px;
+}
+
+.chat-message {
+    border: 1px dotted #4a4a4a; /* Borde punteado discreto */
+    padding: 5px;
+    margin: 5px 0;
+    background-color: #2e2e2e;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.play-icon {
+    margin-right: 5px;
+    font-size: 12px; /* Ícono pequeño y discreto */
+    color: #00cc00; /* Verde un poco más oscuro para no llamar mucho la atención */
+}
