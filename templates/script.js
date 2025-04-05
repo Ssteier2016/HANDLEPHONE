@@ -177,7 +177,7 @@ function updateOpenSkyData() {
                         if (lat && lon) {
                             L.marker([lat, lon], { 
                                 icon: L.icon({
-                                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149498.png', // Ícono de avión
+                                    iconUrl: '/templates/aircraft.png', // Ícono local en el repositorio Ícono de avión
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
