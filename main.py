@@ -7,12 +7,21 @@ from datetime import datetime, timedelta
 import sqlite3
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 import logging
 import requests
 from vosk import Model, KaldiRecognizer
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+
+# Cargar index.html para la ruta raíz
+with open("templates/index.html", "r") as f:
+    INDEX_HTML = f.read()
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    return INDEX_HTML
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +40,6 @@ ICAO_ALPHABET = {
     'Z': 'Zulu'
 }
 
-# Intentar cargar el modelo Vosk
 try:
     model = Model("model")  # Subí vosk-model-es-0.42 a /model
 except Exception as e:
@@ -41,15 +49,14 @@ except Exception as e:
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-clients = {}  # {user_id: {"ws": WebSocket, "muted": bool}}
-users = {}   # {user_id: {"name": str, "matricula": str, "matricula_icao": str, "logged_in": bool}}
+clients = {}
+users = {}
 active_sessions = {}
-audio_queue = asyncio.Queue()  # Cola para procesar audios
+audio_queue = asyncio.Queue()
 
-# Caché para OpenSky
 last_request_time = 0
 cached_data = None
-CACHE_DURATION = 5  # segundos
+CACHE_DURATION = 15  # Aumentado a 15 segundos para evitar Error 429
 
 @app.get("/opensky")
 async def get_opensky_data():
