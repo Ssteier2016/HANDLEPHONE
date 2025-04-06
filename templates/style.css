@@ -12,7 +12,7 @@ body {
     background-image: linear-gradient(45deg, #1c2526, #2a3439);
 }
 
-#register, #main, #history-screen {
+#register, #main, #radar-screen, #history-screen {
     background-color: #2a3439;
     border: 5px solid #4a4a4a;
     border-radius: 5px;
@@ -31,7 +31,7 @@ body {
 input, button {
     font-family: 'Orbitron', 'Courier New', Courier, monospace;
     font-size: 16px;
-    margin: 5px;
+    margin: 5px 0;
     padding: 10px;
     width: 100%;
     border: 2px solid #ff3333;
@@ -39,6 +39,7 @@ input, button {
     color: #00ff00;
     border-radius: 3px;
     cursor: pointer;
+    box-sizing: border-box;
 }
 
 button {
@@ -88,7 +89,6 @@ button:hover {
     color: #00ff00;
 }
 
-/* Estilos para el chat y el historial */
 #chat-list {
     max-height: 200px;
     overflow-y: auto;
@@ -109,6 +109,34 @@ button:hover {
     cursor: pointer;
     color: #00ff00;
     text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
+}
+
+.flight-message {
+    border: 1px dotted #4a4a4a;
+    padding: 5px;
+    margin: 5px 0;
+    background-color: #2a3439;
+    border-radius: 3px;
+    color: #00ff00;
+    text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
+}
+
+.flight-en-zona {
+    background-color: #ff6666; /* Rojo claro para "En zona" */
+    color: #ffffff;
+    text-shadow: none;
+}
+
+.flight-en-vuelo {
+    background-color: #66ff66; /* Verde claro para "En vuelo" */
+    color: #000000;
+    text-shadow: none;
+}
+
+.flight-despegando {
+    background-color: #ffff66; /* Amarillo claro para "Despegando" */
+    color: #000000;
+    text-shadow: none;
 }
 
 .play-icon {
@@ -139,9 +167,9 @@ h3 {
     background-color: #1c2526;
 }
 
-/* Estilo para el logo */
 .logo {
     width: 64px;
     height: 64px;
-    margin-bottom: 10px;
+    margin: 0 auto 10px;
+    display: block;
 }
