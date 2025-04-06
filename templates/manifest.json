@@ -1,0 +1,15 @@
+{
+    "name": "HANDLEPHONE",
+    "short_name": "Handlephone",
+    "start_url": "/templates/index.html",
+    "display": "standalone",
+    "background_color": "#1c2526",
+    "theme_color": "#ff3333",
+    "icons": [
+        {
+            "src": "/templates/walkie-talkie.png",
+            "sizes": "64x64",
+            "type": "image/png"
+        }
+    ]
+}
