@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="icon" href="/templates/walkie-talkie.png" type="image/png"> <!-- Favicon -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet"> <!-- Fuente Orbitron -->
+    <link rel="manifest" href="/templates/manifest.json"> <!-- Vincular manifest.json -->
 </head>
 <body>
     <div id="register">
@@ -43,5 +44,13 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/templates/script.js"></script>
+    <!-- Registrar el Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/templates/sw.js')
+                .then(() => console.log('Service Worker registrado'))
+                .catch((err) => console.error('Error al registrar Service Worker:', err));
+        }
+    </script>
 </body>
 </html>
