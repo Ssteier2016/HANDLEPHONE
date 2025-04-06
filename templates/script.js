@@ -7,8 +7,8 @@ let stream;
 let map;
 let audioQueue = [];
 let isPlaying = false;
-let flightData = []; // Almacenar los datos de vuelo para la búsqueda
-let markers = []; // Almacenar los marcadores del mapa para filtrarlos
+let flightData = [];
+let markers = [];
 
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
@@ -69,21 +69,49 @@ function connectWebSocket(sessionToken) {
             function: localStorage.getItem("userFunction")
         }));
         document.getElementById("register").style.display = "none";
-        document.getElementById("main").style.display = "block";
+        const mainDiv = document.getElementById("main");
+        if (mainDiv) {
+            mainDiv.style.display = "block";
+        } else {
+            console.error("Elemento #main no encontrado en el DOM");
+        }
         updateOpenSkyData();
+        // Simular un mensaje después de 2 segundos (para pruebas)
+        setTimeout(simulateMessage, 2000);
     };
 
     ws.onmessage = function(event) {
         try {
             const message = JSON.parse(event.data);
             console.log("Mensaje recibido:", message);
+
+            if (!message.type) {
+                console.error("Mensaje sin tipo:", message);
+                return;
+            }
+
             if (message.type === "audio") {
+                if (!message.data || !message.timestamp || !message.sender || !message.function || !message.text) {
+                    console.error("Mensaje de audio incompleto:", message);
+                    return;
+                }
+
                 const audioBlob = base64ToBlob(message.data, 'audio/webm');
                 playAudio(audioBlob);
                 const chatList = document.getElementById("chat-list");
+                if (!chatList) {
+                    console.error("Elemento chat-list no encontrado en el DOM");
+                    return;
+                }
+
                 const msgDiv = document.createElement("div");
                 msgDiv.className = "chat-message";
                 const utcTime = message.timestamp.split(":");
+                if (utcTime.length !== 2) {
+                    console.error("Formato de timestamp inválido:", message.timestamp);
+                    return;
+                }
+
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -93,9 +121,11 @@ function connectWebSocket(sessionToken) {
                 chatList.scrollTop = chatList.scrollHeight;
             } else if (message.type === "users") {
                 document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+            } else {
+                console.warn("Tipo de mensaje desconocido:", message.type);
             }
         } catch (err) {
-            console.error("Error procesando mensaje:", err);
+            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
             alert("Error procesando el mensaje recibido.");
         }
     };
@@ -299,6 +329,20 @@ async function toggleTalk() {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: "audio", data: base64data }));
                 }
+
+                // Mostrar el mensaje localmente
+                const chatList = document.getElementById("chat-list");
+                if (chatList) {
+                    const msgDiv = document.createElement("div");
+                    msgDiv.className = "chat-message";
+                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                    const userName = localStorage.getItem("userName") || "Anónimo";
+                    const userFunction = localStorage.getItem("userFunction") || "Desconocida";
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${userName} (${userFunction}): Sin transcripción`;
+                    msgDiv.onclick = () => playAudio(audioBlob);
+                    chatList.appendChild(msgDiv);
+                    chatList.scrollTop = chatList.scrollHeight;
+                }
             };
             console.log("Grabación detenida");
             if (stream) {
@@ -426,4 +470,16 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                             }
+}
+
+function simulateMessage() {
+    const simulatedMessage = {
+        type: "audio",
+        data: "",
+        timestamp: "12:34",
+        sender: "UsuarioPrueba",
+        function: "Piloto",
+        text: "Mensaje de prueba"
+    };
+    ws.onmessage({ data: JSON.stringify(simulatedMessage) });
+    }
