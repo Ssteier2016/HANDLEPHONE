@@ -39,9 +39,10 @@ ICAO_ALPHABET = {
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-clients = {}
-users = {}
-active_sessions = {}
+# Diccionarios para manejar clientes, usuarios y sesiones
+clients = {}  # {token: {"ws": WebSocket, "muted": bool}}
+users = {}    # {token: {"name": str, "matricula": str, "matricula_icao": str, "logged_in": bool}}
+active_sessions = {}  # {token: bool}
 audio_queue = asyncio.Queue()
 
 last_request_time = 0
@@ -84,7 +85,7 @@ def scrape_tams_data():
         soup = BeautifulSoup(response.text, 'html.parser')
 
         spans = soup.find_all('span')
-        flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
+        flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
 
         flights = []
         for i in range(0, len(flight_data), 17):
@@ -106,7 +107,7 @@ def scrape_tams_data():
                     "flight": f"AR{flight_number}",
                     "registration": registration,
                     "scheduled": scheduled_time,
-                    "estimated": estimated_time if estimated_time != " " else None,
+                    "estimated": estimated_time if estimated_time != " " else None,
                     "status": status,
                     "type": "Arrival" if operation_type == "A" else "Departure",
                     "origin_dest": origin_dest
@@ -178,7 +179,7 @@ def init_db():
     conn.close()
 
 def save_message(user_id, audio_data, text, timestamp):
-    date = datetime.utcnow().strftime("%Y-%m-d")
+    date = datetime.utcnow().strftime("%Y-%m-%d")
     conn = sqlite3.connect("history.db")
     c = conn.cursor()
     c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
@@ -197,84 +198,98 @@ def get_history():
 
 async def process_audio_queue():
     while True:
-        user_id, audio_data, message = await audio_queue.get()
+        token, audio_data, message = await audio_queue.get()
         timestamp = datetime.utcnow().strftime("%H:%M")
-        text = "Sin transcripción"  # Sin Vosk, no hay transcripción
+        text = message.get("text", "Sin transcripción")  # Usar el texto enviado desde el cliente
+        user_id = users.get(token, {}).get("name", "Anónimo")
         save_message(user_id, audio_data, text, timestamp)
         
-        for client_id, client in list(clients.items()):
-            if client_id != user_id and not client["muted"] and users[client_id]["logged_in"]:
+        for client_token, client in list(clients.items()):
+            if client_token != token and not client["muted"] and users[client_token]["logged_in"]:
                 await client["ws"].send_text(json.dumps({
                     "type": "audio",
                     "data": message["data"],
                     "text": text,
                     "timestamp": timestamp,
-                    "sender": users[user_id]["name"],
-                    "matricula": users[user_id]["matricula"],
-                    "matricula_icao": users[user_id]["matricula_icao"]
+                    "sender": users[token]["name"],
+                    "matricula": users[token]["matricula"],
+                    "matricula_icao": users[token]["matricula_icao"]
                 }))
-                logger.info(f"Audio retransmitido a {client_id}")
+                logger.info(f"Audio retransmitido a {client_token}")
         audio_queue.task_done()
 
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
+@app.websocket("/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str):
     await websocket.accept()
-    logger.info(f"Cliente conectado: {user_id}")
-    clients[user_id] = {"ws": websocket, "muted": False}
-    if user_id not in users:
-        users[user_id] = {"name": user_id.split("_")[1], "matricula": "00000", "matricula_icao": to_icao("LV-00000"), "logged_in": True}
-        active_sessions[user_id] = True
+    logger.info(f"Cliente conectado con token: {token}")
+    clients[token] = {"ws": websocket, "muted": False}
+    
+    # Si el token ya existe, restaurar la sesión; si no, inicializar
+    if token not in users:
+        users[token] = {
+            "name": "Anónimo",
+            "matricula": "00000",
+            "matricula_icao": to_icao("LV-00000"),
+            "logged_in": True
+        }
+        active_sessions[token] = True
+    else:
+        users[token]["logged_in"] = True
+        active_sessions[token] = True
     await broadcast_users()
     
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
-            logger.info(f"Mensaje recibido de {user_id}: {data[:50]}...")
+            logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
             
             if message["type"] == "register":
+                name = message.get("name", "Anónimo")
                 legajo = message.get("legajo", "00000")
-                name = message.get("name", "Unknown")
-                matricula = f"{str(legajo)[:5]}"
-                users[user_id] = {
+                matricula = f"LV-{str(legajo)[:5]}"
+                users[token] = {
                     "name": name,
                     "matricula": matricula,
                     "matricula_icao": to_icao(matricula),
                     "logged_in": True
                 }
-                active_sessions[user_id] = True
+                active_sessions[token] = True
                 await broadcast_users()
             
             elif message["type"] == "audio":
                 audio_data = base64.b64decode(message["data"])
-                await audio_queue.put((user_id, audio_data, message))
+                await audio_queue.put((token, audio_data, message))
             
             elif message["type"] == "logout":
-                users[user_id]["logged_in"] = False
-                active_sessions[user_id] = False
-                if user_id in clients:
-                    del clients[user_id]
+                if token in users:
+                    users[token]["logged_in"] = False
+                    active_sessions[token] = False
+                if token in clients:
+                    del clients[token]
                 await broadcast_users()
                 await websocket.close()
-                logger.info(f"Usuario {user_id} cerró sesión")
+                logger.info(f"Usuario {token} cerró sesión")
                 break
             
             elif message["type"] == "mute":
-                clients[user_id]["muted"] = True
-            elif message["type"] == "unmute":  # Corregido de "mute" duplicado a "unmute"
-                clients[user_id]["muted"] = False
+                if token in clients:
+                    clients[token]["muted"] = True
+            elif message["type"] == "unmute":
+                if token in clients:
+                    clients[token]["muted"] = False
             
     except WebSocketDisconnect:
-        if user_id in clients:
-            del clients[user_id]
-        users[user_id]["logged_in"] = False
-        active_sessions[user_id] = False
-        logger.info(f"Cliente desconectado: {user_id}, sesión cerrada")
+        logger.info(f"Cliente desconectado: {token}")
+        # No eliminar al usuario ni cerrar su sesión, solo remover el WebSocket
+        if token in clients:
+            del clients[token]
+        # Mantener la sesión activa para permitir reconexiones
         await broadcast_users()
 
 async def broadcast_users():
     user_count = len([u for u in users if users[u]["logged_in"]])
-    user_list = [f"{users[uid]['name']} ({users[uid]['matricula']})" for uid in users if users[uid]["logged_in"]]
+    user_list = [f"{users[token]['name']} ({users[token]['matricula']})" for token in users if users[token]["logged_in"]]
     for client in list(clients.values()):
         await client["ws"].send_text(json.dumps({
             "type": "users",
