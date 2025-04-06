@@ -7,17 +7,16 @@ let stream;
 let map;
 let audioQueue = [];
 let isPlaying = false;
+let flightData = []; // Almacenar los datos de vuelo para la búsqueda
+let markers = []; // Almacenar los marcadores del mapa para filtrarlos
 
-// Mapeo de prefijos de callsign a nombres de aerolíneas (solo Aerolíneas Argentinas)
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
     "AEP": "AEP"
 };
 
-// Letras permitidas (A-Z), aunque no se usan en el registro ahora
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-// Solicitar permisos de micrófono al cargar la página
 async function requestMicPermission() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -30,7 +29,6 @@ async function requestMicPermission() {
     }
 }
 
-// Función para registrar al usuario y mantener la sesión
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
@@ -51,7 +49,6 @@ function register() {
     connectWebSocket(sessionToken);
 }
 
-// Conectar al WebSocket con el token de sesión
 function connectWebSocket(sessionToken) {
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl}`);
@@ -118,7 +115,6 @@ function connectWebSocket(sessionToken) {
     };
 }
 
-// Verificar si hay una sesión activa al cargar la página
 window.onload = function() {
     const sessionToken = localStorage.getItem("sessionToken");
     if (sessionToken) {
@@ -130,7 +126,6 @@ window.onload = function() {
     }
 };
 
-// Reproducir audio con MediaSession
 function playAudio(blob) {
     const audio = new Audio(URL.createObjectURL(blob));
     audioQueue.push(audio);
@@ -169,6 +164,10 @@ function initMap() {
 
     L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
         .bindPopup("Aeroparque").openPopup();
+
+    // Agregar evento de búsqueda
+    const searchBar = document.getElementById("search-bar");
+    searchBar.addEventListener("input", filterFlights);
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -201,6 +200,29 @@ function getFlightStatus(altitude, speed, verticalRate) {
     return "Desconocido";
 }
 
+function filterFlights() {
+    const searchTerm = document.getElementById("search-bar").value.toUpperCase();
+    markers.forEach(marker => {
+        const flight = marker.flight;
+        const registration = marker.registration;
+        const flightNumber = flight.replace("ARG", "").replace("AR", "");
+        const displayFlight = `AEP${flightNumber}`;
+        const matchesSearch = 
+            registration.toUpperCase().includes(searchTerm) || 
+            displayFlight.toUpperCase().includes(searchTerm) ||
+            flightNumber === searchTerm;
+        if (matchesSearch) {
+            if (!map.hasLayer(marker)) {
+                marker.addTo(map);
+            }
+        } else {
+            if (map.hasLayer(marker)) {
+                map.removeLayer(marker);
+            }
+        }
+    });
+}
+
 function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
@@ -208,6 +230,9 @@ function updateOpenSkyData() {
             console.log("Datos recibidos de /opensky:", data);
             const messageList = document.getElementById("message-list");
             messageList.innerHTML = "";
+            flightData = data; // Almacenar datos para la búsqueda
+            markers = []; // Reiniciar marcadores
+
             if (map) {
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
@@ -215,6 +240,7 @@ function updateOpenSkyData() {
                     }
                 });
             }
+
             if (data.error) {
                 console.warn("Error en Airplanes.Live:", data.error);
                 messageList.textContent = "Esperando datos de Airplanes.Live...";
@@ -241,13 +267,16 @@ function updateOpenSkyData() {
                         messageList.appendChild(flightDiv);
 
                         if (lat && lon && map) {
-                            L.marker([lat, lon], { 
+                            const marker = L.marker([lat, lon], { 
                                 icon: L.icon({
                                     iconUrl: '/templates/aero.png',
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
                               .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
+                            marker.flight = flight;
+                            marker.registration = registration;
+                            markers.push(marker);
                         }
                     }
                 });
@@ -340,12 +369,17 @@ function showRadar() {
     if (!map) {
         initMap();
         updateOpenSkyData();
+    } else {
+        map.invalidateSize(); // Ajustar el tamaño del mapa al cambiar a pantalla completa
+        filterFlights(); // Aplicar filtro inicial si hay texto en la barra de búsqueda
     }
 }
 
 function backToMainFromRadar() {
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
+    document.getElementById("search-bar").value = ""; // Limpiar la barra de búsqueda al volver
+    filterFlights(); // Restaurar todos los marcadores
 }
 
 function showHistory() {
@@ -402,4 +436,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                    }
+            }
