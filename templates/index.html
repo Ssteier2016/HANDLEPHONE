@@ -14,7 +14,7 @@
     <div id="register">
         <img src="/templates/logo.png" alt="HANDLEPHONE Logo" class="logo">
         <input id="name" placeholder="Apellido">
-        <input id="legajo" placeholder="Legajo (5 números)" type="number" maxlength="5">
+        <input id="legajo" placeholder="Legajo" type="number" maxlength="5">
         <input id="function" placeholder="Función">
         <button onclick="register()">Registrarse</button>
     </div>
@@ -39,8 +39,11 @@
     </div>
 
     <div id="radar-screen" style="display: none;">
-        <button onclick="backToMainFromRadar()">Volver</button>
-        <h2>Radar</h2>
+        <div class="radar-header">
+            <h2>Radar</h2>
+            <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
+            <button class="close-btn" onclick="backToMainFromRadar()">✖</button>
+        </div>
         <div id="map"></div>
     </div>
 
