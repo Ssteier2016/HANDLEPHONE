@@ -1,6 +1,6 @@
 body {
-    background-color: #1a1a1a;
-    font-family: 'Courier New', Courier, monospace;
+    background-color: #1c2526;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
     color: #00ff00;
     display: flex;
     justify-content: center;
@@ -9,58 +9,62 @@ body {
     margin: 0;
     padding: 20px;
     box-sizing: border-box;
+    background-image: linear-gradient(45deg, #1c2526, #2a3439);
 }
 
 #register, #main, #history-screen {
-    background-color: #2e2e2e;
+    background-color: #2a3439;
     border: 5px solid #4a4a4a;
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 20px;
     max-width: 600px;
     margin: 0 auto;
     text-align: center;
-    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-    display: none; /* Ocultar todas por defecto */
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+    display: none;
 }
 
 #register {
-    display: block; /* Solo register visible al inicio */
+    display: block;
 }
 
 input, button {
-    font-family: 'Courier New', Courier, monospace;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
     font-size: 16px;
     margin: 5px;
     padding: 10px;
     width: 100%;
-    border: 2px solid #00ff00;
-    background-color: #1a1a1a;
+    border: 2px solid #ff3333;
+    background-color: #1c2526;
     color: #00ff00;
-    border-radius: 5px;
+    border-radius: 3px;
     cursor: pointer;
 }
 
 button {
     background-color: #4a4a4a;
     transition: background-color 0.3s;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
 button:hover {
-    background-color: #00ff00;
-    color: #1a1a1a;
+    background-color: #ff3333;
+    color: #ffffff;
 }
 
 #talk {
-    background-color: red;
+    background-color: #ff3333;
 }
 
 #mute {
-    background-color: green;
+    background-color: #00cc00;
 }
 
 #users {
     margin-top: 10px;
     font-size: 14px;
+    color: #ff3333;
+    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
 }
 
 #messages, #history-screen {
@@ -72,55 +76,72 @@ button:hover {
     overflow-y: auto;
     text-align: left;
     padding: 10px;
-    background-color: #1a1a1a;
-    border: 2px solid #00ff00;
-    border-radius: 5px;
+    background-color: #1c2526;
+    border: 2px solid #ff3333;
+    border-radius: 3px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
 #message-list div, #history-list div {
     margin: 5px 0;
     cursor: pointer;
+    color: #00ff00;
 }
 
-/* Estilos agregados para el chat y el historial */
+/* Estilos para el chat y el historial */
 #chat-list {
     max-height: 200px;
     overflow-y: auto;
     text-align: left;
     padding: 10px;
-    background-color: #1a1a1a;
-    border: 2px solid #00ff00;
-    border-radius: 5px;
+    background-color: #1c2526;
+    border: 2px solid #ff3333;
+    border-radius: 3px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
 .chat-message {
-    border: 1px dotted #4a4a4a; /* Borde punteado discreto */
+    border: 1px dotted #4a4a4a;
     padding: 5px;
     margin: 5px 0;
-    background-color: #2e2e2e;
+    background-color: #2a3439;
     border-radius: 3px;
     cursor: pointer;
+    color: #00ff00;
+    text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
 }
 
 .play-icon {
     margin-right: 5px;
-    font-size: 12px; /* Ícono pequeño y discreto */
-    color: #00cc00; /* Verde un poco más oscuro para no llamar mucho la atención */
+    font-size: 12px;
+    color: #ff3333;
 }
 
 h2 {
     font-size: 18px;
     margin: 10px 0;
+    color: #ff3333;
+    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
 }
 
 h3 {
     font-size: 16px;
     margin: 10px 0;
+    color: #ff3333;
+    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
 }
 
 #map {
     height: 400px;
     margin-bottom: 20px;
-    border: 2px solid #00ff00;
-    border-radius: 5px;
-    }
+    border: 2px solid #ff3333;
+    border-radius: 3px;
+    background-color: #1c2526;
+}
+
+/* Estilo para el logo */
+.logo {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 10px;
+}
