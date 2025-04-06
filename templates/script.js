@@ -17,6 +17,20 @@ const AIRLINE_MAPPING = {
 // Letras permitidas para matrículas argentinas (A-Z)
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+// Solicitar permisos de micrófono al cargar la página
+async function requestMicPermission() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("Micrófono permitido");
+        return stream;
+    } catch (err) {
+        console.error("Error al solicitar permiso de micrófono:", err);
+        alert("No se pudo acceder al micrófono. Por favor, habilita los permisos en tu navegador.");
+        return null;
+    }
+}
+
+// Función para registrar al usuario y mantener la sesión
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
@@ -25,7 +39,15 @@ function register() {
         return;
     }
     userId = `${legajo}_${name}`;
-    const wsUrl = `wss://${window.location.host}/ws/${userId}`;
+    const sessionToken = btoa(userId); // Generar un token simple (base64)
+    localStorage.setItem("sessionToken", sessionToken); // Guardar el token en localStorage
+    localStorage.setItem("userName", name);
+    connectWebSocket(sessionToken);
+}
+
+// Conectar al WebSocket con el token de sesión
+function connectWebSocket(sessionToken) {
+    const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl}`);
     try {
         ws = new WebSocket(wsUrl);
@@ -34,10 +56,10 @@ function register() {
         alert("Error al intentar conectar con el servidor.");
         return;
     }
-    
+
     ws.onopen = function() {
         console.log("WebSocket conectado exitosamente");
-        ws.send(JSON.stringify({ type: "register", legajo: legajo, name: name }));
+        ws.send(JSON.stringify({ type: "register", token: sessionToken, name: localStorage.getItem("userName") }));
         console.log("Ocultando #register y mostrando #main");
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
@@ -45,47 +67,77 @@ function register() {
         updateOpenSkyData();
         document.body.addEventListener('touchstart', unlockAudio, { once: true });
     };
-    
+
     ws.onmessage = function(event) {
-    const message = JSON.parse(event.data);
-    console.log("Mensaje recibido:", message);
-    if (message.type === "audio") {
         try {
-            const audioBlob = base64ToBlob(message.data, 'audio/webm');
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audioQueue.push(audio);
-            playNextAudio();
-            const chatList = document.getElementById("chat-list");
-            const msgDiv = document.createElement("div");
-            msgDiv.className = "chat-message"; // Clase para estilizar
-            // Ajustar la hora recibida (UTC) a la hora local
-            const utcTime = message.timestamp.split(":"); // Ej. ["22", "21"]
-            const utcDate = new Date();
-            utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-            const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
-            msgDiv.onclick = () => audio.play(); // Reproducir al hacer clic
-            chatList.appendChild(msgDiv);
-            chatList.scrollTop = chatList.scrollHeight;
+            const message = JSON.parse(event.data);
+            console.log("Mensaje recibido:", message);
+            if (message.type === "audio") {
+                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                playAudio(audioBlob); // Usar la nueva función para reproducir audio
+                const chatList = document.getElementById("chat-list");
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "chat-message";
+                const utcTime = message.timestamp.split(":");
+                const utcDate = new Date();
+                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
+                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+                msgDiv.onclick = () => playAudio(audioBlob);
+                chatList.appendChild(msgDiv);
+                chatList.scrollTop = chatList.scrollHeight;
+            } else if (message.type === "users") {
+                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+            }
         } catch (err) {
-            console.error("Error procesando audio:", err);
-            alert("Error procesando el audio recibido.");
+            console.error("Error procesando mensaje:", err);
+            alert("Error procesando el mensaje recibido.");
         }
-    } else if (message.type === "users") {
-        document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
-    }
-};
-    
+    };
+
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
         alert("No se pudo conectar al servidor. Revisá la consola para más detalles.");
     };
-    
+
     ws.onclose = function() {
         console.log("WebSocket cerrado");
-        logout();
+        // No cerrar la sesión aquí, solo reconectar si el usuario no ha cerrado sesión
+        const sessionToken = localStorage.getItem("sessionToken");
+        if (sessionToken) {
+            setTimeout(() => connectWebSocket(sessionToken), 5000); // Intentar reconectar después de 5 segundos
+        }
     };
+}
+
+// Verificar si hay una sesión activa al cargar la página
+window.onload = function() {
+    const sessionToken = localStorage.getItem("sessionToken");
+    if (sessionToken) {
+        document.getElementById("register").style.display = "none";
+        document.getElementById("main").style.display = "block";
+        connectWebSocket(sessionToken);
+    } else {
+        requestMicPermission();
+    }
+};
+
+// Nueva función para reproducir audio con MediaSession
+function playAudio(blob) {
+    const audio = new Audio(URL.createObjectURL(blob));
+    audioQueue.push(audio);
+    playNextAudio();
+
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaSessionMetadata({
+            title: 'Mensaje de voz',
+            artist: 'HANDLEPHONE',
+            album: 'Comunicación Aeronáutica'
+        });
+
+        navigator.mediaSession.setActionHandler('play', () => audio.play());
+        navigator.mediaSession.setActionHandler('pause', () => audio.pause());
+    }
 }
 
 function unlockAudio() {
@@ -103,7 +155,7 @@ function initMap() {
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'templates/airport.png', // Ícono de aeropuerto más claro
+        iconUrl: 'templates/airport.png',
         iconSize: [30, 30],
     });
 
@@ -111,9 +163,8 @@ function initMap() {
         .bindPopup("Aeroparque").openPopup();
 }
 
-// Función para calcular la distancia en millas náuticas entre dos puntos
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 3440.07; // Radio de la Tierra en millas náuticas
+    const R = 3440.07;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -123,7 +174,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Función para estimar la hora de llegada
 function estimateArrivalTime(lat, lon, speed) {
     const aeroparqueLat = -34.5597;
     const aeroparqueLon = -58.4116;
@@ -132,23 +182,22 @@ function estimateArrivalTime(lat, lon, speed) {
     const timeHours = distance / speed;
     const now = new Date();
     const arrivalTime = new Date(now.getTime() + timeHours * 60 * 60 * 1000);
-    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(":", ""); // Ej. "0526 p.m."
+    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(":", "");
 }
 
-// Función para determinar el estado del vuelo
 function getFlightStatus(altitude, speed, verticalRate) {
     if (altitude < 100 && speed < 50) return "En tierra";
     if (altitude >= 100 && altitude <= 2000 && speed > 50) return "Despegando";
     if (altitude > 2000 && verticalRate < 0) return "Arribando";
     if (altitude > 2000) return "En vuelo";
-    return "Desconocido"; // Fallback
+    return "Desconocido";
 }
 
 function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
         .then(data => {
-            console.log("Datos recibidos de /opensky:", data); // Para depurar
+            console.log("Datos recibidos de /opensky:", data);
             const messageList = document.getElementById("message-list");
             messageList.innerHTML = "";
             map.eachLayer(layer => {
@@ -164,16 +213,15 @@ function updateOpenSkyData() {
                     const lat = state.lat;
                     const lon = state.lon;
                     const flight = state.flight ? state.flight.trim() : 'N/A';
-                    const registration = state.registration || "LV-XXX"; // Matrícula real de TAMS
+                    const registration = state.registration || "LV-XXX";
                     const speed = state.gs;
-                    const altitude = state.alt_geom || 0; // Altitud en pies
-                    const verticalRate = state.vert_rate || 0; // Tasa vertical en pies/minuto
-                    const originDest = state.origin_dest || "N/A"; // Origen/Destino de TAMS
+                    const altitude = state.alt_geom || 0;
+                    const verticalRate = state.vert_rate || 0;
+                    const originDest = state.origin_dest || "N/A";
 
-                    // Filtrar solo vuelos de Aerolíneas Argentinas
                     if (flight.startsWith("AR") || flight.startsWith("ARG")) {
-                        const flightNumber = flight.replace("ARG", "").replace("AR", ""); // Extraer número
-                        const displayFlight = `AEP${flightNumber}`; // Usar "AEP" como prefijo
+                        const flightNumber = flight.replace("ARG", "").replace("AR", "");
+                        const displayFlight = `AEP${flightNumber}`;
                         const status = getFlightStatus(altitude, speed, verticalRate);
                         const arrivalTime = estimateArrivalTime(lat, lon, speed);
 
@@ -184,7 +232,7 @@ function updateOpenSkyData() {
                         if (lat && lon) {
                             L.marker([lat, lon], { 
                                 icon: L.icon({
-                                    iconUrl: '/templates/aero.png', // Ícono local en el repositorio Ícono de avión
+                                    iconUrl: '/templates/aero.png',
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
@@ -202,39 +250,37 @@ function updateOpenSkyData() {
     setTimeout(updateOpenSkyData, 15000);
 }
 
-function toggleTalk() {
+async function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(audioStream => {
-                stream = audioStream;
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                audioChunks = [];
-                mediaRecorder.ondataavailable = function(event) {
-                    audioChunks.push(event.data);
-                };
-                mediaRecorder.onstop = function() {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = function() {
-                        const base64data = reader.result.split(',')[1];
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({ type: "audio", data: base64data }));
-                        }
-                    };
-                    console.log("Grabación detenida");
-                    if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                        stream = null;
-                    }
-                    audioChunks = [];
-                };
-                mediaRecorder.start(100);
-                talkButton.textContent = "Grabando...";
-                talkButton.style.backgroundColor = "green";
-            })
-            .catch(err => console.error("Error al acceder al micrófono:", err));
+        stream = await requestMicPermission();
+        if (!stream) return;
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunks = [];
+        mediaRecorder.ondataavailable = function(event) {
+            audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = function() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = function() {
+                const base64data = reader.result.split(',')[1];
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "audio", data: base64data }));
+                }
+            };
+            console.log("Grabación detenida");
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            audioChunks = [];
+        };
+        mediaRecorder.start(100);
+        talkButton.textContent = "Grabando...";
+        talkButton.style.backgroundColor = "green";
     } else if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
         talkButton.textContent = "Hablar";
@@ -264,6 +310,8 @@ function logout() {
         ws.send(JSON.stringify({ type: "logout" }));
         ws.close();
     }
+    localStorage.removeItem("sessionToken");
+    localStorage.removeItem("userName");
     console.log("Mostrando #register y ocultando #main y #history-screen");
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
@@ -282,15 +330,14 @@ function showHistory() {
             historyList.innerHTML = "";
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message"; // Misma clase que en chat-list
-                // Ajustar la hora recibida (UTC) a la hora local
-                const utcTime = msg.timestamp.split(":"); // Ej. ["22", "21"]
+                msgDiv.className = "chat-message";
+                const utcTime = msg.timestamp.split(":");
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
                 const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
-                msgDiv.onclick = () => audio.play();
+                msgDiv.onclick = () => playAudio(new Blob([base64ToBlob(msg.audio, 'audio/webm')]));
                 historyList.appendChild(msgDiv);
             });
             document.getElementById("main").style.display = "none";
