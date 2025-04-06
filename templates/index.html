@@ -6,21 +6,22 @@
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="icon" href="/templates/walkie-talkie.png" type="image/png"> <!-- Favicon -->
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet"> <!-- Fuente Orbitron -->
-    <link rel="manifest" href="/templates/manifest.json"> <!-- Vincular manifest.json -->
+    <link rel="icon" href="/templates/walkie-talkie.png" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/templates/manifest.json">
 </head>
 <body>
     <div id="register">
-        <input id="legajo" placeholder="Número de legajo" type="number">
-        <input id="name" placeholder="Nombre o Apellido">
+        <img src="/templates/logo.png" alt="HANDLEPHONE Logo" class="logo">
+        <input id="name" placeholder="Apellido">
+        <input id="legajo" placeholder="Legajo (5 números)" type="number" maxlength="5">
+        <input id="function" placeholder="Función">
         <button onclick="register()">Registrarse</button>
     </div>
 
     <div id="main">
-        <img src="/templates/logo.png" alt="HANDLEPHONE Logo" class="logo"> <!-- Logo -->
+        <img src="/templates/logo.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
-        <div id="map"></div>
         <div id="flights-window">
             <h3>Datos de Vuelos</h3>
             <div id="message-list"></div>
@@ -31,9 +32,16 @@
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" onclick="toggleMute()">Mutear</button>
+        <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
         <div id="users">Usuarios conectados: 0</div>
+    </div>
+
+    <div id="radar-screen" style="display: none;">
+        <button onclick="backToMainFromRadar()">Volver</button>
+        <h2>Radar</h2>
+        <div id="map"></div>
     </div>
 
     <div id="history-screen">
@@ -44,7 +52,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/templates/script.js"></script>
-    <!-- Registrar el Service Worker -->
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/templates/sw.js')
