@@ -14,7 +14,7 @@ const AIRLINE_MAPPING = {
     "AEP": "AEP"
 };
 
-// Letras permitidas para matrículas argentinas (A-Z)
+// Letras permitidas (A-Z), aunque no se usan en el registro ahora
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 // Solicitar permisos de micrófono al cargar la página
@@ -34,14 +34,20 @@ async function requestMicPermission() {
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
-    if (!legajo || !name) {
-        alert("Por favor, ingresa un legajo y un nombre.");
+    const userFunction = document.getElementById("function").value;
+    if (!legajo || !name || !userFunction) {
+        alert("Por favor, ingresa un apellido, un legajo y una función.");
         return;
     }
-    userId = `${legajo}_${name}`;
-    const sessionToken = btoa(userId); // Generar un token simple (base64)
-    localStorage.setItem("sessionToken", sessionToken); // Guardar el token en localStorage
+    if (!/^\d{5}$/.test(legajo)) {
+        alert("El legajo debe contener exactamente 5 números.");
+        return;
+    }
+    userId = `${legajo}_${name}_${userFunction}`;
+    const sessionToken = btoa(userId);
+    localStorage.setItem("sessionToken", sessionToken);
     localStorage.setItem("userName", name);
+    localStorage.setItem("userFunction", userFunction);
     connectWebSocket(sessionToken);
 }
 
@@ -59,11 +65,14 @@ function connectWebSocket(sessionToken) {
 
     ws.onopen = function() {
         console.log("WebSocket conectado exitosamente");
-        ws.send(JSON.stringify({ type: "register", token: sessionToken, name: localStorage.getItem("userName") }));
-        console.log("Ocultando #register y mostrando #main");
+        ws.send(JSON.stringify({ 
+            type: "register", 
+            legajo: document.getElementById("legajo").value, 
+            name: localStorage.getItem("userName"),
+            function: localStorage.getItem("userFunction")
+        }));
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
-        initMap();
         updateOpenSkyData();
         document.body.addEventListener('touchstart', unlockAudio, { once: true });
     };
@@ -74,7 +83,7 @@ function connectWebSocket(sessionToken) {
             console.log("Mensaje recibido:", message);
             if (message.type === "audio") {
                 const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                playAudio(audioBlob); // Usar la nueva función para reproducir audio
+                playAudio(audioBlob);
                 const chatList = document.getElementById("chat-list");
                 const msgDiv = document.createElement("div");
                 msgDiv.className = "chat-message";
@@ -82,7 +91,7 @@ function connectWebSocket(sessionToken) {
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.matricula_icao}): ${message.text}`;
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.function}): ${message.text}`;
                 msgDiv.onclick = () => playAudio(audioBlob);
                 chatList.appendChild(msgDiv);
                 chatList.scrollTop = chatList.scrollHeight;
@@ -102,10 +111,9 @@ function connectWebSocket(sessionToken) {
 
     ws.onclose = function() {
         console.log("WebSocket cerrado");
-        // No cerrar la sesión aquí, solo reconectar si el usuario no ha cerrado sesión
         const sessionToken = localStorage.getItem("sessionToken");
         if (sessionToken) {
-            setTimeout(() => connectWebSocket(sessionToken), 5000); // Intentar reconectar después de 5 segundos
+            setTimeout(() => connectWebSocket(sessionToken), 5000);
         }
     };
 }
@@ -122,7 +130,7 @@ window.onload = function() {
     }
 };
 
-// Nueva función para reproducir audio con MediaSession
+// Reproducir audio con MediaSession
 function playAudio(blob) {
     const audio = new Audio(URL.createObjectURL(blob));
     audioQueue.push(audio);
@@ -188,7 +196,7 @@ function estimateArrivalTime(lat, lon, speed) {
 function getFlightStatus(altitude, speed, verticalRate) {
     if (altitude < 100 && speed < 50) return "En tierra";
     if (altitude >= 100 && altitude <= 2000 && speed > 50) return "Despegando";
-    if (altitude > 2000 && verticalRate < 0) return "Arribando";
+    if (altitude > 2000 && verticalRate < 0) return "En zona";
     if (altitude > 2000) return "En vuelo";
     return "Desconocido";
 }
@@ -200,11 +208,13 @@ function updateOpenSkyData() {
             console.log("Datos recibidos de /opensky:", data);
             const messageList = document.getElementById("message-list");
             messageList.innerHTML = "";
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
-                    map.removeLayer(layer);
-                }
-            });
+            if (map) {
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
+                        map.removeLayer(layer);
+                    }
+                });
+            }
             if (data.error) {
                 console.warn("Error en Airplanes.Live:", data.error);
                 messageList.textContent = "Esperando datos de Airplanes.Live...";
@@ -226,10 +236,11 @@ function updateOpenSkyData() {
                         const arrivalTime = estimateArrivalTime(lat, lon, speed);
 
                         const flightDiv = document.createElement("div");
+                        flightDiv.className = `flight-message flight-${status.toLowerCase().replace(" ", "-")}`;
                         flightDiv.textContent = `Aerolíneas Argentinas ${displayFlight} / ${registration} ${status} ${arrivalTime}`;
                         messageList.appendChild(flightDiv);
 
-                        if (lat && lon) {
+                        if (lat && lon && map) {
                             L.marker([lat, lon], { 
                                 icon: L.icon({
                                     iconUrl: '/templates/aero.png',
@@ -312,14 +323,29 @@ function logout() {
     }
     localStorage.removeItem("sessionToken");
     localStorage.removeItem("userName");
-    console.log("Mostrando #register y ocultando #main y #history-screen");
+    localStorage.removeItem("userFunction");
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
+    document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "none";
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
     }
     console.log("Sesión cerrada");
+}
+
+function showRadar() {
+    document.getElementById("main").style.display = "none";
+    document.getElementById("radar-screen").style.display = "block";
+    if (!map) {
+        initMap();
+        updateOpenSkyData();
+    }
+}
+
+function backToMainFromRadar() {
+    document.getElementById("radar-screen").style.display = "none";
+    document.getElementById("main").style.display = "block";
 }
 
 function showHistory() {
@@ -341,6 +367,7 @@ function showHistory() {
                 historyList.appendChild(msgDiv);
             });
             document.getElementById("main").style.display = "none";
+            document.getElementById("radar-screen").style.display = "none";
             document.getElementById("history-screen").style.display = "block";
         })
         .catch(err => console.error("Error al cargar historial:", err));
@@ -375,4 +402,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-}
+                    }
