@@ -71,7 +71,6 @@ function connectWebSocket(sessionToken) {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         updateOpenSkyData();
-        document.body.addEventListener('touchstart', unlockAudio, { once: true });
     };
 
     ws.onmessage = function(event) {
@@ -121,8 +120,6 @@ window.onload = function() {
         document.getElementById("register").style.display = "none";
         document.getElementById("main").style.display = "block";
         connectWebSocket(sessionToken);
-    } else {
-        requestMicPermission();
     }
 };
 
@@ -143,13 +140,6 @@ function playAudio(blob) {
     }
 }
 
-function unlockAudio() {
-    const audio = new Audio();
-    audio.play().catch(() => {});
-    console.log("Audio desbloqueado tras interacción");
-    alert("Audio desbloqueado. Probá hablar ahora.");
-}
-
 function initMap() {
     map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -165,7 +155,6 @@ function initMap() {
     L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
         .bindPopup("Aeroparque").openPopup();
 
-    // Agregar evento de búsqueda
     const searchBar = document.getElementById("search-bar");
     searchBar.addEventListener("input", filterFlights);
 }
@@ -230,8 +219,8 @@ function updateOpenSkyData() {
             console.log("Datos recibidos de /opensky:", data);
             const messageList = document.getElementById("message-list");
             messageList.innerHTML = "";
-            flightData = data; // Almacenar datos para la búsqueda
-            markers = []; // Reiniciar marcadores
+            flightData = data;
+            markers = [];
 
             if (map) {
                 map.eachLayer(layer => {
@@ -317,6 +306,7 @@ async function toggleTalk() {
                 stream = null;
             }
             audioChunks = [];
+            mediaRecorder = null;
         };
         mediaRecorder.start(100);
         talkButton.textContent = "Grabando...";
@@ -370,16 +360,16 @@ function showRadar() {
         initMap();
         updateOpenSkyData();
     } else {
-        map.invalidateSize(); // Ajustar el tamaño del mapa al cambiar a pantalla completa
-        filterFlights(); // Aplicar filtro inicial si hay texto en la barra de búsqueda
+        map.invalidateSize();
+        filterFlights();
     }
 }
 
 function backToMainFromRadar() {
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
-    document.getElementById("search-bar").value = ""; // Limpiar la barra de búsqueda al volver
-    filterFlights(); // Restaurar todos los marcadores
+    document.getElementById("search-bar").value = "";
+    filterFlights();
 }
 
 function showHistory() {
@@ -436,4 +426,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-            }
+                             }
