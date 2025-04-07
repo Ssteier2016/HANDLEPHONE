@@ -9,6 +9,7 @@ let audioQueue = [];
 let isPlaying = false;
 let flightData = [];
 let markers = [];
+let recognition; // Variable para SpeechRecognition
 
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
@@ -16,6 +17,17 @@ const AIRLINE_MAPPING = {
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Inicializar SpeechRecognition
+if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'es-ES';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+} else {
+    console.error("SpeechRecognition no soportado en este navegador.");
+    alert("Tu navegador no soporta speech-to-text. Usa Chrome para mejor compatibilidad.");
+}
 
 async function requestMicPermission() {
     try {
@@ -317,6 +329,27 @@ async function toggleTalk() {
 
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         audioChunks = [];
+        let transcript = ""; // Variable para almacenar la transcripción
+
+        // Iniciar SpeechRecognition
+        if (recognition) {
+            recognition.onresult = (event) => {
+                transcript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        transcript += event.results[i][0].transcript;
+                    } else {
+                        transcript += event.results[i][0].transcript; // Resultados intermedios
+                    }
+                }
+            };
+            recognition.onerror = (event) => {
+                console.error("Error en SpeechRecognition:", event.error);
+                transcript = "Error en transcripción";
+            };
+            recognition.start();
+        }
+
         mediaRecorder.ondataavailable = function(event) {
             audioChunks.push(event.data);
         };
@@ -327,10 +360,14 @@ async function toggleTalk() {
             reader.onloadend = function() {
                 const base64data = reader.result.split(',')[1];
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: "audio", data: base64data }));
+                    ws.send(JSON.stringify({ 
+                        type: "audio", 
+                        data: base64data,
+                        text: transcript || "Sin transcripción" // Usar transcripción o fallback
+                    }));
                 }
 
-                // Mostrar el mensaje localmente
+                // Mostrar el mensaje localmente con la transcripción
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
                     const msgDiv = document.createElement("div");
@@ -338,7 +375,7 @@ async function toggleTalk() {
                     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                     const userName = localStorage.getItem("userName") || "Anónimo";
                     const userFunction = localStorage.getItem("userFunction") || "Desconocida";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${userName} (${userFunction}): Sin transcripción`;
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${userName} (${userFunction}): ${transcript || "Sin transcripción"}`;
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
@@ -351,6 +388,7 @@ async function toggleTalk() {
             }
             audioChunks = [];
             mediaRecorder = null;
+            if (recognition) recognition.stop(); // Detener SpeechRecognition
         };
         mediaRecorder.start(100);
         talkButton.textContent = "Grabando...";
@@ -482,4 +520,4 @@ function simulateMessage() {
         text: "Mensaje de prueba"
     };
     ws.onmessage({ data: JSON.stringify(simulatedMessage) });
-    }
+}
