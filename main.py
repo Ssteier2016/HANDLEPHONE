@@ -282,15 +282,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
 async def broadcast_users():
     user_count = len([u for u in users if users[u]["logged_in"]])
-    # Extraer legajo del token (primera parte antes del primer "_")
-    user_list = [f"{users[token]['name']} ({token.split('_')[0]})" for token in users if users[token]["logged_in"]]
+    # Cambiar para mostrar nombre y legajo (extraído del token)
+    user_list = []
+    for token in users:
+        if users[token]["logged_in"]:
+            decoded_token = base64.b64decode(token).decode('utf-8')  # Decodificar el token
+            legajo, name, _ = decoded_token.split('_', 2)  # Extraer legajo y nombre
+            user_list.append(f"{users[token]['name']} ({legajo})")
     for client in list(clients.values()):
         await client["ws"].send_text(json.dumps({
             "type": "users",
             "count": user_count,
             "list": user_list
         }))
-
+        
 @app.get("/history")
 async def get_history_endpoint():
     return get_history()
