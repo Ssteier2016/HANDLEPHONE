@@ -178,7 +178,7 @@ function playAudio(blob) {
 function initMap() {
     map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19 Jewel,
+        maxZoom: 19,
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
