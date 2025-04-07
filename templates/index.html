@@ -15,7 +15,20 @@
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <input id="name" placeholder="Apellido">
         <input id="legajo" placeholder="Legajo" type="number" maxlength="5">
-        <input id="function" placeholder="Función">
+        <select id="function">
+            <option value="" disabled selected>Selecciona una función</option>
+            <option value="Maletero">Maletero</option>
+            <option value="Cintero">Cintero</option>
+            <option value="Tractorista">Tractorista</option>
+            <option value="Equipo">Equipo</option>
+            <option value="Micro">Micro</option>
+            <option value="Mobilero">Mobilero</option>
+            <option value="Jefatura">Jefatura</option>
+            <option value="Supervisor">Supervisor</option>
+            <option value="Señalero">Señalero</option>
+            <option value="Pañolero">Pañolero</option>
+            <option value="Combustible">Combustible</option>
+        </select>
         <button onclick="register()">Registrarse</button>
     </div>
 
