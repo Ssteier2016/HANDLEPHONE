@@ -9,3 +9,4 @@ pyaudio==0.2.14
 aiohttp
 requests
 beautifulsoup4
+soundfile
