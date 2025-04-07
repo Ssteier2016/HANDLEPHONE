@@ -12,6 +12,10 @@ import logging
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
+import speech_recognition as sr
+import io
+import soundfile as sf
+from pydub import AudioSegment
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -48,6 +52,44 @@ audio_queue = asyncio.Queue()
 last_request_time = 0
 cached_data = None
 CACHE_DURATION = 15  # 15 segundos para evitar saturación
+
+# Función para transcribir audio usando speech_recognition
+def transcribe_audio(audio_data):
+    try:
+        # Decodificar el audio base64
+        audio_file = io.BytesIO(audio_data)
+
+        # Convertir el audio WebM a WAV
+        with sf.SoundFile(audio_file, 'r') as f:
+            audio_samples = f.read()
+            sample_rate = f.samplerate
+        wav_io = io.BytesIO()
+        sf.write(wav_io, audio_samples, sample_rate, format='WAV')
+        wav_io.seek(0)
+
+        # Usar pydub para cargar el audio WAV
+        audio_segment = AudioSegment.from_wav(wav_io)
+        wav_io = io.BytesIO()
+        audio_segment.export(wav_io, format="wav")
+        wav_io.seek(0)
+
+        # Transcribir el audio
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_io) as source:
+            audio = recognizer.record(source)
+            try:
+                text = recognizer.recognize_google(audio, language="es-ES")
+                logger.info("Audio transcrito exitosamente en el servidor")
+                return text
+            except sr.UnknownValueError:
+                logger.warning("No se pudo transcribir el audio en el servidor")
+                return "No se pudo transcribir"
+            except sr.RequestError as e:
+                logger.error(f"Error en la transcripción en el servidor: {e}")
+                return f"Error en la transcripción: {e}"
+    except Exception as e:
+        logger.error(f"Error al procesar el audio en el servidor: {e}")
+        return f"Error al procesar el audio: {e}"
 
 # Función para obtener datos de Airplanes.Live
 async def get_airplanes_live_data():
@@ -202,10 +244,16 @@ async def process_audio_queue():
         timestamp = datetime.utcnow().strftime("%H:%M")
         text = message.get("text", "Sin transcripción")
         user_id = users.get(token, {}).get("name", "Anónimo")
+
+        # Si el texto es "Pendiente de transcripción", transcribir en el servidor
+        if text == "Pendiente de transcripción":
+            text = transcribe_audio(audio_data)
+
         save_message(user_id, audio_data, text, timestamp)
         
+        # Retransmitir el mensaje a todos los clientes, incluido el emisor
         for client_token, client in list(clients.items()):
-            if client_token != token and not client["muted"] and users[client_token]["logged_in"]:
+            if not client["muted"] and users[client_token]["logged_in"]:
                 await client["ws"].send_text(json.dumps({
                     "type": "audio",
                     "data": message["data"],
