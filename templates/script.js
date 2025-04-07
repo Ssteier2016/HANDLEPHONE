@@ -104,12 +104,8 @@ function connectWebSocket(sessionToken) {
             }
 
             if (message.type === "audio") {
-                if (!message.data || !message.timestamp || !message.sender) {
-                    console.error("Mensaje de audio incompleto:", message);
-                    return;
-                }
-
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                // Relajar validaciones y usar valores por defecto si faltan
+                const audioBlob = base64ToBlob(message.data || "", 'audio/webm');
                 playAudio(audioBlob);
                 const chatList = document.getElementById("chat-list");
                 if (!chatList) {
@@ -119,34 +115,23 @@ function connectWebSocket(sessionToken) {
 
                 const msgDiv = document.createElement("div");
                 msgDiv.className = "chat-message";
-                const utcTime = message.timestamp.split(":");
-                if (utcTime.length !== 2) {
-                    console.error("Formato de timestamp inválido:", message.timestamp);
-                    return;
-                }
-
-                const utcDate = new Date();
-                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                // Usar el texto recibido o "Sin transcripción" si no llega
+                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = message.sender || "Anónimo";
+                const userFunction = message.function || "Desconocida";
                 const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.function}): ${text}`;
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
                 msgDiv.onclick = () => playAudio(audioBlob);
                 chatList.appendChild(msgDiv);
                 chatList.scrollTop = chatList.scrollHeight;
             } else if (message.type === "users") {
-                // Mostrar legajo en lugar de función
-                const userList = message.list.map(user => {
-                    const [name, legajo] = user.split(" (");
-                    return `${name} (${legajo.replace(")", "")})`; // Ya viene con legajo desde el backend
-                });
-                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${userList.join(", ")})`;
+                // Mostrar lista directamente como viene del backend (Nombre (Legajo))
+                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
         } catch (err) {
             console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
-            alert("Error procesando el mensaje recibido.");
+            // No mostrar alerta para no interrumpir, solo loguear
         }
     };
 
@@ -193,7 +178,7 @@ function playAudio(blob) {
 function initMap() {
     map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+        maxZoom: 19 Jewel,
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
@@ -337,9 +322,8 @@ async function toggleTalk() {
 
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         audioChunks = [];
-        let transcript = ""; // Variable para almacenar la transcripción
+        let transcript = "";
 
-        // Iniciar SpeechRecognition
         if (recognition) {
             recognition.onresult = (event) => {
                 transcript = "";
@@ -347,10 +331,10 @@ async function toggleTalk() {
                     if (event.results[i].isFinal) {
                         transcript += event.results[i][0].transcript;
                     } else {
-                        transcript += event.results[i][0].transcript; // Resultados intermedios
+                        transcript += event.results[i][0].transcript;
                     }
                 }
-                console.log("Transcripción parcial:", transcript); // Para depurar
+                console.log("Transcripción parcial:", transcript);
             };
             recognition.onerror = (event) => {
                 console.error("Error en SpeechRecognition:", event.error);
@@ -368,25 +352,26 @@ async function toggleTalk() {
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
                 const base64data = reader.result.split(',')[1];
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = localStorage.getItem("userName") || "Anónimo";
+                const userFunction = localStorage.getItem("userFunction") || "Desconocida";
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    // Enviar audio y transcripción juntos
                     ws.send(JSON.stringify({ 
                         type: "audio", 
                         data: base64data,
-                        text: transcript || "Sin transcripción" // Asegurar que siempre se envíe
+                        text: transcript || "Sin transcripción",
+                        timestamp: timestamp,
+                        sender: sender,
+                        function: userFunction
                     }));
-                    console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript });
+                    console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript, timestamp, sender, function: userFunction });
                 }
 
-                // Mostrar el mensaje localmente con la transcripción
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
                     const msgDiv = document.createElement("div");
                     msgDiv.className = "chat-message";
-                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                    const userName = localStorage.getItem("userName") || "Anónimo";
-                    const userFunction = localStorage.getItem("userFunction") || "Desconocida";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${userName} (${userFunction}): ${transcript || "Sin transcripción"}`;
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript || "Sin transcripción"}`;
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
@@ -399,7 +384,7 @@ async function toggleTalk() {
             }
             audioChunks = [];
             mediaRecorder = null;
-            if (recognition) recognition.stop(); // Detener SpeechRecognition
+            if (recognition) recognition.stop();
         };
         mediaRecorder.start(100);
         talkButton.textContent = "Grabando...";
