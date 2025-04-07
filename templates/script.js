@@ -10,6 +10,7 @@ let isPlaying = false;
 let flightData = [];
 let markers = [];
 let recognition; // Variable para SpeechRecognition
+let supportsSpeechRecognition = false; // Bandera para verificar soporte
 
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
@@ -18,15 +19,17 @@ const AIRLINE_MAPPING = {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-// Inicializar SpeechRecognition
+// Inicializar SpeechRecognition y verificar soporte
 if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     recognition.lang = 'es-ES';
     recognition.continuous = true;
     recognition.interimResults = true;
+    supportsSpeechRecognition = true;
+    console.log("SpeechRecognition soportado. Navegador:", navigator.userAgent);
 } else {
-    console.error("SpeechRecognition no soportado en este navegador.");
-    alert("Tu navegador no soporta speech-to-text. Usa Chrome para mejor compatibilidad.");
+    console.error("SpeechRecognition no soportado en este navegador. Navegador:", navigator.userAgent);
+    alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
 
 async function requestMicPermission() {
@@ -322,9 +325,9 @@ async function toggleTalk() {
 
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         audioChunks = [];
-        let transcript = "";
+        let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
 
-        if (recognition) {
+        if (supportsSpeechRecognition && recognition) {
             recognition.onresult = (event) => {
                 transcript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -338,7 +341,8 @@ async function toggleTalk() {
             };
             recognition.onerror = (event) => {
                 console.error("Error en SpeechRecognition:", event.error);
-                transcript = "Error en transcripción";
+                transcript = "Error en transcripción: " + event.error;
+                alert("Error en speech-to-text: " + event.error);
             };
             recognition.start();
         }
@@ -359,7 +363,7 @@ async function toggleTalk() {
                     ws.send(JSON.stringify({ 
                         type: "audio", 
                         data: base64data,
-                        text: transcript || "Sin transcripción",
+                        text: transcript,
                         timestamp: timestamp,
                         sender: sender,
                         function: userFunction
@@ -371,7 +375,7 @@ async function toggleTalk() {
                 if (chatList) {
                     const msgDiv = document.createElement("div");
                     msgDiv.className = "chat-message";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript || "Sin transcripción"}`;
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
@@ -384,7 +388,7 @@ async function toggleTalk() {
             }
             audioChunks = [];
             mediaRecorder = null;
-            if (recognition) recognition.stop();
+            if (supportsSpeechRecognition && recognition) recognition.stop();
         };
         mediaRecorder.start(100);
         talkButton.textContent = "Grabando...";
