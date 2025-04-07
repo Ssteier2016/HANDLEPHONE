@@ -282,7 +282,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
 async def broadcast_users():
     user_count = len([u for u in users if users[u]["logged_in"]])
-    user_list = [f"{users[token]['name']} ({users[token]['function']})" for token in users if users[token]["logged_in"]]
+    # Extraer legajo del token (primera parte antes del primer "_")
+    user_list = [f"{users[token]['name']} ({token.split('_')[0]})" for token in users if users[token]["logged_in"]]
     for client in list(clients.values()):
         await client["ws"].send_text(json.dumps({
             "type": "users",
