@@ -58,6 +58,7 @@ function register() {
     localStorage.setItem("sessionToken", sessionToken);
     localStorage.setItem("userName", name);
     localStorage.setItem("userFunction", userFunction);
+    localStorage.setItem("userLegajo", legajo); // Guardar legajo por separado
     connectWebSocket(sessionToken);
 }
 
@@ -103,7 +104,7 @@ function connectWebSocket(sessionToken) {
             }
 
             if (message.type === "audio") {
-                if (!message.data || !message.timestamp || !message.sender || !message.function || !message.text) {
+                if (!message.data || !message.timestamp || !message.sender) {
                     console.error("Mensaje de audio incompleto:", message);
                     return;
                 }
@@ -127,12 +128,19 @@ function connectWebSocket(sessionToken) {
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.function}): ${message.text}`;
+                // Usar el texto recibido o "Sin transcripción" si no llega
+                const text = message.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${localTime} - ${message.sender} (${message.function}): ${text}`;
                 msgDiv.onclick = () => playAudio(audioBlob);
                 chatList.appendChild(msgDiv);
                 chatList.scrollTop = chatList.scrollHeight;
             } else if (message.type === "users") {
-                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+                // Mostrar legajo en lugar de función
+                const userList = message.list.map(user => {
+                    const [name, legajo] = user.split(" (");
+                    return `${name} (${legajo.replace(")", "")})`; // Ya viene con legajo desde el backend
+                });
+                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${userList.join(", ")})`;
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
@@ -342,6 +350,7 @@ async function toggleTalk() {
                         transcript += event.results[i][0].transcript; // Resultados intermedios
                     }
                 }
+                console.log("Transcripción parcial:", transcript); // Para depurar
             };
             recognition.onerror = (event) => {
                 console.error("Error en SpeechRecognition:", event.error);
@@ -360,11 +369,13 @@ async function toggleTalk() {
             reader.onloadend = function() {
                 const base64data = reader.result.split(',')[1];
                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    // Enviar audio y transcripción juntos
                     ws.send(JSON.stringify({ 
                         type: "audio", 
                         data: base64data,
-                        text: transcript || "Sin transcripción" // Usar transcripción o fallback
+                        text: transcript || "Sin transcripción" // Asegurar que siempre se envíe
                     }));
+                    console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript });
                 }
 
                 // Mostrar el mensaje localmente con la transcripción
@@ -425,6 +436,7 @@ function logout() {
     localStorage.removeItem("sessionToken");
     localStorage.removeItem("userName");
     localStorage.removeItem("userFunction");
+    localStorage.removeItem("userLegajo");
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
