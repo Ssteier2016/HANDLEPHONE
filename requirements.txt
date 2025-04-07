@@ -1,12 +1,12 @@
 fastapi
 uvicorn
 websockets
-speechrecognition
 pocketsphinx
-pydub
 flask==2.3.2
 pyaudio==0.2.14
 aiohttp
 requests
 beautifulsoup4
-soundfile
+speechrecognition==3.10.0
+pydub==0.25.1
+soundfile==0.12.1
