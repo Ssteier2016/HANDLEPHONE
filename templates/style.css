@@ -66,7 +66,7 @@ body {
     color: #ffffff;
 }
 
-input, button {
+input, button, select {
     font-family: 'Orbitron', 'Courier New', Courier, monospace;
     font-size: 16px;
     margin: 5px 0;
@@ -160,20 +160,20 @@ button:hover {
 }
 
 .flight-en-zona {
-    background-color: #ff6666; /* Rojo claro para "En zona" */
-    color: #000000 !important; /* Asegurar que el color del texto sea blanco */
+    background-color: #ff6666;
+    color: #000000 !important;
     text-shadow: none;
 }
 
 .flight-en-vuelo {
-    background-color: #66ff66; /* Verde claro para "En vuelo" */
-    color: #000000 !important; /* Asegurar que el color del texto sea negro */
+    background-color: #66ff66;
+    color: #000000 !important;
     text-shadow: none;
 }
 
 .flight-despegando {
-    background-color: #ffff66; /* Amarillo claro para "Despegando" */
-    color: #000000 !important; /* Asegurar que el color del texto sea negro */
+    background-color: #ffff66;
+    color: #000000 !important;
     text-shadow: none;
 }
 
@@ -198,7 +198,7 @@ h3 {
 }
 
 #map {
-    height: calc(100% - 60px); /* Ajustar altura para dejar espacio al header */
+    height: calc(100% - 60px);
     border: 2px solid #ff3333;
     border-radius: 3px;
     background-color: #1c2526;
@@ -210,3 +210,16 @@ h3 {
     margin: 0 auto 10px;
     display: block;
 }
+
+select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: #1c2526 url('data:image/svg+xml;utf8,<svg fill="%23ff3333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+    padding-right: 30px; /* Espacio para la flecha */
+}
+
+select:hover {
+    background-color: #ff3333;
+    color: #ffffff;
+    }
