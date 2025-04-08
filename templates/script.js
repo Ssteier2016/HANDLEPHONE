@@ -505,7 +505,7 @@ function playNextAudio() {
         playNextAudio();
     }).catch(err => {
         console.error("Error reproduciendo audio:", err);
-        alert("No se pudo reproducir el audio. Hacé clic en la pantalla primero.");
+        // No mostramos la alerta, solo registramos el error en la consola
         isPlaying = false;
         playNextAudio();
     });
