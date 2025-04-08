@@ -34,22 +34,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configurar claves VAPID para notificaciones push
-from webpush import generate_vapid_keys
-
-# Generar claves VAPID al iniciar
-keys = generate_vapid_keys()
-# Configurar claves VAPID para notificaciones push
 VAPID_PUBLIC_KEY = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"
 VAPID_PRIVATE_KEY = "hcRHiegtjnRTht4MEjqHs0j6u8Pnsti82u7hDXB85y4"
 VAPID_CLAIMS = {
-    "sub": "mailto:rod.arena7@gmail.com"  # Reemplazar con tu correo
+    "sub": "mailto:rod.arena7@gmail.com"
 }
-
-# Mostrar las claves en los logs
-logger.info(f"Claves VAPID generadas:")
-logger.info(f"Public Key: {VAPID_PUBLIC_KEY}")
-logger.info(f"Private Key: {VAPID_PRIVATE_KEY}")
-logger.info(f"VAPID Claims: {VAPID_CLAIMS}")
 
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
