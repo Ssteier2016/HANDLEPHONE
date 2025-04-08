@@ -37,7 +37,7 @@ if ('serviceWorker' in navigator) {
 // Función para suscribirse a notificaciones push
 async function subscribeToPush(registration) {
     try {
-        const vapidPublicKey = "YOUR_VAPID_PUBLIC_KEY"; // Reemplazar con tu clave pública VAPID
+        const vapidPublicKey = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"; // Reemplazar con tu clave pública VAPID
         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
