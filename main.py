@@ -16,6 +16,7 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
+from webpush import WebPush  # Para enviar notificaciones push
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -28,8 +29,16 @@ with open("templates/index.html", "r") as f:
 async def read_root():
     return INDEX_HTML
 
+# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configurar claves VAPID para notificaciones push
+VAPID_PUBLIC_KEY = "YOUR_VAPID_PUBLIC_KEY"  # Reemplazar con tu clave pública VAPID
+VAPID_PRIVATE_KEY = "YOUR_VAPID_PRIVATE_KEY"  # Reemplazar con tu clave privada VAPID
+VAPID_CLAIMS = {
+    "sub": "mailto:your-email@example.com"  # Reemplazar con tu correo
+}
 
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
@@ -43,10 +52,8 @@ ICAO_ALPHABET = {
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-# Diccionarios para manejar clientes, usuarios y sesiones
-clients = {}  # {token: {"ws": WebSocket, "muted": bool}}
-users = {}    # {token: {"name": str, "function": str, "logged_in": bool}}
-active_sessions = {}  # {token: bool}
+# Diccionarios para manejar usuarios, sesiones y suscripciones push
+users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription}}
 audio_queue = asyncio.Queue()
 
 last_request_time = 0
@@ -54,31 +61,29 @@ cached_data = None
 CACHE_DURATION = 15  # 15 segundos para evitar saturación
 
 # Función para transcribir audio usando speech_recognition
-def transcribe_audio(audio_data):
+async def transcribe_audio(audio_data):
     try:
         # Decodificar el audio base64
-        audio_file = io.BytesIO(audio_data)
+        audio_bytes = base64.b64decode(audio_data)
+        audio_file = io.BytesIO(audio_bytes)
 
-        # Convertir el audio WebM a WAV
-        with sf.SoundFile(audio_file, 'r') as f:
-            audio_samples = f.read()
-            sample_rate = f.samplerate
-        wav_io = io.BytesIO()
-        sf.write(wav_io, audio_samples, sample_rate, format='WAV')
-        wav_io.seek(0)
-
-        # Usar pydub para cargar el audio WAV
-        audio_segment = AudioSegment.from_wav(wav_io)
+        # Convertir el audio WebM a WAV usando pydub
+        audio_segment = AudioSegment.from_file(audio_file, format="webm")
+        audio_segment = audio_segment.set_channels(1)  # Convertir a mono
+        audio_segment = audio_segment.set_frame_rate(16000)  # Ajustar la tasa de muestreo
         wav_io = io.BytesIO()
         audio_segment.export(wav_io, format="wav")
         wav_io.seek(0)
 
-        # Transcribir el audio
+        # Leer el archivo WAV con soundfile
+        data, samplerate = sf.read(wav_io)
+
+        # Usar SpeechRecognition para transcribir
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_io) as source:
-            audio = recognizer.record(source)
+            audio_data = recognizer.record(source)
             try:
-                text = recognizer.recognize_google(audio, language="es-ES")
+                text = recognizer.recognize_google(audio_data, language="es-ES")
                 logger.info("Audio transcrito exitosamente en el servidor")
                 return text
             except sr.UnknownValueError:
@@ -90,6 +95,10 @@ def transcribe_audio(audio_data):
     except Exception as e:
         logger.error(f"Error al procesar el audio en el servidor: {e}")
         return f"Error al procesar el audio: {e}"
+    finally:
+        # Limpiar recursos
+        audio_file.close()
+        wav_io.close()
 
 # Función para obtener datos de Airplanes.Live
 async def get_airplanes_live_data():
@@ -247,103 +256,149 @@ async def process_audio_queue():
 
         # Si el texto es "Pendiente de transcripción", transcribir en el servidor
         if text == "Pendiente de transcripción":
-            text = transcribe_audio(audio_data)
+            text = await transcribe_audio(message["data"])
 
+        # Guardar el mensaje en la base de datos
         save_message(user_id, audio_data, text, timestamp)
-        
-        # Retransmitir el mensaje a todos los clientes, incluido el emisor
-        for client_token, client in list(clients.items()):
-            if not client["muted"] and users[client_token]["logged_in"]:
-                await client["ws"].send_text(json.dumps({
-                    "type": "audio",
-                    "data": message["data"],
-                    "text": text,
-                    "timestamp": timestamp,
-                    "sender": users[token]["name"],
-                    "function": users[token]["function"]
-                }))
-                logger.info(f"Audio retransmitido a {client_token}")
+
+        # Preparar el mensaje para retransmitir
+        broadcast_message = {
+            "type": "audio",
+            "data": message["data"],
+            "text": text,
+            "timestamp": timestamp,
+            "sender": users[token]["name"],
+            "function": users[token]["function"]
+        }
+
+        # Enviar notificación push a los usuarios suscritos (excepto al emisor)
+        for user_token, user in list(users.items()):
+            if user_token != token and user["logged_in"] and user.get("subscription"):
+                try:
+                    webpush = WebPush(
+                        subscription_info=user["subscription"],
+                        data=json.dumps({
+                            "type": "audio",
+                            "sender": users[token]["name"],
+                            "function": users[token]["function"],
+                            "text": text
+                        }),
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims=VAPID_CLAIMS
+                    )
+                    webpush.send()
+                    logger.info(f"Notificación push enviada a {user_token}")
+                except Exception as e:
+                    logger.error(f"Error al enviar notificación push a {user_token}: {e}")
+
+        # Retransmitir el mensaje a todos los clientes conectados, excepto al emisor
+        for user_token, user in list(users.items()):
+            if user_token != token and user["logged_in"] and user["websocket"] is not None and not user.get("muted", False):
+                try:
+                    await user["websocket"].send_text(json.dumps(broadcast_message))
+                    logger.info(f"Audio retransmitido a {user_token}")
+                except Exception as e:
+                    logger.error(f"Error al retransmitir audio a {user_token}: {e}")
+                    user["websocket"] = None  # Marcar como desconectado si falla
         audio_queue.task_done()
 
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     await websocket.accept()
     logger.info(f"Cliente conectado con token: {token}")
-    clients[token] = {"ws": websocket, "muted": False}
-    
-    if token not in users:
-        users[token] = {
-            "name": "Anónimo",
-            "function": "Desconocida",
-            "logged_in": True
-        }
-        active_sessions[token] = True
-    else:
-        users[token]["logged_in"] = True
-        active_sessions[token] = True
-    await broadcast_users()
-    
+
     try:
+        # Decodificar el token para obtener user_id
+        user_id = base64.b64decode(token).decode('utf-8')
+
+        # Si el usuario ya existe en users, actualizamos su WebSocket
+        if token in users:
+            users[token]["websocket"] = websocket
+            users[token]["logged_in"] = True
+        else:
+            # Si es un usuario nuevo, lo agregamos
+            users[token] = {
+                "name": "Anónimo",
+                "function": "Desconocida",
+                "logged_in": True,
+                "websocket": websocket,
+                "muted": False,
+                "subscription": None  # Para notificaciones push
+            }
+
+        # Enviar lista inicial de usuarios conectados
+        await broadcast_users()
+
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
             logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
-            
+
             if message["type"] == "register":
                 name = message.get("name", "Anónimo")
                 function = message.get("function", "Desconocida")
-                users[token] = {
-                    "name": name,
-                    "function": function,
-                    "logged_in": True
-                }
-                active_sessions[token] = True
+                users[token]["name"] = name
+                users[token]["function"] = function
+                users[token]["logged_in"] = True
                 await broadcast_users()
-            
+
+            elif message["type"] == "subscribe":
+                # Guardar la suscripción para notificaciones push
+                users[token]["subscription"] = message["subscription"]
+                logger.info(f"Suscripción push recibida para {token}")
+
             elif message["type"] == "audio":
                 audio_data = base64.b64decode(message["data"])
                 await audio_queue.put((token, audio_data, message))
-            
+
             elif message["type"] == "logout":
+                # Manejar el logout manualmente
                 if token in users:
                     users[token]["logged_in"] = False
-                    active_sessions[token] = False
-                if token in clients:
-                    del clients[token]
+                    del users[token]
                 await broadcast_users()
                 await websocket.close()
                 logger.info(f"Usuario {token} cerró sesión")
                 break
-            
+
             elif message["type"] == "mute":
-                if token in clients:
-                    clients[token]["muted"] = True
+                users[token]["muted"] = True
             elif message["type"] == "unmute":
-                if token in clients:
-                    clients[token]["muted"] = False
-            
+                users[token]["muted"] = False
+
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
-        if token in clients:
-            del clients[token]
-        await broadcast_users()
+        # No eliminamos al usuario de users, solo marcamos su WebSocket como None
+        if token in users:
+            users[token]["websocket"] = None
+        # No actualizamos la lista de usuarios conectados porque el usuario sigue "activo"
+
+    except Exception as e:
+        logger.error(f"Error en WebSocket para el cliente {token}: {str(e)}", exc_info=True)
+        if token in users:
+            users[token]["websocket"] = None
+        # No actualizamos la lista de usuarios conectados porque el usuario sigue "activo"
+        await websocket.close()
 
 async def broadcast_users():
-    user_count = len([u for u in users if users[u]["logged_in"]])
-    # Cambiar para mostrar nombre y legajo (extraído del token)
     user_list = []
     for token in users:
         if users[token]["logged_in"]:
             decoded_token = base64.b64decode(token).decode('utf-8')  # Decodificar el token
             legajo, name, _ = decoded_token.split('_', 2)  # Extraer legajo y nombre
             user_list.append(f"{users[token]['name']} ({legajo})")
-    for client in list(clients.values()):
-        await client["ws"].send_text(json.dumps({
-            "type": "users",
-            "count": user_count,
-            "list": user_list
-        }))
-        
+    for user in users.values():
+        if user["logged_in"] and user["websocket"] is not None:
+            try:
+                await user["websocket"].send_text(json.dumps({
+                    "type": "users",
+                    "count": len(user_list),
+                    "list": user_list
+                }))
+            except Exception as e:
+                logger.error(f"Error al enviar lista de usuarios a un cliente: {e}")
+                user["websocket"] = None
+
 @app.get("/history")
 async def get_history_endpoint():
     return get_history()
