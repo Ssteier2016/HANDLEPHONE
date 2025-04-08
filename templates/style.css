@@ -1,7 +1,7 @@
 body {
-    background-color: #1c2526;
+    background-color: #87CEEB; /* Azul claro para simular el cielo */
     font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    color: #00ff00;
+    color: #333333; /* Texto oscuro para mejor contraste */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -9,18 +9,48 @@ body {
     margin: 0;
     padding: 20px;
     box-sizing: border-box;
-    background-image: linear-gradient(45deg, #1c2526, #2a3439);
+    background-image: linear-gradient(45deg, #87CEEB, #4682B4); /* Gradiente de cielo */
+    position: relative;
+    overflow: hidden; /* Para que el avión no desborde */
+}
+
+/* Animación del avión volando */
+body::before {
+    content: '';
+    position: absolute;
+    width: 100px;
+    height: 50px;
+    background: url('https://img.icons8.com/ios-filled/50/ffffff/airplane-take-off.png') no-repeat center center;
+    background-size: contain;
+    top: 10%;
+    left: -100px; /* Comienza fuera de la pantalla */
+    animation: fly 20s linear infinite; /* Animación de vuelo */
+}
+
+/* Animación del avión */
+@keyframes fly {
+    0% {
+        left: -100px;
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(50px); /* Movimiento vertical para simular turbulencia */
+    }
+    100% {
+        left: 100%; /* Termina fuera de la pantalla a la derecha */
+        transform: translateY(0);
+    }
 }
 
 #register, #main, #radar-screen, #history-screen {
-    background-color: #2a3439;
-    border: 5px solid #4a4a4a;
-    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente */
+    border: 3px solid #4682B4; /* Borde azul oscuro */
+    border-radius: 10px;
     padding: 20px;
     max-width: 600px;
     margin: 0 auto;
     text-align: center;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Sombra más suave */
     display: none;
 }
 
@@ -55,7 +85,7 @@ body {
 .close-btn {
     background-color: transparent;
     border: none;
-    color: #ff3333;
+    color: #FF4500; /* Naranja para el botón de cerrar */
     font-size: 24px;
     cursor: pointer;
     padding: 5px 10px;
@@ -63,7 +93,7 @@ body {
 }
 
 .close-btn:hover {
-    color: #ffffff;
+    color: #FF6347; /* Naranja más claro al pasar el mouse */
 }
 
 input, button, select {
@@ -72,38 +102,38 @@ input, button, select {
     margin: 5px 0;
     padding: 10px;
     width: 100%;
-    border: 2px solid #ff3333;
-    background-color: #1c2526;
-    color: #00ff00;
-    border-radius: 3px;
+    border: 2px solid #4682B4; /* Borde azul oscuro */
+    background-color: #F5F5F5; /* Fondo gris claro */
+    color: #333333; /* Texto oscuro */
+    border-radius: 5px;
     cursor: pointer;
     box-sizing: border-box;
 }
 
 button {
-    background-color: #4a4a4a;
+    background-color: #4682B4; /* Azul oscuro para botones */
     transition: background-color 0.3s;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 button:hover {
-    background-color: #ff3333;
-    color: #ffffff;
+    background-color: #FF4500; /* Naranja al pasar el mouse */
+    color: #FFFFFF;
 }
 
 #talk {
-    background-color: #ff3333;
+    background-color: #FF4500; /* Naranja para el botón de hablar */
 }
 
 #mute {
-    background-color: #00cc00;
+    background-color: #32CD32; /* Verde lima para el botón de mute */
 }
 
 #users {
     margin-top: 10px;
     font-size: 14px;
-    color: #ff3333;
-    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
+    color: #FF4500; /* Naranja para los usuarios conectados */
+    text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
 }
 
 #messages, #history-screen {
@@ -115,16 +145,16 @@ button:hover {
     overflow-y: auto;
     text-align: left;
     padding: 10px;
-    background-color: #1c2526;
-    border: 2px solid #ff3333;
-    border-radius: 3px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    background-color: #F5F5F5; /* Fondo gris claro */
+    border: 2px solid #4682B4; /* Borde azul oscuro */
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 #message-list div, #history-list div {
     margin: 5px 0;
     cursor: pointer;
-    color: #00ff00;
+    color: #333333; /* Texto oscuro */
 }
 
 #chat-list {
@@ -132,76 +162,76 @@ button:hover {
     overflow-y: auto;
     text-align: left;
     padding: 10px;
-    background-color: #1c2526;
-    border: 2px solid #ff3333;
-    border-radius: 3px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    background-color: #F5F5F5; /* Fondo gris claro */
+    border: 2px solid #4682B4; /* Borde azul oscuro */
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 .chat-message {
-    border: 1px dotted #4a4a4a;
+    border: 1px solid #4682B4; /* Borde azul oscuro */
     padding: 5px;
     margin: 5px 0;
-    background-color: #2a3439;
-    border-radius: 3px;
+    background-color: #FFFFFF; /* Fondo blanco */
+    border-radius: 5px;
     cursor: pointer;
-    color: #00ff00;
-    text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
+    color: #333333; /* Texto oscuro */
+    text-shadow: none; /* Sin sombra de texto */
 }
 
 .flight-message {
-    border: 1px dotted #4a4a4a;
+    border: 1px solid #4682B4; /* Borde azul oscuro */
     padding: 5px;
     margin: 5px 0;
-    background-color: #2a3439;
-    border-radius: 3px;
-    color: #00ff00;
-    text-shadow: 0 0 2px rgba(0, 255, 0, 0.5);
+    background-color: #FFFFFF; /* Fondo blanco */
+    border-radius: 5px;
+    color: #333333; /* Texto oscuro */
+    text-shadow: none;
 }
 
 .flight-en-zona {
-    background-color: #ff6666;
-    color: #000000 !important;
+    background-color: #FF6347; /* Rojo para "en zona" */
+    color: #FFFFFF !important;
     text-shadow: none;
 }
 
 .flight-en-vuelo {
-    background-color: #66ff66;
-    color: #000000 !important;
+    background-color: #32CD32; /* Verde para "en vuelo" */
+    color: #FFFFFF !important;
     text-shadow: none;
 }
 
 .flight-despegando {
-    background-color: #ffff66;
-    color: #000000 !important;
+    background-color: #FFD700; /* Amarillo para "despegando" */
+    color: #333333 !important;
     text-shadow: none;
 }
 
 .play-icon {
     margin-right: 5px;
     font-size: 12px;
-    color: #ff3333;
+    color: #FF4500; /* Naranja para el ícono de reproducción */
 }
 
 h2 {
     font-size: 18px;
     margin: 10px 0;
-    color: #ff3333;
-    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
+    color: #4682B4; /* Azul oscuro para los títulos */
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 h3 {
     font-size: 16px;
     margin: 10px 0;
-    color: #ff3333;
-    text-shadow: 0 0 3px rgba(255, 51, 51, 0.5);
+    color: #4682B4; /* Azul oscuro para los subtítulos */
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #map {
     height: calc(100% - 60px);
-    border: 2px solid #ff3333;
-    border-radius: 3px;
-    background-color: #1c2526;
+    border: 2px solid #4682B4; /* Borde azul oscuro */
+    border-radius: 5px;
+    background-color: #87CEEB; /* Fondo azul claro para el mapa */
 }
 
 .logo {
@@ -215,11 +245,11 @@ select {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
-    background: #1c2526 url('data:image/svg+xml;utf8,<svg fill="%23ff3333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+    background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
     padding-right: 30px; /* Espacio para la flecha */
 }
 
 select:hover {
-    background-color: #ff3333;
-    color: #ffffff;
-    }
+    background-color: #FF4500; /* Naranja al pasar el mouse */
+    color: #FFFFFF;
+}
