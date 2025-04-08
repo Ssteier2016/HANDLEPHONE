@@ -58,6 +58,11 @@ body::before {
 
 #register {
     display: block;
+    background-image: url('/templates/borde.png'); /* Ruta a la imagen */
+    background-size: cover; /* Ajustar la imagen para que cubra todo el contenedor */
+    background-position: center; /* Centrar la imagen */
+    background-repeat: no-repeat; /* Evitar que la imagen se repita */
+    background-color: rgba(255, 255, 255, 0.7); /* Fondo blanco semitransparente para legibilidad */
 }
 
 #radar-screen {
@@ -269,6 +274,14 @@ select:hover {
         margin: 0;
     }
 
+    #register {
+        background-image: url('/templates/register-bg.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: rgba(255, 255, 255, 0.8); /* Más opacidad en celulares para mejor legibilidad */
+    }
+
     #main {
         display: flex;
         flex-direction: column;
@@ -346,6 +359,14 @@ select:hover {
         max-width: 600px;
     }
 
+    #register {
+        background-image: url('/templates/register-bg.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: rgba(255, 255, 255, 0.7); /* Menos opacidad en computadoras */
+    }
+
     #main {
         display: flex;
         flex-direction: column;
@@ -396,4 +417,4 @@ select:hover {
     #map {
         height: calc(100% - 60px);
     }
-        }
+    }
