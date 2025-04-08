@@ -2,42 +2,42 @@ body {
     background-color: #87CEEB; /* Azul claro para simular el cielo */
     font-family: 'Orbitron', 'Courier New', Courier, monospace;
     color: #333333; /* Texto oscuro para mejor contraste */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
     margin: 0;
-    padding: 20px;
+    padding: 10px;
     box-sizing: border-box;
     background-image: linear-gradient(45deg, #87CEEB, #4682B4); /* Gradiente de cielo */
     position: relative;
-    overflow: hidden; /* Para que el avión no desborde */
+    overflow-x: hidden; /* Evitar desbordamiento horizontal */
+    min-height: 100vh; /* Asegurar que el cuerpo ocupe toda la altura */
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 /* Animación del avión volando */
 body::before {
     content: '';
     position: absolute;
-    width: 100px;
-    height: 50px;
+    width: 60px; /* Reducido para pantallas pequeñas */
+    height: 30px;
     background: url('https://img.icons8.com/ios-filled/50/ffffff/airplane-take-off.png') no-repeat center center;
     background-size: contain;
-    top: 10%;
-    left: -100px; /* Comienza fuera de la pantalla */
+    top: 5%;
+    left: -60px; /* Ajustado para el nuevo tamaño */
     animation: fly 20s linear infinite; /* Animación de vuelo */
 }
 
 /* Animación del avión */
 @keyframes fly {
     0% {
-        left: -100px;
+        left: -60px;
         transform: translateY(0);
     }
     50% {
-        transform: translateY(50px); /* Movimiento vertical para simular turbulencia */
+        transform: translateY(30px); /* Movimiento vertical ajustado */
     }
     100% {
-        left: 100%; /* Termina fuera de la pantalla a la derecha */
+        left: 100%;
         transform: translateY(0);
     }
 }
@@ -46,12 +46,14 @@ body::before {
     background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente */
     border: 3px solid #4682B4; /* Borde azul oscuro */
     border-radius: 10px;
-    padding: 20px;
-    max-width: 600px;
+    padding: 15px;
+    width: 100%;
+    max-width: 600px; /* Máximo ancho para pantallas grandes */
     margin: 0 auto;
     text-align: center;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Sombra más suave */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     display: none;
+    box-sizing: border-box;
 }
 
 #register {
@@ -74,79 +76,80 @@ body::before {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
+    flex-wrap: wrap; /* Permitir que los elementos se ajusten en pantallas pequeñas */
 }
 
 #search-bar {
     flex-grow: 1;
-    margin: 0 10px;
+    margin: 5px 10px;
     width: auto;
 }
 
 .close-btn {
     background-color: transparent;
     border: none;
-    color: #FF4500; /* Naranja para el botón de cerrar */
-    font-size: 24px;
+    color: #FF4500;
+    font-size: 20px;
     cursor: pointer;
     padding: 5px 10px;
     transition: color 0.3s;
 }
 
 .close-btn:hover {
-    color: #FF6347; /* Naranja más claro al pasar el mouse */
+    color: #FF6347;
 }
 
 input, button, select {
     font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 16px;
+    font-size: 14px;
     margin: 5px 0;
-    padding: 10px;
+    padding: 8px;
     width: 100%;
-    border: 2px solid #4682B4; /* Borde azul oscuro */
-    background-color: #F5F5F5; /* Fondo gris claro */
-    color: #333333; /* Texto oscuro */
+    border: 2px solid #4682B4;
+    background-color: #F5F5F5;
+    color: #333333;
     border-radius: 5px;
     cursor: pointer;
     box-sizing: border-box;
 }
 
 button {
-    background-color: #4682B4; /* Azul oscuro para botones */
+    background-color: #4682B4;
     transition: background-color 0.3s;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 button:hover {
-    background-color: #FF4500; /* Naranja al pasar el mouse */
+    background-color: #FF4500;
     color: #FFFFFF;
 }
 
 #talk {
-    background-color: #FF4500; /* Naranja para el botón de hablar */
+    background-color: #FF4500;
 }
 
 #mute {
-    background-color: #32CD32; /* Verde lima para el botón de mute */
+    background-color: #32CD32;
 }
 
 #users {
     margin-top: 10px;
-    font-size: 14px;
-    color: #FF4500; /* Naranja para los usuarios conectados */
+    font-size: 12px;
+    color: #FF4500;
     text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
 }
 
 #messages, #history-screen {
-    margin-top: 20px;
+    margin-top: 15px;
 }
 
 #message-list, #history-list {
-    max-height: 200px;
+    max-height: 150px;
     overflow-y: auto;
     text-align: left;
-    padding: 10px;
-    background-color: #F5F5F5; /* Fondo gris claro */
-    border: 2px solid #4682B4; /* Borde azul oscuro */
+    padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
     border-radius: 5px;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
@@ -154,90 +157,90 @@ button:hover {
 #message-list div, #history-list div {
     margin: 5px 0;
     cursor: pointer;
-    color: #333333; /* Texto oscuro */
+    color: #333333;
 }
 
 #chat-list {
-    max-height: 200px;
+    max-height: 150px;
     overflow-y: auto;
     text-align: left;
-    padding: 10px;
-    background-color: #F5F5F5; /* Fondo gris claro */
-    border: 2px solid #4682B4; /* Borde azul oscuro */
+    padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
     border-radius: 5px;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 .chat-message {
-    border: 1px solid #4682B4; /* Borde azul oscuro */
+    border: 1px solid #4682B4;
     padding: 5px;
     margin: 5px 0;
-    background-color: #FFFFFF; /* Fondo blanco */
+    background-color: #FFFFFF;
     border-radius: 5px;
     cursor: pointer;
-    color: #333333; /* Texto oscuro */
-    text-shadow: none; /* Sin sombra de texto */
+    color: #333333;
+    text-shadow: none;
 }
 
 .flight-message {
-    border: 1px solid #4682B4; /* Borde azul oscuro */
+    border: 1px solid #4682B4;
     padding: 5px;
     margin: 5px 0;
-    background-color: #FFFFFF; /* Fondo blanco */
+    background-color: #FFFFFF;
     border-radius: 5px;
-    color: #333333; /* Texto oscuro */
+    color: #333333;
     text-shadow: none;
 }
 
 .flight-en-zona {
-    background-color: #FF6347; /* Rojo para "en zona" */
+    background-color: #FF6347;
     color: #FFFFFF !important;
     text-shadow: none;
 }
 
 .flight-en-vuelo {
-    background-color: #32CD32; /* Verde para "en vuelo" */
+    background-color: #32CD32;
     color: #FFFFFF !important;
     text-shadow: none;
 }
 
 .flight-despegando {
-    background-color: #FFD700; /* Amarillo para "despegando" */
+    background-color: #FFD700;
     color: #333333 !important;
     text-shadow: none;
 }
 
 .play-icon {
     margin-right: 5px;
-    font-size: 12px;
-    color: #FF4500; /* Naranja para el ícono de reproducción */
+    font-size: 10px;
+    color: #FF4500;
 }
 
 h2 {
-    font-size: 18px;
-    margin: 10px 0;
-    color: #4682B4; /* Azul oscuro para los títulos */
+    font-size: 16px;
+    margin: 8px 0;
+    color: #4682B4;
     text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 h3 {
-    font-size: 16px;
-    margin: 10px 0;
-    color: #4682B4; /* Azul oscuro para los subtítulos */
+    font-size: 14px;
+    margin: 8px 0;
+    color: #4682B4;
     text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #map {
     height: calc(100% - 60px);
-    border: 2px solid #4682B4; /* Borde azul oscuro */
+    border: 2px solid #4682B4;
     border-radius: 5px;
-    background-color: #87CEEB; /* Fondo azul claro para el mapa */
+    background-color: #87CEEB;
 }
 
 .logo {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto 10px;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 8px;
     display: block;
 }
 
@@ -246,10 +249,151 @@ select {
     -moz-appearance: none;
     appearance: none;
     background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
-    padding-right: 30px; /* Espacio para la flecha */
+    padding-right: 30px;
 }
 
 select:hover {
-    background-color: #FF4500; /* Naranja al pasar el mouse */
+    background-color: #FF4500;
     color: #FFFFFF;
 }
+
+/* Media query para pantallas pequeñas (celulares, max-width: 768px) */
+@media (max-width: 768px) {
+    body {
+        padding: 5px;
+    }
+
+    #register, #main, #radar-screen, #history-screen {
+        padding: 10px;
+        max-width: 100%; /* Ocupar todo el ancho disponible */
+        margin: 0;
+    }
+
+    #main {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #flights-window, #chat-window {
+        width: 100%;
+    }
+
+    #message-list, #chat-list, #history-list {
+        max-height: 120px; /* Reducir altura en pantallas pequeñas */
+    }
+
+    input, button, select {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    h2 {
+        font-size: 14px;
+    }
+
+    h3 {
+        font-size: 12px;
+    }
+
+    .logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    #users {
+        font-size: 10px;
+    }
+
+    #radar-screen {
+        padding: 5px;
+    }
+
+    #map {
+        height: calc(100% - 50px); /* Ajustar altura del mapa */
+    }
+
+    body::before {
+        width: 40px; /* Avión más pequeño en celulares */
+        height: 20px;
+        top: 2%;
+        left: -40px;
+    }
+
+    @keyframes fly {
+        0% {
+            left: -40px;
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(20px);
+        }
+        100% {
+            left: 100%;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Media query para pantallas grandes (computadoras, min-width: 769px) */
+@media (min-width: 769px) {
+    body {
+        padding: 20px;
+    }
+
+    #register, #main, #radar-screen, #history-screen {
+        padding: 20px;
+        max-width: 600px;
+    }
+
+    #main {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    #flights-window, #chat-window {
+        width: 100%;
+    }
+
+    #message-list, #chat-list, #history-list {
+        max-height: 200px;
+    }
+
+    input, button, select {
+        font-size: 16px;
+        padding: 10px;
+        width: auto; /* Permitir que los botones e inputs tengan su tamaño natural */
+        max-width: 100%;
+    }
+
+    button {
+        width: 200px; /* Botones más pequeños en pantallas grandes */
+        margin: 5px auto;
+    }
+
+    h2 {
+        font-size: 18px;
+    }
+
+    h3 {
+        font-size: 16px;
+    }
+
+    .logo {
+        width: 64px;
+        height: 64px;
+    }
+
+    #users {
+        font-size: 14px;
+    }
+
+    #radar-screen {
+        padding: 10px;
+    }
+
+    #map {
+        height: calc(100% - 60px);
+    }
+        }
