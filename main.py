@@ -38,10 +38,11 @@ from webpush import generate_vapid_keys
 
 # Generar claves VAPID al iniciar
 keys = generate_vapid_keys()
-VAPID_PUBLIC_KEY = keys["public_key"]
-VAPID_PRIVATE_KEY = keys["private_key"]
+# Configurar claves VAPID para notificaciones push
+VAPID_PUBLIC_KEY = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"
+VAPID_PRIVATE_KEY = "hcRHiegtjnRTht4MEjqHs0j6u8Pnsti82u7hDXB85y4"
 VAPID_CLAIMS = {
-    "sub": "rod.arena7@gmail.com"  # Reemplazar con tu correo
+    "sub": "mailto:rod.arena7@gmail.com"  # Reemplazar con tu correo
 }
 
 # Mostrar las claves en los logs
