@@ -19,6 +19,55 @@ const AIRLINE_MAPPING = {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+// Registrar el Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/templates/sw.js')
+            .then(registration => {
+                console.log('Service Worker registrado con éxito:', registration);
+                // Suscribirse a notificaciones push
+                subscribeToPush(registration);
+            })
+            .catch(err => {
+                console.error('Error al registrar el Service Worker:', err);
+            });
+    });
+}
+
+// Función para suscribirse a notificaciones push
+async function subscribeToPush(registration) {
+    try {
+        const vapidPublicKey = "YOUR_VAPID_PUBLIC_KEY"; // Reemplazar con tu clave pública VAPID
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        });
+        console.log('Suscripción a notificaciones push:', subscription);
+
+        // Enviar la suscripción al servidor
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "subscribe",
+                subscription: subscription.toJSON()
+            }));
+        }
+    } catch (err) {
+        console.error('Error al suscribirse a notificaciones push:', err);
+    }
+}
+
+// Convertir la clave pública VAPID a Uint8Array
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
 // Inicializar SpeechRecognition y verificar soporte
 if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -31,6 +80,20 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     console.error("SpeechRecognition no soportado en este navegador. Navegador:", navigator.userAgent);
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
+
+// Función para desbloquear el audio
+function unlockAudio() {
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+            console.log("Contexto de audio desbloqueado");
+        }).catch(err => {
+            console.error("Error al desbloquear el contexto de audio:", err);
+        });
+    }
+}
+
+// Agregar un evento para desbloquear el audio al interactuar con la página
+document.addEventListener('click', unlockAudio, { once: true });
 
 async function requestMicPermission() {
     try {
@@ -129,6 +192,12 @@ function connectWebSocket(sessionToken) {
             } else if (message.type === "users") {
                 // Mostrar lista directamente como viene del backend (Nombre (Legajo))
                 document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+            } else if (message.type === "reconnect-websocket") {
+                // Intentar reconectar el WebSocket
+                const sessionToken = localStorage.getItem("sessionToken");
+                if (sessionToken) {
+                    connectWebSocket(sessionToken);
+                }
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
@@ -140,13 +209,14 @@ function connectWebSocket(sessionToken) {
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
-        alert("No se pudo conectar al servidor. Revisá la consola para más detalles.");
+        // No mostramos alerta para no interrumpir al usuario
     };
 
     ws.onclose = function() {
         console.log("WebSocket cerrado");
         const sessionToken = localStorage.getItem("sessionToken");
         if (sessionToken) {
+            // Intentar reconectarse cada 5 segundos
             setTimeout(() => connectWebSocket(sessionToken), 5000);
         }
     };
@@ -160,6 +230,29 @@ window.onload = function() {
         connectWebSocket(sessionToken);
     }
 };
+
+// Manejo de doble toque en el botón de volumen (+)
+let lastVolumeUpTime = 0;
+let volumeUpCount = 0;
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'VolumeUp') {
+        event.preventDefault(); // Evitar el comportamiento predeterminado
+        const currentTime = Date.now();
+        const timeDiff = currentTime - lastVolumeUpTime;
+
+        if (timeDiff < 500) { // 500ms para considerar un doble toque
+            volumeUpCount++;
+            if (volumeUpCount === 2) {
+                toggleTalk(); // Activar el botón "Hablar"
+                volumeUpCount = 0; // Reiniciar el contador
+            }
+        } else {
+            volumeUpCount = 1; // Reiniciar el contador si el tiempo entre toques es mayor
+        }
+        lastVolumeUpTime = currentTime;
+    }
+});
 
 function playAudio(blob) {
     const audio = new Audio(URL.createObjectURL(blob));
@@ -371,6 +464,7 @@ async function toggleTalk() {
                     console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript, timestamp, sender, function: userFunction });
                 }
 
+                // Agregar el mensaje al chat-list, pero no reproducirlo para el emisor
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
                     const msgDiv = document.createElement("div");
@@ -505,7 +599,6 @@ function playNextAudio() {
         playNextAudio();
     }).catch(err => {
         console.error("Error reproduciendo audio:", err);
-        // No mostramos la alerta, solo registramos el error en la consola
         isPlaying = false;
         playNextAudio();
     });
@@ -521,4 +614,4 @@ function simulateMessage() {
         text: "Mensaje de prueba"
     };
     ws.onmessage({ data: JSON.stringify(simulatedMessage) });
-}
+                                                      }
