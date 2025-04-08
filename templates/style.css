@@ -275,7 +275,7 @@ select:hover {
     }
 
     #register {
-        background-image: url('/templates/register-bg.jpg');
+        background-image: url('/templates/borde.png');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -283,7 +283,7 @@ select:hover {
     }
 
     #main {
-        display: flex;
+        display: none; /* Ocultar por defecto */
         flex-direction: column;
         gap: 10px;
     }
