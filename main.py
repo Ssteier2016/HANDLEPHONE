@@ -63,40 +63,31 @@ CACHE_DURATION = 15  # 15 segundos para evitar saturación
 # Función para transcribir audio usando speech_recognition
 async def transcribe_audio(audio_data):
     try:
-        # Decodificar el audio base64
         audio_bytes = base64.b64decode(audio_data)
         audio_file = io.BytesIO(audio_bytes)
-
-        # Convertir el audio WebM a WAV usando pydub
         audio_segment = AudioSegment.from_file(audio_file, format="webm")
-        audio_segment = audio_segment.set_channels(1)  # Convertir a mono
-        audio_segment = audio_segment.set_frame_rate(16000)  # Ajustar la tasa de muestreo
+        audio_segment = audio_segment.set_channels(1)
+        audio_segment = audio_segment.set_frame_rate(16000)
         wav_io = io.BytesIO()
         audio_segment.export(wav_io, format="wav")
         wav_io.seek(0)
-
-        # Leer el archivo WAV con soundfile
         data, samplerate = sf.read(wav_io)
-
-        # Usar SpeechRecognition para transcribir
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
-            try:
-                text = recognizer.recognize_google(audio_data, language="es-ES")
-                logger.info("Audio transcrito exitosamente en el servidor")
-                return text
-            except sr.UnknownValueError:
-                logger.warning("No se pudo transcribir el audio en el servidor")
-                return "No se pudo transcribir"
-            except sr.RequestError as e:
-                logger.error(f"Error en la transcripción en el servidor: {e}")
-                return f"Error en la transcripción: {e}"
+            text = recognizer.recognize_google(audio_data, language="es-ES")
+            logger.info("Audio transcrito exitosamente en el servidor")
+            return text
+    except sr.UnknownValueError:
+        logger.warning("No se pudo transcribir el audio en el servidor")
+        return "No se pudo transcribir"
+    except sr.RequestError as e:
+        logger.error(f"Error en la transcripción en el servidor: {e}")
+        return f"Error en la transcripción: {e}"
     except Exception as e:
         logger.error(f"Error al procesar el audio en el servidor: {e}")
         return f"Error al procesar el audio: {e}"
     finally:
-        # Limpiar recursos
         audio_file.close()
         wav_io.close()
 
@@ -108,12 +99,12 @@ async def get_airplanes_live_data():
         logger.info("Devolviendo datos en caché")
         return cached_data
     try:
-        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
+        url = "https://api.airplanes Facultad.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    cached_data = data.get("ac", [])  # Lista de aviones
+                    cached_data = data.get("ac", [])
                     last_request_time = current_time
                     logger.info("Datos de Airplanes.Live obtenidos correctamente")
                     return cached_data
@@ -124,9 +115,9 @@ async def get_airplanes_live_data():
         logger.error(f"Error al obtener datos de Airplanes.Live: {str(e)}")
         return {"error": str(e)}
 
-# Función para hacer web scraping de TAMS
-def scrape_tams_data():
-    url = "http://www.tams.com.ar/organismos/vuelos.aspx"
+# Función para hacer web scraping de TAMS (actualizada para vuelos AR)
+def scrape_tams():
+    url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
@@ -134,12 +125,13 @@ def scrape_tams_data():
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
+        flights = []
 
+        # Buscar spans y extraer datos (ajustado según tu ejemplo anterior)
         spans = soup.find_all('span')
         flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
 
-        flights = []
-        for i in range(0, len(flight_data), 17):
+        for i in range(0, len(flight_data), 17):  # Ajustado según estructura observada
             row = flight_data[i:i+17]
             if len(row) < 17:
                 continue
@@ -148,32 +140,60 @@ def scrape_tams_data():
             flight_number = row[2]
             scheduled_time = row[3]
             registration = row[4]
-            estimated_time = row[6]
-            operation_type = row[8]
-            origin_dest = row[11]
-            status = row[13]
+            position = row[5] if len(row) > 5 else ""
+            destination = row[11] if len(row) > 11 else ""
 
-            if airline == "AR" and "AEP" in origin_dest:
+            if airline == "AR":  # Solo vuelos de Aerolíneas Argentinas
                 flights.append({
-                    "flight": f"AR{flight_number}",
-                    "registration": registration,
-                    "scheduled": scheduled_time,
-                    "estimated": estimated_time if estimated_time != " " else None,
-                    "status": status,
-                    "type": "Arrival" if operation_type == "A" else "Departure",
-                    "origin_dest": origin_dest
+                    "Vuelo": f"AR{flight_number}",
+                    "STD": scheduled_time,
+                    "Posicion": position,
+                    "Destino": destination,
+                    "Matricula": registration if registration != " " else "N/A"
                 })
 
-        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas con AEP encontrados")
+        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas encontrados")
         return flights
     except Exception as e:
         logger.error(f"Error al scrapear TAMS: {e}")
-        return {"error": str(e)}
+        return []
+
+# Función para eliminar duplicados
+def remove_duplicates(flights):
+    seen = set()
+    unique_flights = []
+    for flight in flights:
+        flight_key = (flight["Vuelo"], flight["STD"])
+        if flight_key not in seen:
+            seen.add(flight_key)
+            unique_flights.append(flight)
+    return unique_flights
+
+# Función para actualizar vuelos de TAMS cada 5 minutos y emitir a clientes
+async def update_tams_flights():
+    while True:
+        flights = scrape_tams()
+        unique_flights = remove_duplicates(flights)
+        if unique_flights:
+            # Emitir a todos los clientes conectados
+            for user in users.values():
+                if user["logged_in"] and user["websocket"] is not None:
+                    try:
+                        await user["websocket"].send_text(json.dumps({
+                            "type": "flight_update",
+                            "flights": unique_flights
+                        }))
+                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                    except Exception as e:
+                        logger.error(f"Error al enviar actualización de vuelos: {e}")
+                        user["websocket"] = None
+            logger.info(f"Enviados {len(unique_flights)} vuelos únicos")
+        await asyncio.sleep(300)  # 5 minutos
 
 @app.get("/opensky")
 async def get_opensky_data():
     airplanes_data = await get_airplanes_live_data()
-    tams_data = scrape_tams_data()
+    tams_data = scrape_tams()
     
     if isinstance(airplanes_data, dict) and "error" in airplanes_data:
         return airplanes_data
@@ -195,27 +215,23 @@ async def get_opensky_data():
                 "vert_rate": plane.get("vert_rate")
             }
             for tams_flight in tams_data:
-                if tams_flight["registration"] == registration:
+                if tams_flight["Matricula"] == registration:
                     plane_info.update({
-                        "scheduled": tams_flight["scheduled"],
-                        "estimated": tams_flight["estimated"],
-                        "status": tams_flight["status"],
-                        "type": tams_flight["type"],
-                        "origin_dest": tams_flight["origin_dest"]
+                        "scheduled": tams_flight["STD"],
+                        "position": tams_flight["Posicion"],
+                        "destination": tams_flight["Destino"],
                     })
                     break
             combined_data.append(plane_info)
     
     for tams_flight in tams_data:
-        if not any(plane["registration"] == tams_flight["registration"] for plane in combined_data):
+        if not any(plane["registration"] == tams_flight["Matricula"] for plane in combined_data):
             combined_data.append({
-                "flight": tams_flight["flight"],
-                "registration": tams_flight["registration"],
-                "scheduled": tams_flight["scheduled"],
-                "estimated": tams_flight["estimated"],
-                "status": tams_flight["status"],
-                "type": tams_flight["type"],
-                "origin_dest": tams_flight["origin_dest"],
+                "flight": tams_flight["Vuelo"],
+                "registration": tams_flight["Matricula"],
+                "scheduled": tams_flight["STD"],
+                "position": tams_flight["Posicion"],
+                "destination": tams_flight["Destino"],
                 "lat": None, "lon": None, "alt_geom": None, "gs": None, "vert_rate": None
             })
 
@@ -254,14 +270,11 @@ async def process_audio_queue():
         text = message.get("text", "Sin transcripción")
         user_id = users.get(token, {}).get("name", "Anónimo")
 
-        # Si el texto es "Pendiente de transcripción", transcribir en el servidor
         if text == "Pendiente de transcripción":
             text = await transcribe_audio(message["data"])
 
-        # Guardar el mensaje en la base de datos
         save_message(user_id, audio_data, text, timestamp)
 
-        # Preparar el mensaje para retransmitir
         broadcast_message = {
             "type": "audio",
             "data": message["data"],
@@ -271,7 +284,6 @@ async def process_audio_queue():
             "function": users[token]["function"]
         }
 
-        # Enviar notificación push a los usuarios suscritos (excepto al emisor)
         for user_token, user in list(users.items()):
             if user_token != token and user["logged_in"] and user.get("subscription"):
                 try:
@@ -291,7 +303,6 @@ async def process_audio_queue():
                 except Exception as e:
                     logger.error(f"Error al enviar notificación push a {user_token}: {e}")
 
-        # Retransmitir el mensaje a todos los clientes conectados, excepto al emisor
         for user_token, user in list(users.items()):
             if user_token != token and user["logged_in"] and user["websocket"] is not None and not user.get("muted", False):
                 try:
@@ -299,7 +310,7 @@ async def process_audio_queue():
                     logger.info(f"Audio retransmitido a {user_token}")
                 except Exception as e:
                     logger.error(f"Error al retransmitir audio a {user_token}: {e}")
-                    user["websocket"] = None  # Marcar como desconectado si falla
+                    user["websocket"] = None
         audio_queue.task_done()
 
 @app.websocket("/ws/{token}")
@@ -308,25 +319,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     logger.info(f"Cliente conectado con token: {token}")
 
     try:
-        # Decodificar el token para obtener user_id
         user_id = base64.b64decode(token).decode('utf-8')
-
-        # Si el usuario ya existe en users, actualizamos su WebSocket
         if token in users:
             users[token]["websocket"] = websocket
             users[token]["logged_in"] = True
         else:
-            # Si es un usuario nuevo, lo agregamos
             users[token] = {
                 "name": "Anónimo",
                 "function": "Desconocida",
                 "logged_in": True,
                 "websocket": websocket,
                 "muted": False,
-                "subscription": None  # Para notificaciones push
+                "subscription": None
             }
 
-        # Enviar lista inicial de usuarios conectados
         await broadcast_users()
 
         while True:
@@ -343,7 +349,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await broadcast_users()
 
             elif message["type"] == "subscribe":
-                # Guardar la suscripción para notificaciones push
                 users[token]["subscription"] = message["subscription"]
                 logger.info(f"Suscripción push recibida para {token}")
 
@@ -352,7 +357,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await audio_queue.put((token, audio_data, message))
 
             elif message["type"] == "logout":
-                # Manejar el logout manualmente
                 if token in users:
                     users[token]["logged_in"] = False
                     del users[token]
@@ -368,24 +372,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
-        # No eliminamos al usuario de users, solo marcamos su WebSocket como None
         if token in users:
             users[token]["websocket"] = None
-        # No actualizamos la lista de usuarios conectados porque el usuario sigue "activo"
-
     except Exception as e:
         logger.error(f"Error en WebSocket para el cliente {token}: {str(e)}", exc_info=True)
         if token in users:
             users[token]["websocket"] = None
-        # No actualizamos la lista de usuarios conectados porque el usuario sigue "activo"
         await websocket.close()
 
 async def broadcast_users():
     user_list = []
     for token in users:
         if users[token]["logged_in"]:
-            decoded_token = base64.b64decode(token).decode('utf-8')  # Decodificar el token
-            legajo, name, _ = decoded_token.split('_', 2)  # Extraer legajo y nombre
+            decoded_token = base64.b64decode(token).decode('utf-8')
+            legajo, name, _ = decoded_token.split('_', 2)
             user_list.append(f"{users[token]['name']} ({legajo})")
     for user in users.values():
         if user["logged_in"] and user["websocket"] is not None:
@@ -416,6 +416,7 @@ async def startup_event():
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
+    asyncio.create_task(update_tams_flights())  # Iniciar actualización de vuelos de TAMS
 
 if __name__ == "__main__":
     import uvicorn
