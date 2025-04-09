@@ -1,5 +1,5 @@
-# Usar una imagen base de Python 3.11 (versión completa, no slim)
-FROM python:3.11
+# Usar una imagen base de Python 3.9 (más compatible con http-ece)
+FROM python:3.9
 
 # Instalar dependencias del sistema necesarias para PyAudio, Vosk, http-ece y herramientas adicionales
 RUN apt-get update && apt-get install -y \
