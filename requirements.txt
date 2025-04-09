@@ -7,4 +7,4 @@ aiohttp==3.10.5
 beautifulsoup4
 speechrecognition==3.10.0
 soundfile==0.12.1
-pywebpush==1.9.4
+pywebpush==1.9.3
