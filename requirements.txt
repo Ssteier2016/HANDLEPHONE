@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-websockets
 pydub==0.25.1
 requests==2.31.0
 aiohttp==3.10.5
