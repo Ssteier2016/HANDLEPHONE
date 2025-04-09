@@ -1,5 +1,5 @@
-# Usar una imagen base de Python 3.11
-FROM python:3.11-slim
+# Usar una imagen base de Python 3.11 (versión completa, no slim)
+FROM python:3.11
 
 # Instalar dependencias del sistema necesarias para PyAudio, Vosk, http-ece y herramientas adicionales
 RUN apt-get update && apt-get install -y \
@@ -17,11 +17,8 @@ WORKDIR /app
 # Copiar requirements.txt primero para aprovechar el cache de Docker
 COPY requirements.txt .
 
-# Actualizar pip e instalar wheel
-RUN pip install --upgrade pip && pip install wheel
-
-# Instalar las dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Actualizar pip, instalar wheel e instalar las dependencias en una sola línea
+RUN pip install --upgrade pip wheel && pip install --no-cache-dir -r requirements.txt
 
 # Copiar el resto de los archivos del proyecto
 COPY . .
