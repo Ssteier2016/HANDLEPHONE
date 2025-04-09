@@ -19,55 +19,6 @@ const AIRLINE_MAPPING = {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-// Registrar el Service Worker
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/templates/sw.js')
-            .then(registration => {
-                console.log('Service Worker registrado con éxito:', registration);
-                // Suscribirse a notificaciones push
-                subscribeToPush(registration);
-            })
-            .catch(err => {
-                console.error('Error al registrar el Service Worker:', err);
-            });
-    });
-}
-
-// Función para suscribirse a notificaciones push
-async function subscribeToPush(registration) {
-    try {
-        const vapidPublicKey = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"; // Reemplazar con tu clave pública VAPID
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-        });
-        console.log('Suscripción a notificaciones push:', subscription);
-
-        // Enviar la suscripción al servidor
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                type: "subscribe",
-                subscription: subscription.toJSON()
-            }));
-        }
-    } catch (err) {
-        console.error('Error al suscribirse a notificaciones push:', err);
-    }
-}
-
-// Convertir la clave pública VAPID a Uint8Array
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-}
-
 // Inicializar SpeechRecognition y verificar soporte
 if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -128,9 +79,9 @@ function register() {
     connectWebSocket(sessionToken);
 }
 
-function connectWebSocket(sessionToken) {
+function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
-    console.log(`Intentando conectar WebSocket a: ${wsUrl}`);
+    console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1}/${maxRetries})`);
     try {
         ws = new WebSocket(wsUrl);
     } catch (err) {
@@ -155,14 +106,13 @@ function connectWebSocket(sessionToken) {
             console.error("Elemento #main no encontrado en el DOM");
         }
         updateOpenSkyData();
-        // Simular un mensaje después de 2 segundos (para pruebas)
-        setTimeout(simulateMessage, 2000);
     };
 
     ws.onmessage = function(event) {
+        console.log("Datos recibidos del servidor:", event.data);
         try {
             const message = JSON.parse(event.data);
-            console.log("Mensaje recibido:", message);
+            console.log("Mensaje parseado:", message);
 
             if (!message.type) {
                 console.error("Mensaje sin tipo:", message);
@@ -170,8 +120,12 @@ function connectWebSocket(sessionToken) {
             }
 
             if (message.type === "audio") {
-                // Relajar validaciones y usar valores por defecto si faltan
-                const audioBlob = base64ToBlob(message.data || "", 'audio/webm');
+                if (!message.data) {
+                    console.error("Mensaje de audio sin datos de audio:", message);
+                    return;
+                }
+                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
                 playAudio(audioBlob);
                 const chatList = document.getElementById("chat-list");
                 if (!chatList) {
@@ -189,45 +143,72 @@ function connectWebSocket(sessionToken) {
                 msgDiv.onclick = () => playAudio(audioBlob);
                 chatList.appendChild(msgDiv);
                 chatList.scrollTop = chatList.scrollHeight;
+                console.log("Mensaje de audio agregado al chat-list");
             } else if (message.type === "users") {
-                // Mostrar lista directamente como viene del backend (Nombre (Legajo))
                 document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+                console.log("Lista de usuarios actualizada:", message.list);
             } else if (message.type === "reconnect-websocket") {
-                // Intentar reconectar el WebSocket
                 const sessionToken = localStorage.getItem("sessionToken");
                 if (sessionToken) {
                     connectWebSocket(sessionToken);
                 }
+                console.log("Intentando reconectar WebSocket...");
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
         } catch (err) {
             console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
-            // No mostrar alerta para no interrumpir, solo loguear
         }
     };
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
-        // No mostramos alerta para no interrumpir al usuario
     };
 
     ws.onclose = function() {
         console.log("WebSocket cerrado");
         const sessionToken = localStorage.getItem("sessionToken");
-        if (sessionToken) {
-            // Intentar reconectarse cada 5 segundos
-            setTimeout(() => connectWebSocket(sessionToken), 5000);
+        if (sessionToken && retryCount < maxRetries) {
+            setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
+        } else if (retryCount >= maxRetries) {
+            console.error("Máximo número de intentos de reconexión alcanzado. Por favor, recarga la página.");
+            alert("No se pudo reconectar al servidor después de varios intentos. Por favor, recarga la página.");
         }
     };
 }
 
 window.onload = function() {
+    console.log("window.onload ejecutado");
     const sessionToken = localStorage.getItem("sessionToken");
+    console.log("sessionToken:", sessionToken);
+    const registerDiv = document.getElementById("register");
+    const mainDiv = document.getElementById("main");
+    const radarDiv = document.getElementById("radar-screen");
+    const historyDiv = document.getElementById("history-screen");
+
+    if (!registerDiv || !mainDiv || !radarDiv || !historyDiv) {
+        console.error("Uno o más elementos no se encontraron en el DOM:", {
+            registerDiv: !!registerDiv,
+            mainDiv: !!mainDiv,
+            radarDiv: !!radarDiv,
+            historyDiv: !!historyDiv
+        });
+        return;
+    }
+
     if (sessionToken) {
-        document.getElementById("register").style.display = "none";
-        document.getElementById("main").style.display = "block";
+        console.log("Usuario autenticado, mostrando pantalla principal");
+        registerDiv.style.display = "none";
+        mainDiv.style.display = "block";
+        radarDiv.style.display = "none";
+        historyDiv.style.display = "none";
         connectWebSocket(sessionToken);
+    } else {
+        console.log("Usuario no autenticado, mostrando pantalla de registro");
+        registerDiv.style.display = "block";
+        mainDiv.style.display = "none";
+        radarDiv.style.display = "none";
+        historyDiv.style.display = "none";
     }
 };
 
@@ -413,10 +394,22 @@ function updateOpenSkyData() {
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        console.log("Iniciando grabación...");
         stream = await requestMicPermission();
-        if (!stream) return;
+        if (!stream) {
+            console.error("No se pudo obtener el stream del micrófono");
+            return;
+        }
 
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        try {
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            console.log("MediaRecorder creado con mimeType: audio/webm");
+        } catch (err) {
+            console.error("Error al crear MediaRecorder:", err);
+            alert("Error al iniciar la grabación: " + err.message);
+            return;
+        }
+
         audioChunks = [];
         let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
 
@@ -437,18 +430,28 @@ async function toggleTalk() {
                 transcript = "Error en transcripción: " + event.error;
                 alert("Error en speech-to-text: " + event.error);
             };
-            recognition.start();
+            try {
+                recognition.start();
+                console.log("SpeechRecognition iniciado");
+            } catch (err) {
+                console.error("Error al iniciar SpeechRecognition:", err);
+            }
         }
 
         mediaRecorder.ondataavailable = function(event) {
+            console.log("Datos de audio disponibles:", event.data.size, "bytes");
             audioChunks.push(event.data);
         };
         mediaRecorder.onstop = function() {
+            console.log("Grabación detenida");
+            console.log("Tamaño de audioChunks:", audioChunks.length);
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            console.log("Audio Blob creado, tamaño:", audioBlob.size, "bytes");
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
                 const base64data = reader.result.split(',')[1];
+                console.log("Audio convertido a Base64, longitud:", base64data.length);
                 const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 const sender = localStorage.getItem("userName") || "Anónimo";
                 const userFunction = localStorage.getItem("userFunction") || "Desconocida";
@@ -462,20 +465,26 @@ async function toggleTalk() {
                         function: userFunction
                     }));
                     console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript, timestamp, sender, function: userFunction });
+                } else {
+                    console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+                    alert("No se pudo enviar el mensaje: WebSocket no está conectado.");
                 }
 
-                // Agregar el mensaje al chat-list, pero no reproducirlo para el emisor
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
                     const msgDiv = document.createElement("div");
                     msgDiv.className = "chat-message";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span>
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
+                } else {
+                    console.error("Elemento #chat-list no encontrado en el DOM");
                 }
             };
-            console.log("Grabación detenida");
+            reader.onerror = function(err) {
+                console.error("Error al leer el audio como Base64:", err);
+            };
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
@@ -484,9 +493,19 @@ async function toggleTalk() {
             mediaRecorder = null;
             if (supportsSpeechRecognition && recognition) recognition.stop();
         };
-        mediaRecorder.start(100);
-        talkButton.textContent = "Grabando...";
-        talkButton.style.backgroundColor = "green";
+        mediaRecorder.onerror = function(err) {
+            console.error("Error en MediaRecorder:", err);
+            alert("Error durante la grabación: " + err);
+        };
+        try {
+            mediaRecorder.start(100);
+            console.log("Grabación iniciada");
+            talkButton.textContent = "Grabando...";
+            talkButton.style.backgroundColor = "green";
+        } catch (err) {
+            console.error("Error al iniciar la grabación:", err);
+            alert("Error al iniciar la grabación: " + err.message);
+        }
     } else if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
         talkButton.textContent = "Hablar";
@@ -580,13 +599,18 @@ function backToMain() {
 }
 
 function base64ToBlob(base64, mime) {
-    const byteString = atob(base64);
-    const arrayBuffer = new ArrayBuffer(byteString.length);
-    const uint8Array = new Uint8Array(arrayBuffer);
-    for (let i = 0; i < byteString.length; i++) {
-        uint8Array[i] = byteString.charCodeAt(i);
+    try {
+        const byteString = atob(base64);
+        const arrayBuffer = new ArrayBuffer(byteString.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < byteString.length; i++) {
+            uint8Array[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([uint8Array], { type: mime });
+    } catch (err) {
+        console.error("Error al convertir Base64 a Blob:", err);
+        return null;
     }
-    return new Blob([uint8Array], { type: mime });
 }
 
 function playNextAudio() {
@@ -602,16 +626,4 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-}
-
-function simulateMessage() {
-    const simulatedMessage = {
-        type: "audio",
-        data: "",
-        timestamp: "12:34",
-        sender: "UsuarioPrueba",
-        function: "Piloto",
-        text: "Mensaje de prueba"
-    };
-    ws.onmessage({ data: JSON.stringify(simulatedMessage) });
-                                                      }
+                      }
