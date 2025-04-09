@@ -16,7 +16,6 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
-from pywebpush import WebPush
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -34,11 +33,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configurar claves VAPID para notificaciones push
-VAPID_PUBLIC_KEY = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"
-VAPID_PRIVATE_KEY = "hcRHiegtjnRTht4MEjqHs0j6u8Pnsti82u7hDXB85y4"
-VAPID_CLAIMS = {
-    "sub": "mailto:rod.arena7@gmail.com"
-}
+#VAPID_PUBLIC_KEY = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"
+#VAPID_PRIVATE_KEY = "hcRHiegtjnRTht4MEjqHs0j6u8Pnsti82u7hDXB85y4"
+#VAPID_CLAIMS = {"sub": "mailto:rod.arena7@gmail.com"}
 
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
