@@ -2,10 +2,8 @@ websockets
 pydub==0.25.1
 webpush
 requests==2.31.0
-beautifulsoup4==4.12.3
-fastapi==0.115.0
-uvicorn==0.30.6
 aiohttp==3.10.5
-soundfile==0.12.1
+beautifulsoup4
 speechrecognition==3.10.0
-pywebpush==1.9.4
+soundfile==0.12.1
+pywebpush==2.0.0
