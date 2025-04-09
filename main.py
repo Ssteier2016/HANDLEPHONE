@@ -263,53 +263,57 @@ def get_history():
 
 async def process_audio_queue():
     while True:
-        token, audio_data, message = await audio_queue.get()
-        timestamp = datetime.utcnow().strftime("%H:%M")
-        text = message.get("text", "Sin transcripción")
-        user_id = users.get(token, {}).get("name", "Anónimo")
+        try:
+            message = await audio_queue.get()
+            sender = message.get("sender", "Unknown")
+            function = message.get("function", "Unknown")
+            text = message.get("text", "Audio message")
+            token = message.get("token")
 
-        if text == "Pendiente de transcripción":
-            text = await transcribe_audio(message["data"])
+            # Guardar el mensaje en la base de datos
+            save_message(sender, function, text, token)
 
-        save_message(user_id, audio_data, text, timestamp)
+            # Enviar notificación push a los usuarios suscritos
+            # for user_token, user in users.items():
+            #     if user_token == token:
+            #         continue
+            #     subscription = user.get("subscription")
+            #     if subscription:
+            #         try:
+            #             WebPush(
+            #                 subscription,
+            #                 data=json.dumps({
+            #                     "type": "audio",
+            #                     "sender": sender,
+            #                     "function": function,
+            #                     "text": text
+            #                 }),
+            #                 vapid_private_key=VAPID_PRIVATE_KEY,
+            #                 vapid_claims={"sub": "mailto:your-email@example.com"}
+            #             ).send()
+            #         except Exception as e:
+            #             logger.error(f"Error sending push notification to {user_token}: {e}")
 
-        broadcast_message = {
-            "type": "audio",
-            "data": message["data"],
-            "text": text,
-            "timestamp": timestamp,
-            "sender": users[token]["name"],
-            "function": users[token]["function"]
-        }
-
-        for user_token, user in list(users.items()):
-            if user_token != token and user["logged_in"] and user.get("subscription"):
-                try:
-                    webpush = WebPush(
-                        subscription_info=user["subscription"],
-                        data=json.dumps({
+            # Retransmitir el mensaje a los clientes conectados
+            for user_token, user in users.items():
+                if user_token == token or user.get("muted", False):
+                    continue
+                ws = user.get("ws")
+                if ws:
+                    try:
+                        await ws.send_json({
                             "type": "audio",
-                            "sender": users[token]["name"],
-                            "function": users[token]["function"],
-                            "text": text
-                        }),
-                        vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims=VAPID_CLAIMS
-                    )
-                    webpush.send()
-                    logger.info(f"Notificación push enviada a {user_token}")
-                except Exception as e:
-                    logger.error(f"Error al enviar notificación push a {user_token}: {e}")
-
-        for user_token, user in list(users.items()):
-            if user_token != token and user["logged_in"] and user["websocket"] is not None and not user.get("muted", False):
-                try:
-                    await user["websocket"].send_text(json.dumps(broadcast_message))
-                    logger.info(f"Audio retransmitido a {user_token}")
-                except Exception as e:
-                    logger.error(f"Error al retransmitir audio a {user_token}: {e}")
-                    user["websocket"] = None
-        audio_queue.task_done()
+                            "sender": sender,
+                            "function": function,
+                            "text": text,
+                            "token": token
+                        })
+                    except Exception as e:
+                        logger.error(f"Error broadcasting message to {user_token}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing audio queue: {e}")
+        finally:
+            audio_queue.task_done()
 
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
