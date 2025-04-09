@@ -1,7 +1,6 @@
 websockets
 pocketsphinx
 pyaudio==0.2.14
-aiohttp
 pydub==0.25.1
 soundfile==0.12.1
 webpush
@@ -13,6 +12,5 @@ fastapi==0.115.0
 uvicorn==0.30.6
 aiohttp==3.10.5
 speechrecognition==3.10.4
-pydub==0.25.1
 soundfile==0.12.1
 pywebpush==2.0.0
