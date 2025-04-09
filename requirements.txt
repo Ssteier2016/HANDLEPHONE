@@ -1,6 +1,5 @@
 websockets
 pocketsphinx
-pyaudio==0.2.14
 pydub==0.25.1
 soundfile==0.12.1
 webpush
