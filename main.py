@@ -16,7 +16,6 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
-# from pywebpush import WebPush
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
@@ -33,11 +32,6 @@ async def read_root():
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configurar claves VAPID para notificaciones push
-#VAPID_PUBLIC_KEY = "BIu7_BQhrPKB1Q39EcuUWndK5KosDJx9btpAbqr3T6wq6oTb0QqZaMgA2PAmLHVJbRdFU0lxxEs_k4Mh9JJ0fAg"
-#VAPID_PRIVATE_KEY = "hcRHiegtjnRTht4MEjqHs0j6u8Pnsti82u7hDXB85y4"
-#VAPID_CLAIMS = {"sub": "mailto:rod.arena7@gmail.com"}
-
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
     'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliett',
@@ -50,7 +44,7 @@ ICAO_ALPHABET = {
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-# Diccionarios para manejar usuarios, sesiones y suscripciones push
+# Diccionarios para manejar usuarios y colas
 users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription}}
 audio_queue = asyncio.Queue()
 
@@ -97,7 +91,7 @@ async def get_airplanes_live_data():
         logger.info("Devolviendo datos en caché")
         return cached_data
     try:
-        url = "https://api.airplanes Facultad.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
+        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
@@ -125,7 +119,7 @@ def scrape_tams():
         soup = BeautifulSoup(response.text, 'html.parser')
         flights = []
 
-        # Buscar spans y extraer datos (ajustado según tu ejemplo anterior)
+        # Buscar spans y extraer datos
         spans = soup.find_all('span')
         flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
 
@@ -236,82 +230,82 @@ async def get_opensky_data():
     return combined_data
 
 def init_db():
-    conn = sqlite3.connect("history.db")
+    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db para consistencia
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                 (id INTEGER PRIMARY KEY, user_id TEXT, audio BLOB, text TEXT, timestamp TEXT, date TEXT)''')
+                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')  # Cambiado audio de BLOB a TEXT para almacenar Base64
     conn.commit()
     conn.close()
 
 def save_message(user_id, audio_data, text, timestamp):
     date = datetime.utcnow().strftime("%Y-%m-%d")
-    conn = sqlite3.connect("history.db")
+    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db
     c = conn.cursor()
     c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
               (user_id, audio_data, text, timestamp, date))
     conn.commit()
     conn.close()
+    logger.info(f"Mensaje guardado en la base de datos: user_id={user_id}, timestamp={timestamp}")
 
 def get_history():
-    conn = sqlite3.connect("history.db")
+    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db
     c = conn.cursor()
     c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
     rows = c.fetchall()
     conn.close()
-    return [{"user_id": row[0], "audio": base64.b64encode(row[1]).decode('utf-8'), 
-             "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
+    return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
 async def process_audio_queue():
     while True:
         try:
-            message = await audio_queue.get()
+            token, audio_data, message = await audio_queue.get()
             sender = message.get("sender", "Unknown")
             function = message.get("function", "Unknown")
-            text = message.get("text", "Audio message")
-            token = message.get("token")
+            text = message.get("text", "Sin transcripción")
+            timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
+
+            logger.info(f"Procesando mensaje de audio de {sender} ({function}) con token {token}")
+
+            # Si el cliente no proporcionó una transcripción, transcribir en el servidor
+            if text == "Sin transcripción" or text == "Pendiente de transcripción":
+                logger.info("Transcribiendo audio en el servidor...")
+                text = await transcribe_audio(audio_data)
+                logger.info(f"Transcripción del servidor: {text}")
 
             # Guardar el mensaje en la base de datos
-            save_message(sender, function, text, token)
+            user_id = f"{sender}_{function}"
+            try:
+                save_message(user_id, audio_data, text, timestamp)
+            except Exception as e:
+                logger.error(f"Error al guardar el mensaje en la base de datos: {e}")
 
-            # Enviar notificación push a los usuarios suscritos
-            # for user_token, user in users.items():
-            #     if user_token == token:
-            #         continue
-            #     subscription = user.get("subscription")
-            #     if subscription:
-            #         try:
-            #             WebPush(
-            #                 subscription,
-            #                 data=json.dumps({
-            #                     "type": "audio",
-            #                     "sender": sender,
-            #                     "function": function,
-            #                     "text": text
-            #                 }),
-            #                 vapid_private_key=VAPID_PRIVATE_KEY,
-            #                 vapid_claims={"sub": "mailto:your-email@example.com"}
-            #             ).send()
-            #         except Exception as e:
-            #             logger.error(f"Error sending push notification to {user_token}: {e}")
-
-            # Retransmitir el mensaje a los clientes conectados
-            for user_token, user in users.items():
+            # Retransmitir el mensaje a los usuarios conectados
+            broadcast_message = {
+                "type": "audio",
+                "sender": sender,
+                "function": function,
+                "text": text,
+                "timestamp": timestamp,
+                "data": audio_data  # Incluir el audio en Base64
+            }
+            logger.info(f"Retransmitiendo mensaje a {len(users)} usuarios")
+            for user_token, user in list(users.items()):  # Usar list() para evitar RuntimeError por modificación del diccionario
                 if user_token == token or user.get("muted", False):
+                    if user.get("muted", False):
+                        logger.info(f"Usuario {user['name']} está muteado, no recibirá el mensaje")
                     continue
-                ws = user.get("ws")
+                ws = user.get("websocket")
                 if ws:
                     try:
-                        await ws.send_json({
-                            "type": "audio",
-                            "sender": sender,
-                            "function": function,
-                            "text": text,
-                            "token": token
-                        })
+                        await ws.send_json(broadcast_message)
+                        logger.info(f"Mensaje enviado a {user['name']} ({user_token})")
                     except Exception as e:
-                        logger.error(f"Error broadcasting message to {user_token}: {e}")
+                        logger.error(f"Error al enviar mensaje a {user['name']} ({user_token}): {e}")
+                        user["websocket"] = None
+                        users[user_token]["logged_in"] = False
+                        await broadcast_users()
         except Exception as e:
-            logger.error(f"Error processing audio queue: {e}")
+            logger.error(f"Error procesando audio queue: {e}")
         finally:
             audio_queue.task_done()
 
@@ -349,14 +343,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["function"] = function
                 users[token]["logged_in"] = True
                 await broadcast_users()
+                logger.info(f"Usuario registrado: {name} ({function}) con token {token}")
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
                 logger.info(f"Suscripción push recibida para {token}")
 
             elif message["type"] == "audio":
-                audio_data = base64.b64decode(message["data"])
+                audio_data = message.get("data")
+                if not audio_data:
+                    logger.error("Mensaje de audio sin datos de audio")
+                    continue
                 await audio_queue.put((token, audio_data, message))
+                logger.info(f"Mensaje de audio recibido de {token} y agregado a la cola")
 
             elif message["type"] == "logout":
                 if token in users:
@@ -369,17 +368,23 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
             elif message["type"] == "mute":
                 users[token]["muted"] = True
+                logger.info(f"Usuario {token} muteado")
             elif message["type"] == "unmute":
                 users[token]["muted"] = False
+                logger.info(f"Usuario {token} desmuteado")
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
             users[token]["websocket"] = None
+            users[token]["logged_in"] = False
+            await broadcast_users()
     except Exception as e:
         logger.error(f"Error en WebSocket para el cliente {token}: {str(e)}", exc_info=True)
         if token in users:
             users[token]["websocket"] = None
+            users[token]["logged_in"] = False
+            await broadcast_users()
         await websocket.close()
 
 async def broadcast_users():
@@ -389,7 +394,7 @@ async def broadcast_users():
             decoded_token = base64.b64decode(token).decode('utf-8')
             legajo, name, _ = decoded_token.split('_', 2)
             user_list.append(f"{users[token]['name']} ({legajo})")
-    for user in users.values():
+    for user in list(users.values()):  # Usar list() para evitar RuntimeError
         if user["logged_in"] and user["websocket"] is not None:
             try:
                 await user["websocket"].send_text(json.dumps({
@@ -397,13 +402,17 @@ async def broadcast_users():
                     "count": len(user_list),
                     "list": user_list
                 }))
+                logger.info(f"Lista de usuarios enviada a {user['name']}")
             except Exception as e:
                 logger.error(f"Error al enviar lista de usuarios a un cliente: {e}")
                 user["websocket"] = None
+                user["logged_in"] = False
 
 @app.get("/history")
 async def get_history_endpoint():
-    return get_history()
+    history = get_history()
+    logger.info(f"Historial solicitado, {len(history)} mensajes devueltos")
+    return history
 
 async def clear_messages():
     while True:
@@ -419,6 +428,7 @@ async def startup_event():
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
     asyncio.create_task(update_tams_flights())  # Iniciar actualización de vuelos de TAMS
+    logger.info("Aplicación iniciada, tareas programadas")
 
 if __name__ == "__main__":
     import uvicorn
