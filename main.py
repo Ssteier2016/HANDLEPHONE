@@ -16,7 +16,7 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
-from webpush import WebPush  # Para enviar notificaciones push
+from pywebpush import WebPush
 
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
