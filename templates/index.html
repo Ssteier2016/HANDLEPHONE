@@ -37,7 +37,9 @@
         <h2>Comunicación Aeronáutica</h2>
         <div id="flights-window">
             <h3>Datos de Vuelos</h3>
-            <div id="message-list"></div>
+            <div id="flight-details">
+                <!-- Los vuelos se cargarán aquí dinámicamente -->
+            </div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
@@ -67,6 +69,7 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
     <script src="/templates/script.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
@@ -74,6 +77,33 @@
                 .then(() => console.log('Service Worker registrado'))
                 .catch((err) => console.error('Error al registrar Service Worker:', err));
         }
+
+        const socket = io("http://localhost:5000"); // Ajustar URL según tu servidor
+
+        socket.on("flight_update", (flights) => {
+            const container = document.getElementById("flight-details");
+            container.innerHTML = ""; // Limpiar contenido anterior
+            flights.forEach(flight => {
+                const flightDiv = document.createElement("div");
+                flightDiv.className = "flight";
+                flightDiv.innerHTML = `
+                    <strong>Vuelo:</strong> ${flight.Vuelo} | 
+                    <strong>STD:</strong> ${flight.STD} | 
+                    <strong>Posición:</strong> ${flight.Posicion} | 
+                    <strong>Destino:</strong> ${flight.Destino} | 
+                    <strong>Matrícula:</strong> ${flight.Matricula || "N/A"}
+                `;
+                container.appendChild(flightDiv);
+            });
+        });
+
+        socket.on("connect", () => {
+            console.log("Conectado al servidor de vuelos");
+        });
+
+        socket.on("disconnect", () => {
+            console.log("Desconectado del servidor de vuelos");
+        });
     </script>
 </body>
 </html>
