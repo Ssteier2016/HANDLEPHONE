@@ -1,7 +1,7 @@
-# Usar una imagen base de Python 3.9 (más compatible con http-ece)
+# Usar una imagen base de Python 3.9
 FROM python:3.9
 
-# Instalar dependencias del sistema necesarias para PyAudio, Vosk, http-ece y herramientas adicionales
+# Instalar dependencias del sistema necesarias para PyAudio, Vosk y herramientas adicionales
 RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     gcc \
@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     wget \
     unzip \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -31,5 +30,5 @@ COPY . .
 ENV PORT=10000
 EXPOSE $PORT
 
-# Comando para iniciar la aplicación
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+# Comando para iniciar la aplicación (usar formato de shell para sustitución de variables)
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
