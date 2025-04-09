@@ -11,7 +11,7 @@
     <link rel="manifest" href="/templates/manifest.json">
 </head>
 <body>
-    <div id="register">
+    <div id="register" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <input id="name" placeholder="Apellido">
         <input id="legajo" placeholder="Legajo" type="number" maxlength="5">
@@ -32,7 +32,7 @@
         <button onclick="register()">Registrarse</button>
     </div>
 
-    <div id="main">
+    <div id="main" style="display: none;">
         <img src="/templates/phoneair.gif" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="flights-window">
@@ -62,7 +62,7 @@
         <div id="map"></div>
     </div>
 
-    <div id="history-screen">
+    <div id="history-screen" style="display: none;">
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
