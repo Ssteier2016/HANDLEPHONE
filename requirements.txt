@@ -6,11 +6,9 @@ soundfile==0.12.1
 webpush
 requests==2.31.0
 beautifulsoup4==4.12.3
-Flask==3.0.3
-Flask-SocketIO==5.3.6
 fastapi==0.115.0
 uvicorn==0.30.6
 aiohttp==3.10.5
-speechrecognition==3.10.4
 soundfile==0.12.1
-pywebpush==2.0.0
+speechrecognition==3.10.0
+pywebpush==1.9.4
