@@ -2,7 +2,6 @@ fastapi
 uvicorn
 websockets
 pocketsphinx
-flask==2.3.2
 pyaudio==0.2.14
 aiohttp
 requests
