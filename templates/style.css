@@ -364,4 +364,23 @@ select:hover {
     #map {
         height: calc(100% - 60px);
     }
-    }
+}
+
+/* Estilos para el cartel de Detalles de Vuelo */
+#flight-details {
+    font-family: 'Orbitron', sans-serif;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.flight {
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    color: #fff;
+    font-size: 14px;
+}
+
+.flight:last-child {
+    border-bottom: none;
+}
