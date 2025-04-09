@@ -1,10 +1,8 @@
 fastapi
 uvicorn
-pydub==0.25.1
-requests==2.31.0
 aiohttp==3.10.5
+requests==2.31.0
 beautifulsoup4
 speechrecognition==3.10.0
+pydub==0.25.1
 soundfile==0.12.1
-pywebpush==1.9.3
-six
