@@ -1,7 +1,5 @@
 websockets
-pocketsphinx
 pydub==0.25.1
-soundfile==0.12.1
 webpush
 requests==2.31.0
 beautifulsoup4==4.12.3
