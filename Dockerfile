@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     wget \
     unzip \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -17,8 +18,11 @@ WORKDIR /app
 # Copiar requirements.txt primero para aprovechar el cache de Docker
 COPY requirements.txt .
 
-# Actualizar pip, instalar wheel e instalar las dependencias en una sola línea
-RUN pip install --upgrade pip wheel && pip install --no-cache-dir -r requirements.txt
+# Actualizar pip e instalar wheel en un paso separado
+RUN pip install --upgrade pip && pip install wheel
+
+# Instalar las dependencias en un paso separado
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el resto de los archivos del proyecto
 COPY . .
