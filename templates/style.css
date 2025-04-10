@@ -119,14 +119,22 @@ button:hover {
 }
 
 #mute {
-    background-color: #32CD32;
-    position: absolute; /* Posicionarlo a la derecha */
+    position: absolute; /* Posicionarlo en la esquina superior derecha */
     right: 10px; /* Alinear a la derecha */
     top: 10px; /* Alinear arriba */
-    width: auto; /* Ajustar al contenido */
-    font-size: 12px; /* Tamaño pequeño */
-    padding: 5px 10px; /* Padding reducido para hacerlo pequeño */
-    line-height: 1; /* Ajustar altura del texto */
+    width: 24px; /* Tamaño pequeño para la imagen */
+    height: 24px; /* Tamaño pequeño para la imagen */
+    padding: 0; /* Sin padding para que la imagen defina el tamaño */
+    border: none; /* Sin borde */
+    background-color: transparent; /* Fondo transparente */
+    background-image: url('/templates/mute.png'); /* Imagen inicial (mutear) */
+    background-size: cover; /* Ajustar imagen al tamaño del botón */
+    background-repeat: no-repeat;
+    cursor: pointer;
+}
+
+#mute.active { /* Clase para estado desmuteado (micrófono activo) */
+    background-image: url('/templates/mic.png'); /* Imagen para desmutear */
 }
 
 #users {
@@ -134,6 +142,19 @@ button:hover {
     font-size: 12px;
     color: #FF4500;
     text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
+    display: flex; /* Usar flexbox para alinear texto e ícono */
+    justify-content: center; /* Centrar el contenedor */
+    align-items: center;
+}
+
+#users span { /* Estilo para el nombre del usuario */
+    margin-right: 5px; /* Espacio entre el nombre y el ícono */
+}
+
+#users img { /* Estilo para el ícono */
+    width: 10px; /* Muy pequeño */
+    height: 10px; /* Muy pequeño */
+    vertical-align: middle; /* Alinear con el texto */
 }
 
 #messages, #history-screen {
@@ -298,8 +319,17 @@ select:hover {
     #mute {
         right: 5px; /* Menos margen en pantallas pequeñas */
         top: 5px; /* Arriba */
-        font-size: 10px; /* Más pequeño */
-        padding: 4px 8px; /* Más compacto */
+        width: 20px; /* Más pequeño */
+        height: 20px; /* Más pequeño */
+    }
+
+    #users {
+        font-size: 10px;
+    }
+
+    #users img {
+        width: 8px; /* Más pequeño en pantallas pequeñas */
+        height: 8px;
     }
 
     h2 {
@@ -313,10 +343,6 @@ select:hover {
     .logo {
         width: 40px;
         height: 40px;
-    }
-
-    #users {
-        font-size: 10px;
     }
 
     #radar-screen {
@@ -378,8 +404,17 @@ select:hover {
     #mute {
         right: 10px;
         top: 10px; /* Arriba */
-        font-size: 12px; /* Pequeño */
-        padding: 5px 10px; /* Compacto */
+        width: 24px; /* Tamaño pequeño */
+        height: 24px; /* Tamaño pequeño */
+    }
+
+    #users {
+        font-size: 14px;
+    }
+
+    #users img {
+        width: 10px; /* Tamaño pequeño */
+        height: 10px;
     }
 
     h2 {
@@ -393,10 +428,6 @@ select:hover {
     .logo {
         width: 64px;
         height: 64px;
-    }
-
-    #users {
-        font-size: 14px;
     }
 
     #radar-screen {
