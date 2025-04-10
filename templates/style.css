@@ -122,10 +122,11 @@ button:hover {
     background-color: #32CD32;
     position: absolute; /* Posicionarlo a la derecha */
     right: 10px; /* Alinear a la derecha */
-    top: 50%; /* Centrar verticalmente */
-    transform: translateY(-50%); /* Ajuste vertical */
+    top: 10px; /* Alinear arriba */
     width: auto; /* Ajustar al contenido */
-    padding: 8px 16px; /* Mantener padding */
+    font-size: 12px; /* Tamaño pequeño */
+    padding: 5px 10px; /* Padding reducido para hacerlo pequeño */
+    line-height: 1; /* Ajustar altura del texto */
 }
 
 #users {
@@ -296,7 +297,9 @@ select:hover {
 
     #mute {
         right: 5px; /* Menos margen en pantallas pequeñas */
-        padding: 6px 12px;
+        top: 5px; /* Arriba */
+        font-size: 10px; /* Más pequeño */
+        padding: 4px 8px; /* Más compacto */
     }
 
     h2 {
@@ -374,7 +377,9 @@ select:hover {
 
     #mute {
         right: 10px;
-        padding: 10px 20px;
+        top: 10px; /* Arriba */
+        font-size: 12px; /* Pequeño */
+        padding: 5px 10px; /* Compacto */
     }
 
     h2 {
