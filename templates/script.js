@@ -474,7 +474,7 @@ async function toggleTalk() {
                 if (chatList) {
                     const msgDiv = document.createElement("div");
                     msgDiv.className = "chat-message";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span>
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
@@ -626,4 +626,14 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
-                      }
+}
+
+// Agregar event listener para el botón de registro
+document.addEventListener('DOMContentLoaded', () => {
+    const registerButton = document.getElementById('register-button');
+    if (registerButton) {
+        registerButton.addEventListener('click', register);
+    } else {
+        console.error("Botón de registro no encontrado en el DOM");
+    }
+});
