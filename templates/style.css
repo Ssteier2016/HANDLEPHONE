@@ -1,111 +1,176 @@
-/* Estilos generales */
 body {
+    background-color: #87CEEB; /* Color de respaldo por si la imagen no carga */
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    color: #333333; /* Texto oscuro para mejor contraste */
     margin: 0;
-    padding: 0;
-    font-family: 'Orbitron', sans-serif;
-    background-color: #1a1a1a;
-    color: #fff;
+    padding: 10px;
+    box-sizing: border-box;
+    background-image: url('/templates/borde.png'); /* Usar borde.png como fondo */
+    background-size: cover; /* Ajustar la imagen para que cubra toda la pantalla */
+    background-position: center; /* Centrar la imagen */
+    background-repeat: no-repeat; /* Evitar que la imagen se repita */
+    position: relative;
+    overflow-x: hidden; /* Evitar desbordamiento horizontal */
+    min-height: 100vh; /* Asegurar que el cuerpo ocupe toda la altura */
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    overflow: auto;
 }
 
-/* Pantalla de registro */
-#register {
-    text-align: center;
-    background-color: #2a2a2a;
-    padding: 20px;
+/* Se eliminó la animación del avión volando (body::before y @keyframes fly) */
+
+#register, #main, #radar-screen, #history-screen {
+    background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente */
+    border: 3px solid #4682B4; /* Borde azul oscuro */
     border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    max-width: 400px;
-}
-
-.logo {
-    width: 100px;
-    margin-bottom: 20px;
-}
-
-#register input, #register select {
-    display: block;
+    padding: 15px;
     width: 100%;
-    padding: 10px;
-    margin: 10px 0;
-    border: none;
-    border-radius: 5px;
-    background-color: #333;
-    color: #fff;
-    font-family: 'Orbitron', sans-serif;
+    max-width: 600px; /* Máximo ancho para pantallas grandes */
+    margin: 0 auto;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    display: none;
+    box-sizing: border-box;
 }
 
-#register select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background: url('data:image/svg+xml;utf8,<svg fill="white" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 10px center;
-    background-color: #333;
+#register {
+    display: block;
 }
 
-#register-button {
+#main {
+    display: none; /* Ocultar por defecto */
+}
+
+#radar-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     padding: 10px;
-    background-color: #007bff;
-    color: #fff;
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+.radar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-wrap: wrap; /* Permitir que los elementos se ajusten en pantallas pequeñas */
+}
+
+#search-bar {
+    flex-grow: 1;
+    margin: 5px 10px;
+    width: auto;
+}
+
+.close-btn {
+    background-color: transparent;
     border: none;
+    color: #FF4500;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px 10px;
+    transition: color 0.3s;
+}
+
+.close-btn:hover {
+    color: #FF6347;
+}
+
+input, button, select {
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 8px;
+    width: 100%;
+    border: 2px solid #4682B4;
+    background-color: #F5F5F5;
+    color: #333333;
     border-radius: 5px;
     cursor: pointer;
-    font-family: 'Orbitron', sans-serif;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #4682B4;
     transition: background-color 0.3s;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-#register-button:hover {
-    background-color: #0056b3;
+button:hover {
+    background-color: #FF4500;
+    color: #FFFFFF;
 }
 
-/* Pantalla principal */
-#main {
-    text-align: center;
-    background-color: #2a2a2a;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    max-width: 600px;
+#talk {
+    background-color: #FF4500;
 }
 
-h2 {
-    font-size: 24px;
-    margin-bottom: 20px;
-    color: #00ff00;
-    text-shadow: 0 0 5px #00ff00;
+#mute {
+    background-color: #32CD32;
 }
 
-#flights-window {
-    margin-bottom: 20px;
+#users {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #FF4500;
+    text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
 }
 
-#flights-window h3 {
-    font-size: 18px;
-    margin-bottom: 10px;
-    color: #00ff00;
+#messages, #history-screen {
+    margin-top: 15px;
 }
 
-#flight-details {
-    font-family: 'Orbitron', sans-serif;
-    padding: 10px;
+#message-list, #history-list {
     max-height: 150px;
     overflow-y: auto;
-    background-color: #333;
+    text-align: left;
+    padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
     border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.flight {
-    padding: 8px;
-    border-bottom: 1px solid #444;
-    color: #fff;
-    font-size: 14px;
+#message-list div, #history-list div {
+    margin: 5px 0;
+    cursor: pointer;
+    color: #333333;
+}
+
+#chat-list {
+    max-height: 150px;
+    overflow-y: auto;
     text-align: left;
+    padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.chat-message {
+    border: 1px solid #4682B4;
+    padding: 5px;
+    margin: 5px 0;
+    background-color: #FFFFFF;
+    border-radius: 5px;
+    cursor: pointer;
+    color: #333333;
+    text-shadow: none;
+}
+
+.flight-message {
+    border: 1px solid #4682B4;
+    padding: 5px;
+    margin: 5px 0;
+    background-color: #FFFFFF;
+    border-radius: 5px;
+    color: #333333;
+    text-shadow: none;
 }
 
 .flight-en-zona {
@@ -126,170 +191,196 @@ h2 {
     text-shadow: none;
 }
 
-.flight-en-tierra {
-    background-color: #808080;
-    color: #FFFFFF !important;
-    text-shadow: none;
-}
-
-#chat-window {
-    margin-bottom: 20px;
-}
-
-#chat-window h3 {
-    font-size: 18px;
-    margin-bottom: 10px;
-    color: #00ff00;
-}
-
-#chat-list {
-    max-height: 200px;
-    overflow-y: auto;
-    background-color: #333;
-    border-radius: 5px;
-    padding: 10px;
-}
-
-.chat-message {
-    padding: 5px;
-    border-bottom: 1px solid #444;
-    font-size: 14px;
-    text-align: left;
-    cursor: pointer;
-    color: #fff;
-}
-
-.chat-message:hover {
-    background-color: #444;
-}
-
 .play-icon {
     margin-right: 5px;
+    font-size: 10px;
+    color: #FF4500;
 }
 
-button {
-    padding: 10px;
-    margin: 5px;
-    border: none;
-    border-radius: 5px;
-    background-color: #007bff;
-    color: #fff;
-    cursor: pointer;
-    font-family: 'Orbitron', sans-serif;
-    transition: background-color 0.3s;
-}
-
-button:hover {
-    background-color: #0056b3;
-}
-
-#talk {
-    background-color: #ff0000;
-}
-
-#talk:hover {
-    background-color: #cc0000;
-}
-
-#mute {
-    background-color: #00ff00;
-}
-
-#mute:hover {
-    background-color: #00cc00;
-}
-
-#users {
-    margin-top: 10px;
-    font-size: 14px;
-}
-
-.user-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 5px;
-}
-
-.user-item {
-    display: flex;
-    align-items: center;
-    background-color: #333;
-    padding: 5px 10px;
-    border-radius: 5px;
-}
-
-.mute-button {
-    background: none;
-    border: none;
-    cursor: pointer;
+h2 {
     font-size: 16px;
-    margin-right: 5px;
-    padding: 0;
+    margin: 8px 0;
+    color: #4682B4;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
-.mute-button:hover {
-    opacity: 0.7;
-}
-
-/* Pantalla de radar */
-#radar-screen {
-    width: 90%;
-    max-width: 600px;
-    background-color: #2a2a2a;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-}
-
-.radar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-#search-bar {
-    padding: 10px;
-    border: none;
-    border-radius: 5px;
-    background-color: #333;
-    color: #fff;
-    font-family: 'Orbitron', sans-serif;
-    width: 60%;
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 20px;
-    cursor: pointer;
-}
-
-.close-btn:hover {
-    color: #ff0000;
+h3 {
+    font-size: 14px;
+    margin: 8px 0;
+    color: #4682B4;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #map {
-    height: 400px;
+    height: calc(100% - 60px);
+    border: 2px solid #4682B4;
     border-radius: 5px;
+    background-color: #87CEEB;
 }
 
-/* Pantalla de historial */
-#history-screen {
-    width: 90%;
-    max-width: 600px;
-    background-color: #2a2a2a;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+.logo {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 8px;
+    display: block;
 }
 
-#history-list {
-    max-height: 400px;
-    overflow-y: auto;
-    background-color: #333;
-    border-radius: 5px;
+select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+    padding-right: 30px;
+}
+
+select:hover {
+    background-color: #FF4500;
+    color: #FFFFFF;
+}
+
+/* Media query para pantallas pequeñas (celulares, max-width: 768px) */
+@media (max-width: 768px) {
+    body {
+        padding: 5px;
+        background-image: url('/templates/borde.png'); /* Asegurar que el fondo se aplique */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    #register, #main, #radar-screen, #history-screen {
+        padding: 10px;
+        max-width: 100%; /* Ocupar todo el ancho disponible */
+        margin: 0;
+    }
+
+    #main {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #flights-window, #chat-window {
+        width: 100%;
+    }
+
+    #message-list, #chat-list, #history-list {
+        max-height: 120px; /* Reducir altura en pantallas pequeñas */
+    }
+
+    input, button, select {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    h2 {
+        font-size: 14px;
+    }
+
+    h3 {
+        font-size: 12px;
+    }
+
+    .logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    #users {
+        font-size: 10px;
+    }
+
+    #radar-screen {
+        padding: 5px;
+    }
+
+    #map {
+        height: calc(100% - 50px); /* Ajustar altura del mapa */
+    }
+}
+
+/* Media query para pantallas grandes (computadoras, min-width: 769px) */
+@media (min-width: 769px) {
+    body {
+        padding: 20px;
+        background-image: url('/templates/borde.png'); /* Asegurar que el fondo se aplique */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    #register, #main, #radar-screen, #history-screen {
+        padding: 20px;
+        max-width: 600px;
+    }
+
+    #main {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    #flights-window, #chat-window {
+        width: 100%;
+    }
+
+    #message-list, #chat-list, #history-list {
+        max-height: 200px;
+    }
+
+    input, button, select {
+        font-size: 16px;
+        padding: 10px;
+        width: auto; /* Permitir que los botones e inputs tengan su tamaño natural */
+        max-width: 100%;
+    }
+
+    button {
+        width: 200px; /* Botones más pequeños en pantallas grandes */
+        margin: 5px auto;
+    }
+
+    h2 {
+        font-size: 18px;
+    }
+
+    h3 {
+        font-size: 16px;
+    }
+
+    .logo {
+        width: 64px;
+        height: 64px;
+    }
+
+    #users {
+        font-size: 14px;
+    }
+
+    #radar-screen {
+        padding: 10px;
+    }
+
+    #map {
+        height: calc(100% - 60px);
+    }
+}
+
+/* Estilos para el cartel de Detalles de Vuelo */
+#flight-details {
+    font-family: 'Orbitron', sans-serif;
     padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
 }
+
+.flight {
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    color: #fff;
+    font-size: 14px;
+}
+
+.flight:last-child {
+    border-bottom: none;
+        }
