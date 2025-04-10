@@ -166,7 +166,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 const muteButton = document.createElement("button");
                 muteButton.className = "mute-button";
                 const isMuted = mutedUsers.has(user.user_id);
-                muteButton.textContent = isMuted ? "🔊" : "🔇";
+                muteButton.textContent = isMuted ? "🔇" : "🔊";
                 muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
                 userDiv.appendChild(muteButton);
                 const userText = document.createElement("span");
@@ -606,7 +606,7 @@ function toggleMuteUser(userId, button) {
     if (mutedUsers.has(userId)) {
         // Desmutear
         mutedUsers.delete(userId);
-        button.textContent = "🔇";
+        button.textContent = "🔊";
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "unmute_user", target_user_id: userId }));
         }
@@ -614,7 +614,7 @@ function toggleMuteUser(userId, button) {
     } else {
         // Mutear
         mutedUsers.add(userId);
-        button.textContent = "🔊";
+        button.textContent = "🔇";
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "mute_user", target_user_id: userId }));
         }
