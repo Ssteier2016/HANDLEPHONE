@@ -372,6 +372,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "subscription": None
             }
 
+        # Enviar confirmación de conexión al cliente
+        await websocket.send_json({"type": "connection_success", "message": "Conectado al servidor"})
+        logger.info(f"Confirmación de conexión enviada a {token}")
+
         await broadcast_users()
 
         while True:
@@ -385,8 +389,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["name"] = name
                 users[token]["function"] = function
                 users[token]["logged_in"] = True
+                await websocket.send_json({"type": "register_success", "message": "Registro exitoso"})
+                logger.info(f"Usuario registrado: {name} ({function}) con token {token}, confirmación enviada")
                 await broadcast_users()
-                logger.info(f"Usuario registrado: {name} ({function}) con token {token}")
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
@@ -424,6 +429,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     logger.info(f"Usuario {users[token]['name']} desmuteó a {target_user_id}")
                 else:
                     logger.error("Mensaje de unmute_user sin target_user_id")
+
+            elif message["type"] == "mute":
+                # Manejar mute global (si aplica)
+                logger.info(f"Usuario {users[token]['name']} activó mute global")
+                await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
+
+            elif message["type"] == "unmute":
+                # Manejar unmute global (si aplica)
+                logger.info(f"Usuario {users[token]['name']} desactivó mute global")
+                await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
