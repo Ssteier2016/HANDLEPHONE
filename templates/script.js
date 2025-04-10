@@ -1,18 +1,20 @@
-let ws;
-let userId;
-let audioChunks = [];
-let audioContext = new (window.AudioContext || window.webkitAudioContext)();
-let mediaRecorder;
-let stream;
-let map;
-let audioQueue = [];
-let isPlaying = false;
-let flightData = [];
-let markers = [];
-let recognition; // Variable para SpeechRecognition
-let supportsSpeechRecognition = false; // Bandera para verificar soporte
+// Variables globales
+let ws; // WebSocket para la comunicación con el servidor
+let userId; // Identificador único del usuario (legajo_name_function)
+let audioChunks = []; // Almacena fragmentos de audio durante la grabación
+let audioContext = new (window.AudioContext || window.webkitAudioContext)(); // Contexto de audio para reproducción
+let mediaRecorder; // Objeto para grabar audio
+let stream; // Stream de audio del micrófono
+let map; // Mapa de Leaflet para el radar
+let audioQueue = []; // Cola para reproducir audios en secuencia
+let isPlaying = false; // Bandera para evitar superposición de reproducción de audios
+let flightData = []; // Almacena datos de vuelos recibidos de /opensky
+let markers = []; // Marcadores en el mapa para los vuelos
+let recognition; // Objeto para SpeechRecognition (transcripción de voz)
+let supportsSpeechRecognition = false; // Bandera para verificar soporte de SpeechRecognition
 let mutedUsers = new Set(); // Estado local para rastrear usuarios muteados
 
+// Mapeo de aerolíneas y letras para posibles conversiones
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
     "AEP": "AEP"
@@ -33,7 +35,7 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
 
-// Función para desbloquear el audio
+// Función para desbloquear el contexto de audio (necesario en algunos navegadores)
 function unlockAudio() {
     if (audioContext.state === 'suspended') {
         audioContext.resume().then(() => {
@@ -44,9 +46,10 @@ function unlockAudio() {
     }
 }
 
-// Agregar un evento para desbloquear el audio al interactuar con la página
+// Desbloquear el audio al interactuar con la página
 document.addEventListener('click', unlockAudio, { once: true });
 
+// Solicitar permiso para usar el micrófono
 async function requestMicPermission() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -59,6 +62,7 @@ async function requestMicPermission() {
     }
 }
 
+// Función para registrar al usuario
 function register() {
     const legajo = document.getElementById("legajo").value;
     const name = document.getElementById("name").value;
@@ -80,6 +84,7 @@ function register() {
     connectWebSocket(sessionToken);
 }
 
+// Conectar al WebSocket
 function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1}/${maxRetries})`);
@@ -201,6 +206,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 }
 
+// Cargar la página y verificar si el usuario ya está autenticado
 window.onload = function() {
     console.log("window.onload ejecutado");
     const sessionToken = localStorage.getItem("sessionToken");
@@ -236,7 +242,7 @@ window.onload = function() {
     }
 };
 
-// Manejo de doble toque en el botón de volumen (+)
+// Manejo de doble toque en el botón de volumen (+) para activar la grabación
 let lastVolumeUpTime = 0;
 let volumeUpCount = 0;
 
@@ -259,6 +265,7 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
+// Reproducir audio recibido
 function playAudio(blob) {
     const audio = new Audio(URL.createObjectURL(blob));
     audioQueue.push(audio);
@@ -276,6 +283,23 @@ function playAudio(blob) {
     }
 }
 
+// Reproducir el siguiente audio en la cola
+function playNextAudio() {
+    if (audioQueue.length === 0 || isPlaying) return;
+    isPlaying = true;
+    const audio = audioQueue.shift();
+    audio.play().then(() => {
+        console.log("Audio reproducido exitosamente");
+        isPlaying = false;
+        playNextAudio();
+    }).catch(err => {
+        console.error("Error reproduciendo audio:", err);
+        isPlaying = false;
+        playNextAudio();
+    });
+}
+
+// Inicializar el mapa de Leaflet para el radar
 function initMap() {
     map = L.map('map').setView([-34.5597, -58.4116], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -295,8 +319,9 @@ function initMap() {
     searchBar.addEventListener("input", filterFlights);
 }
 
+// Calcular la distancia entre dos puntos (en millas náuticas)
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 3440.07;
+    const R = 3440.07; // Radio de la Tierra en millas náuticas
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -306,6 +331,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// Estimar la hora de llegada basada en la distancia y velocidad
 function estimateArrivalTime(lat, lon, speed) {
     const aeroparqueLat = -34.5597;
     const aeroparqueLon = -58.4116;
@@ -317,6 +343,7 @@ function estimateArrivalTime(lat, lon, speed) {
     return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(":", "");
 }
 
+// Determinar el estado del vuelo
 function getFlightStatus(altitude, speed, verticalRate) {
     if (altitude < 100 && speed < 50) return "En tierra";
     if (altitude >= 100 && altitude <= 2000 && speed > 50) return "Despegando";
@@ -325,6 +352,7 @@ function getFlightStatus(altitude, speed, verticalRate) {
     return "Desconocido";
 }
 
+// Filtrar vuelos en el radar según la búsqueda
 function filterFlights() {
     const searchTerm = document.getElementById("search-bar").value.toUpperCase();
     markers.forEach(marker => {
@@ -348,13 +376,18 @@ function filterFlights() {
     });
 }
 
+// Actualizar datos de vuelos desde /opensky
 function updateOpenSkyData() {
     fetch('/opensky')
         .then(response => response.json())
         .then(data => {
             console.log("Datos recibidos de /opensky:", data);
-            const messageList = document.getElementById("message-list");
-            messageList.innerHTML = "";
+            const flightDetails = document.getElementById("flight-details");
+            if (!flightDetails) {
+                console.error("Elemento #flight-details no encontrado en el DOM");
+                return;
+            }
+            flightDetails.innerHTML = "";
             flightData = data;
             markers = [];
 
@@ -368,7 +401,7 @@ function updateOpenSkyData() {
 
             if (data.error) {
                 console.warn("Error en Airplanes.Live:", data.error);
-                messageList.textContent = "Esperando datos de Airplanes.Live...";
+                flightDetails.textContent = "Esperando datos de Airplanes.Live...";
             } else {
                 data.forEach(state => {
                     const lat = state.lat;
@@ -379,18 +412,29 @@ function updateOpenSkyData() {
                     const altitude = state.alt_geom || 0;
                     const verticalRate = state.vert_rate || 0;
                     const originDest = state.origin_dest || "N/A";
+                    const scheduled = state.scheduled || "N/A";
+                    const position = state.position || "N/A";
+                    const destination = state.destination || "N/A";
+                    const status = state.status || getFlightStatus(altitude, speed, verticalRate);
 
                     if (flight.startsWith("AR") || flight.startsWith("ARG")) {
                         const flightNumber = flight.replace("ARG", "").replace("AR", "");
                         const displayFlight = `AEP${flightNumber}`;
-                        const status = getFlightStatus(altitude, speed, verticalRate);
-                        const arrivalTime = estimateArrivalTime(lat, lon, speed);
 
+                        // Mostrar en #flight-details
                         const flightDiv = document.createElement("div");
-                        flightDiv.className = `flight-message flight-${status.toLowerCase().replace(" ", "-")}`;
-                        flightDiv.textContent = `Aerolíneas Argentinas ${displayFlight} / ${registration} ${status} ${arrivalTime}`;
-                        messageList.appendChild(flightDiv);
+                        flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+                        flightDiv.innerHTML = `
+                            <strong>Vuelo:</strong> ${displayFlight} | 
+                            <strong>STD:</strong> ${scheduled} | 
+                            <strong>Posición:</strong> ${position} | 
+                            <strong>Destino:</strong> ${destination} | 
+                            <strong>Matrícula:</strong> ${registration} | 
+                            <strong>Estado:</strong> ${status}
+                        `;
+                        flightDetails.appendChild(flightDiv);
 
+                        // Mostrar en el mapa (si está visible)
                         if (lat && lon && map) {
                             const marker = L.marker([lat, lon], { 
                                 icon: L.icon({
@@ -405,16 +449,20 @@ function updateOpenSkyData() {
                         }
                     }
                 });
-                messageList.scrollTop = messageList.scrollHeight;
+                flightDetails.scrollTop = flightDetails.scrollHeight;
             }
         })
         .catch(err => {
             console.error("Error al cargar datos de Airplanes.Live:", err);
-            document.getElementById("message-list").textContent = "Error al conectar con Airplanes.Live";
+            const flightDetails = document.getElementById("flight-details");
+            if (flightDetails) {
+                flightDetails.textContent = "Error al conectar con Airplanes.Live";
+            }
         });
     setTimeout(updateOpenSkyData, 15000);
 }
 
+// Alternar la grabación de audio
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
@@ -681,4 +729,3 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Botón de registro no encontrado en el DOM");
     }
 });
-                    
