@@ -46,7 +46,7 @@
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
-        <button id="mute" onclick="toggleMute()"></button>
+        <button id="mute" onclick="toggleMute()">Mutear</button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
@@ -87,6 +87,7 @@
                         applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY') // Reemplazar con tu clave VAPID pública
                     }).then(subscription => {
                         console.log("Suscripción a push exitosa:", subscription);
+                        // Enviar la suscripción al servidor si es necesario
                         fetch('/subscribe', {
                             method: 'POST',
                             body: JSON.stringify(subscription),
@@ -124,6 +125,7 @@
             }
         }
 
+        // Inicializar notificaciones push al cargar la página
         document.addEventListener('DOMContentLoaded', () => {
             checkNotificationPermission();
         });
