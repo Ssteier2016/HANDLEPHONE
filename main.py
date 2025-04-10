@@ -52,7 +52,7 @@ def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Diccionarios para manejar usuarios y colas
-users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription}}
+users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription, "muted_users": set}}
 audio_queue = asyncio.Queue()
 
 last_request_time = 0
@@ -329,9 +329,13 @@ async def process_audio_queue():
             }
             logger.info(f"Retransmitiendo mensaje a {len(users)} usuarios")
             for user_token, user in list(users.items()):
-                if user_token == token or user.get("muted", False):
-                    if user.get("muted", False):
-                        logger.info(f"Usuario {user['name']} está muteado, no recibirá el mensaje")
+                if user_token == token:
+                    continue
+                # Verificar si el usuario ha muteado al remitente
+                muted_users = user.get("muted_users", set())
+                sender_id = f"{sender}_{function}"
+                if sender_id in muted_users:
+                    logger.info(f"Usuario {user['name']} ha muteado a {sender_id}, no recibirá el mensaje")
                     continue
                 ws = user.get("websocket")
                 if ws:
@@ -364,7 +368,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "function": "Desconocida",
                 "logged_in": True,
                 "websocket": websocket,
-                "muted": False,
+                "muted_users": set(),  # Lista de usuarios muteados (como "name_function")
                 "subscription": None
             }
 
@@ -405,12 +409,21 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 logger.info(f"Usuario {token} cerró sesión")
                 break
 
-            elif message["type"] == "mute":
-                users[token]["muted"] = True
-                logger.info(f"Usuario {token} muteado")
-            elif message["type"] == "unmute":
-                users[token]["muted"] = False
-                logger.info(f"Usuario {token} desmuteado")
+            elif message["type"] == "mute_user":
+                target_user_id = message.get("target_user_id")
+                if target_user_id:
+                    users[token]["muted_users"].add(target_user_id)
+                    logger.info(f"Usuario {users[token]['name']} muteó a {target_user_id}")
+                else:
+                    logger.error("Mensaje de mute_user sin target_user_id")
+
+            elif message["type"] == "unmute_user":
+                target_user_id = message.get("target_user_id")
+                if target_user_id:
+                    users[token]["muted_users"].discard(target_user_id)
+                    logger.info(f"Usuario {users[token]['name']} desmuteó a {target_user_id}")
+                else:
+                    logger.error("Mensaje de unmute_user sin target_user_id")
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
@@ -432,7 +445,8 @@ async def broadcast_users():
         if users[token]["logged_in"]:
             decoded_token = base64.b64decode(token).decode('utf-8')
             legajo, name, _ = decoded_token.split('_', 2)
-            user_list.append(f"{users[token]['name']} ({legajo})")
+            user_id = f"{users[token]['name']}_{users[token]['function']}"  # Identificador único para mutear
+            user_list.append({"display": f"{users[token]['name']} ({legajo})", "user_id": user_id})
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"] is not None:
             try:
