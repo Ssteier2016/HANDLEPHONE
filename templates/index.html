@@ -9,26 +9,6 @@
     <link rel="icon" href="/templates/walkie-talkie.png" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="/templates/manifest.json">
-    <style>
-        /* Estilo para posicionar el botón de mute en la esquina inferior derecha */
-        #mute-button {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 50px; /* Ajusta el tamaño según tu imagen */
-            height: 50px;
-            cursor: pointer;
-            z-index: 1000; /* Asegura que esté por encima de otros elementos */
-            background: none;
-            border: none;
-            padding: 0;
-        }
-
-        #mute-button img {
-            width: 100%;
-            height: 100%;
-        }
-    </style>
 </head>
 <body>
     <div id="register" style="display: block;">
@@ -66,10 +46,7 @@
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
-        <!-- Reemplazamos el botón de texto por un botón con imagen -->
-        <button id="mute-button" onclick="toggleMute()">
-            <img src="/templates/mute.png" alt="Mutear/Desmutear">
-        </button>
+        <button id="mute" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
