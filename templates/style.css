@@ -127,7 +127,7 @@ button:hover {
     padding: 0; /* Sin padding para que la imagen defina el tamaño */
     border: none; /* Sin borde */
     background-color: #FF4500; /* Fondo rojo para mic.png (desmuteado) */
-    background-image: url('/templates/mic.png'); /* Imagen para desmutear por defecto */
+    background-image: url('/templates/mute.png'); /* Imagen para desmutear por defecto */
     background-size: cover; /* Ajustar imagen al tamaño del botón */
     background-repeat: no-repeat;
     cursor: pointer;
@@ -135,7 +135,7 @@ button:hover {
 
 #mute.active {
     background-color: #32CD32; /* Fondo verde para mute.png (muteado) */
-    background-image: url('/templates/mute.png'); /* Imagen para mutear */
+    background-image: url('/templates/mic.png'); /* Imagen para mutear */
 }
 
 #users {
@@ -162,7 +162,7 @@ button:hover {
     padding: 0; /* Sin padding */
     border: none; /* Sin borde */
     background-color: transparent; /* Fondo transparente */
-    background-image: url('/templates/mute.png'); /* Imagen por defecto */
+    background-image: url('/templates/mic.png'); /* Imagen por defecto */
     background-size: cover; /* Ajustar imagen */
     background-repeat: no-repeat;
     cursor: pointer;
@@ -170,7 +170,7 @@ button:hover {
 }
 
 .user-mute-btn.active {
-    background-image: url('/templates/mic.png'); /* Imagen para desmutear */
+    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
 }
 
 #messages, #history-screen {
