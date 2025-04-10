@@ -72,7 +72,7 @@ body {
 .close-btn {
     background-color: transparent;
     border: none;
-    color: #FF4500;
+    color: # CampbellFF4500;
     font-size: 20px;
     cursor: pointer;
     padding: 5px 10px;
@@ -126,15 +126,16 @@ button:hover {
     height: 24px; /* Tamaño pequeño para la imagen */
     padding: 0; /* Sin padding para que la imagen defina el tamaño */
     border: none; /* Sin borde */
-    background-color: transparent; /* Fondo transparente */
-    background-image: url('/templates/mute.png'); /* Imagen para mutear */
+    background-color: #FF4500; /* Fondo rojo para mic.png (desmuteado) */
+    background-image: url('/templates/mic.png'); /* Imagen para desmutear por defecto */
     background-size: cover; /* Ajustar imagen al tamaño del botón */
     background-repeat: no-repeat;
     cursor: pointer;
 }
 
 #mute.active {
-    background-image: url('/templates/mic.png'); /* Imagen para desmutear */
+    background-color: #32CD32; /* Fondo verde para mute.png (muteado) */
+    background-image: url('/templates/mute.png'); /* Imagen para mutear */
 }
 
 #users {
@@ -156,8 +157,8 @@ button:hover {
 }
 
 .user-mute-btn {
-    width: 10px; /* Mismo tamaño que el ícono 🔊 */
-    height: 10px; /* Mismo tamaño que el ícono 🔊 */
+    width: 6px; /* Mucho más pequeño (antes 10px) */
+    height: 6px; /* Mucho más pequeño (antes 10px) */
     padding: 0; /* Sin padding */
     border: none; /* Sin borde */
     background-color: transparent; /* Fondo transparente */
@@ -343,8 +344,8 @@ select:hover {
     }
 
     .user-mute-btn {
-        width: 8px; /* Más pequeño en pantallas pequeñas */
-        height: 8px;
+        width: 5px; /* Mucho más pequeño (antes 8px) */
+        height: 5px;
     }
 
     h2 {
@@ -428,8 +429,8 @@ select:hover {
     }
 
     .user-mute-btn {
-        width: 10px; /* Tamaño pequeño */
-        height: 10px;
+        width: 6px; /* Mucho más pequeño (antes 10px) */
+        height: 6px;
     }
 
     h2 {
@@ -471,4 +472,4 @@ select:hover {
 
 .flight:last-child {
     border-bottom: none;
-        }
+    }
