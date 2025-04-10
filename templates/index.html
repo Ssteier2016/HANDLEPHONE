@@ -46,11 +46,17 @@
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
-        <button id="mute" onclick="toggleMute()">Mutear</button>
+        <button id="mute" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
-        <div id="users">Usuarios conectados: 0</div>
+        <div id="users">
+            <!-- Ejemplo de usuario dinámico -->
+            <div class="user-item">
+                <span>Usuario Ejemplo 12345</span>
+                <button class="user-mute-btn"></button>
+            </div>
+        </div>
     </div>
 
     <div id="radar-screen" style="display: none;">
