@@ -127,13 +127,13 @@ button:hover {
     padding: 0; /* Sin padding para que la imagen defina el tamaño */
     border: none; /* Sin borde */
     background-color: transparent; /* Fondo transparente */
-    background-image: url('/templates/mute.png'); /* Imagen inicial (mutear) */
+    background-image: url('/templates/mute.png'); /* Imagen para mutear */
     background-size: cover; /* Ajustar imagen al tamaño del botón */
     background-repeat: no-repeat;
     cursor: pointer;
 }
 
-#mute.active { /* Clase para estado desmuteado (micrófono activo) */
+#mute.active {
     background-image: url('/templates/mic.png'); /* Imagen para desmutear */
 }
 
@@ -142,19 +142,34 @@ button:hover {
     font-size: 12px;
     color: #FF4500;
     text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
-    display: flex; /* Usar flexbox para alinear texto e ícono */
-    justify-content: center; /* Centrar el contenedor */
-    align-items: center;
+    text-align: left; /* Alinear a la izquierda para mejor control */
 }
 
-#users span { /* Estilo para el nombre del usuario */
-    margin-right: 5px; /* Espacio entre el nombre y el ícono */
+.user-item {
+    display: flex; /* Flexbox para alinear nombre, legajo y botón */
+    align-items: center; /* Centrar verticalmente */
+    margin: 2px 0; /* Espaciado entre usuarios */
 }
 
-#users img { /* Estilo para el ícono */
-    width: 10px; /* Muy pequeño */
-    height: 10px; /* Muy pequeño */
+.user-item span {
+    margin-right: 5px; /* Espacio entre nombre/legajo y botón */
+}
+
+.user-mute-btn {
+    width: 10px; /* Mismo tamaño que el ícono 🔊 */
+    height: 10px; /* Mismo tamaño que el ícono 🔊 */
+    padding: 0; /* Sin padding */
+    border: none; /* Sin borde */
+    background-color: transparent; /* Fondo transparente */
+    background-image: url('/templates/mute.png'); /* Imagen por defecto */
+    background-size: cover; /* Ajustar imagen */
+    background-repeat: no-repeat;
+    cursor: pointer;
     vertical-align: middle; /* Alinear con el texto */
+}
+
+.user-mute-btn.active {
+    background-image: url('/templates/mic.png'); /* Imagen para desmutear */
 }
 
 #messages, #history-screen {
@@ -327,7 +342,7 @@ select:hover {
         font-size: 10px;
     }
 
-    #users img {
+    .user-mute-btn {
         width: 8px; /* Más pequeño en pantallas pequeñas */
         height: 8px;
     }
@@ -412,7 +427,7 @@ select:hover {
         font-size: 14px;
     }
 
-    #users img {
+    .user-mute-btn {
         width: 10px; /* Tamaño pequeño */
         height: 10px;
     }
@@ -456,4 +471,4 @@ select:hover {
 
 .flight:last-child {
     border-bottom: none;
-    }
+        }
