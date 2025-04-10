@@ -11,6 +11,8 @@ from fastapi.responses import HTMLResponse
 import logging
 import aiohttp
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 import speech_recognition as sr
 import io
@@ -26,7 +28,12 @@ with open("templates/index.html", "r") as f:
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    return INDEX_HTML
+    # Agregar encabezados para evitar caché en Chrome
+    response = HTMLResponse(content=INDEX_HTML)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -107,14 +114,25 @@ async def get_airplanes_live_data():
         logger.error(f"Error al obtener datos de Airplanes.Live: {str(e)}")
         return {"error": str(e)}
 
-# Función para hacer web scraping de TAMS (actualizada para vuelos AR)
+# Función para hacer web scraping de TAMS (actualizada con reintentos y mejor manejo de errores)
 def scrape_tams():
     url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        # Verificar si el sitio está accesible
+        response = session.head(url, timeout=5)
+        if response.status_code != 200:
+            logger.warning(f"No se puede acceder a TAMS. Código de estado: {response.status_code}")
+            return []
+
+        # Hacer la solicitud completa
+        response = session.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         flights = []
@@ -134,6 +152,7 @@ def scrape_tams():
             registration = row[4]
             position = row[5] if len(row) > 5 else ""
             destination = row[11] if len(row) > 11 else ""
+            status = row[15] if len(row) > 15 else "Desconocido"  # Estado del vuelo (puede incluir "Cancelado")
 
             if airline == "AR":  # Solo vuelos de Aerolíneas Argentinas
                 flights.append({
@@ -141,13 +160,17 @@ def scrape_tams():
                     "STD": scheduled_time,
                     "Posicion": position,
                     "Destino": destination,
-                    "Matricula": registration if registration != " " else "N/A"
+                    "Matricula": registration if registration != " " else "N/A",
+                    "Estado": status  # Agregar el estado del vuelo
                 })
 
         logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas encontrados")
         return flights
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         logger.error(f"Error al scrapear TAMS: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error inesperado al scrapear TAMS: {e}")
         return []
 
 # Función para eliminar duplicados
@@ -180,6 +203,8 @@ async def update_tams_flights():
                         logger.error(f"Error al enviar actualización de vuelos: {e}")
                         user["websocket"] = None
             logger.info(f"Enviados {len(unique_flights)} vuelos únicos")
+        else:
+            logger.warning("No se encontraron vuelos únicos en TAMS para enviar")
         await asyncio.sleep(300)  # 5 minutos
 
 @app.get("/opensky")
@@ -188,11 +213,14 @@ async def get_opensky_data():
     tams_data = scrape_tams()
     
     if isinstance(airplanes_data, dict) and "error" in airplanes_data:
-        return airplanes_data
+        logger.error(f"Error en Airplanes.Live: {airplanes_data['error']}")
+        airplanes_data = []  # Continuar con datos vacíos para mostrar al menos los datos de TAMS
     if isinstance(tams_data, dict) and "error" in tams_data:
-        return tams_data
+        logger.error(f"Error en TAMS: {tams_data['error']}")
+        tams_data = []  # Continuar con datos vacíos para mostrar al menos los datos de Airplanes.Live
 
     combined_data = []
+    # Primero, agregar vuelos activos de Airplanes.Live
     for plane in airplanes_data:
         flight = plane.get("flight", "").strip()
         registration = plane.get("r", "").strip()
@@ -204,18 +232,22 @@ async def get_opensky_data():
                 "lon": plane.get("lon"),
                 "alt_geom": plane.get("alt_geom"),
                 "gs": plane.get("gs"),
-                "vert_rate": plane.get("vert_rate")
+                "vert_rate": plane.get("vert_rate"),
+                "origin_dest": f"{plane.get('orig', 'N/A')}-{plane.get('dest', 'N/A')}"
             }
+            # Combinar con datos de TAMS si están disponibles
             for tams_flight in tams_data:
                 if tams_flight["Matricula"] == registration:
                     plane_info.update({
                         "scheduled": tams_flight["STD"],
                         "position": tams_flight["Posicion"],
                         "destination": tams_flight["Destino"],
+                        "status": tams_flight.get("Estado", "Desconocido")
                     })
                     break
             combined_data.append(plane_info)
     
+    # Agregar vuelos de TAMS que no están en Airplanes.Live (por ejemplo, cancelados o programados)
     for tams_flight in tams_data:
         if not any(plane["registration"] == tams_flight["Matricula"] for plane in combined_data):
             combined_data.append({
@@ -224,22 +256,29 @@ async def get_opensky_data():
                 "scheduled": tams_flight["STD"],
                 "position": tams_flight["Posicion"],
                 "destination": tams_flight["Destino"],
-                "lat": None, "lon": None, "alt_geom": None, "gs": None, "vert_rate": None
+                "status": tams_flight.get("Estado", "Desconocido"),
+                "lat": None,
+                "lon": None,
+                "alt_geom": None,
+                "gs": None,
+                "vert_rate": None,
+                "origin_dest": None
             })
 
+    logger.info(f"Datos combinados: {len(combined_data)} vuelos (Airplanes.Live: {len(airplanes_data)}, TAMS: {len(tams_data)})")
     return combined_data
 
 def init_db():
-    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db para consistencia
+    conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')  # Cambiado audio de BLOB a TEXT para almacenar Base64
+                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
     conn.commit()
     conn.close()
 
 def save_message(user_id, audio_data, text, timestamp):
     date = datetime.utcnow().strftime("%Y-%m-%d")
-    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db
+    conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
               (user_id, audio_data, text, timestamp, date))
@@ -248,7 +287,7 @@ def save_message(user_id, audio_data, text, timestamp):
     logger.info(f"Mensaje guardado en la base de datos: user_id={user_id}, timestamp={timestamp}")
 
 def get_history():
-    conn = sqlite3.connect("chat_history.db")  # Cambiado de history.db a chat_history.db
+    conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
     rows = c.fetchall()
@@ -286,10 +325,10 @@ async def process_audio_queue():
                 "function": function,
                 "text": text,
                 "timestamp": timestamp,
-                "data": audio_data  # Incluir el audio en Base64
+                "data": audio_data
             }
             logger.info(f"Retransmitiendo mensaje a {len(users)} usuarios")
-            for user_token, user in list(users.items()):  # Usar list() para evitar RuntimeError por modificación del diccionario
+            for user_token, user in list(users.items()):
                 if user_token == token or user.get("muted", False):
                     if user.get("muted", False):
                         logger.info(f"Usuario {user['name']} está muteado, no recibirá el mensaje")
@@ -394,7 +433,7 @@ async def broadcast_users():
             decoded_token = base64.b64decode(token).decode('utf-8')
             legajo, name, _ = decoded_token.split('_', 2)
             user_list.append(f"{users[token]['name']} ({legajo})")
-    for user in list(users.values()):  # Usar list() para evitar RuntimeError
+    for user in list(users.values()):
         if user["logged_in"] and user["websocket"] is not None:
             try:
                 await user["websocket"].send_text(json.dumps({
@@ -427,9 +466,10 @@ async def startup_event():
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
-    asyncio.create_task(update_tams_flights())  # Iniciar actualización de vuelos de TAMS
+    asyncio.create_task(update_tams_flights())
     logger.info("Aplicación iniciada, tareas programadas")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))  # Usar el puerto asignado por Render
+    uvicorn.run(app, host="0.0.0.0", port=port)
