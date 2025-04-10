@@ -11,6 +11,7 @@ let flightData = [];
 let markers = [];
 let recognition; // Variable para SpeechRecognition
 let supportsSpeechRecognition = false; // Bandera para verificar soporte
+let mutedUsers = new Set(); // Estado local para rastrear usuarios muteados
 
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
@@ -124,6 +125,11 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                     console.error("Mensaje de audio sin datos de audio:", message);
                     return;
                 }
+                const senderId = `${message.sender}_${message.function}`;
+                if (mutedUsers.has(senderId)) {
+                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                    return;
+                }
                 const audioBlob = base64ToBlob(message.data, 'audio/webm');
                 console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
                 playAudio(audioBlob);
@@ -145,7 +151,25 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 chatList.scrollTop = chatList.scrollHeight;
                 console.log("Mensaje de audio agregado al chat-list");
             } else if (message.type === "users") {
-                document.getElementById("users").textContent = `Usuarios conectados: ${message.count} (${message.list.join(", ")})`;
+                const usersDiv = document.getElementById("users");
+                usersDiv.innerHTML = `Usuarios conectados: ${message.count} `;
+                const userList = document.createElement("div");
+                userList.className = "user-list";
+                message.list.forEach(user => {
+                    const userDiv = document.createElement("div");
+                    userDiv.className = "user-item";
+                    const muteButton = document.createElement("button");
+                    muteButton.className = "mute-button";
+                    const isMuted = mutedUsers.has(user.user_id);
+                    muteButton.textContent = isMuted ? "🔊" : "🔇";
+                    muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
+                    userDiv.appendChild(muteButton);
+                    const userText = document.createElement("span");
+                    userText.textContent = user.display;
+                    userDiv.appendChild(userText);
+                    userList.appendChild(userDiv);
+                });
+                usersDiv.appendChild(userList);
                 console.log("Lista de usuarios actualizada:", message.list);
             } else if (message.type === "reconnect-websocket") {
                 const sessionToken = localStorage.getItem("sessionToken");
@@ -530,6 +554,26 @@ function toggleMute() {
     }
 }
 
+function toggleMuteUser(userId, button) {
+    if (mutedUsers.has(userId)) {
+        // Desmutear
+        mutedUsers.delete(userId);
+        button.textContent = "🔇";
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "unmute_user", target_user_id: userId }));
+        }
+        console.log(`Usuario ${userId} desmuteado`);
+    } else {
+        // Mutear
+        mutedUsers.add(userId);
+        button.textContent = "🔊";
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "mute_user", target_user_id: userId }));
+        }
+        console.log(`Usuario ${userId} muteado`);
+    }
+}
+
 function logout() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
@@ -637,3 +681,4 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Botón de registro no encontrado en el DOM");
     }
 });
+                    
