@@ -39,6 +39,9 @@ body {
 
 #main {
     display: none; /* Ocultar por defecto */
+    position: relative; /* Necesario para posicionar #mute a la derecha */
+    flex-direction: column;
+    gap: 15px;
 }
 
 #radar-screen {
@@ -98,6 +101,7 @@ button {
     background-color: #4682B4;
     transition: background-color 0.3s;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    position: relative; /* Permitir posicionamiento de hijos */
 }
 
 button:hover {
@@ -107,10 +111,21 @@ button:hover {
 
 #talk {
     background-color: #FF4500;
+    font-size: 28px; /* Doble del tamaño original (14px * 2) */
+    padding: 16px; /* Doble del padding original (8px * 2) */
+    width: 100%;
+    max-width: 400px; /* Limitar el ancho máximo */
+    margin: 5px auto; /* Centrarlo horizontalmente */
 }
 
 #mute {
     background-color: #32CD32;
+    position: absolute; /* Posicionarlo a la derecha */
+    right: 10px; /* Alinear a la derecha */
+    top: 50%; /* Centrar verticalmente */
+    transform: translateY(-50%); /* Ajuste vertical */
+    width: auto; /* Ajustar al contenido */
+    padding: 8px 16px; /* Mantener padding */
 }
 
 #users {
@@ -273,6 +288,17 @@ select:hover {
         padding: 6px;
     }
 
+    #talk {
+        font-size: 24px; /* Ajuste para pantallas pequeñas */
+        padding: 12px;
+        max-width: 100%; /* Ocupar todo el ancho */
+    }
+
+    #mute {
+        right: 5px; /* Menos margen en pantallas pequeñas */
+        padding: 6px 12px;
+    }
+
     h2 {
         font-size: 14px;
     }
@@ -340,6 +366,17 @@ select:hover {
         margin: 5px auto;
     }
 
+    #talk {
+        font-size: 32px; /* Más grande en pantallas grandes */
+        padding: 20px;
+        max-width: 400px;
+    }
+
+    #mute {
+        right: 10px;
+        padding: 10px 20px;
+    }
+
     h2 {
         font-size: 18px;
     }
@@ -383,4 +420,4 @@ select:hover {
 
 .flight:last-child {
     border-bottom: none;
-        }
+    }
