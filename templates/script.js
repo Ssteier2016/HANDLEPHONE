@@ -119,100 +119,174 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 
     ws.onmessage = function(event) {
-        console.log("Datos recibidos del servidor:", event.data);
-        try {
-            const message = JSON.parse(event.data);
-            console.log("Mensaje parseado:", message);
+    console.log("Datos recibidos del servidor:", event.data);
+    try {
+        const message = JSON.parse(event.data);
+        console.log("Mensaje parseado:", message);
 
-            if (!message.type) {
-                console.error("Mensaje sin tipo:", message);
+        if (!message.type) {
+            console.error("Mensaje sin tipo:", message);
+            return;
+        }
+
+        if (message.type === "audio") {
+            if (!message.data) {
+                console.error("Mensaje de audio sin datos de audio:", message);
+                return;
+            }
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
+            playAudio(audioBlob);
+            const chatList = document.getElementById("chat-list");
+            if (!chatList) {
+                console.error("Elemento chat-list no encontrado en el DOM");
                 return;
             }
 
-            if (message.type === "audio") {
-                if (!message.data) {
-                    console.error("Mensaje de audio sin datos de audio:", message);
-                    return;
-                }
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
-                playAudio(audioBlob);
-                const chatList = document.getElementById("chat-list");
-                if (!chatList) {
-                    console.error("Elemento chat-list no encontrado en el DOM");
-                    return;
-                }
-
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log("Mensaje de audio agregado al chat-list");
-            } else if (message.type === "users") {
-                updateUsers(message.count, message.list);
-            } else if (message.type === "reconnect-websocket") {
-                const sessionToken = localStorage.getItem("sessionToken");
-                if (sessionToken) {
-                    connectWebSocket(sessionToken);
-                }
-                console.log("Intentando reconectar WebSocket...");
-            } else if (message.type === "join_group") {
-                currentGroup = message.group_id;
-                updateSwipeHint();
-                console.log(`Unido al grupo: ${message.group_id}`);
-            } else if (message.type === "check_group") {
-                if (!message.in_group) {
-                    currentGroup = null;
-                    updateSwipeHint();
-                    console.log("No estás en el grupo, currentGroup restablecido a null");
-                }
-            } else if (message.type === "group_message") {
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                if (!audioBlob) {
-                    console.error("No se pudo crear el Blob para el mensaje de grupo");
-                    return;
-                }
-                playAudio(audioBlob);
-                const chatList = document.getElementById("group-chat-list");
-                if (!chatList) {
-                    console.error("Elemento group-chat-list no encontrado en el DOM");
-                    return;
-                }
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log("Mensaje de grupo agregado al group-chat-list");
-            } else {
-                console.warn("Tipo de mensaje desconocido:", message.type);
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de audio agregado al chat-list");
+        } else if (message.type === "users") {
+            updateUsers(message.count, message.list);
+        } else if (message.type === "reconnect-websocket") {
+            const sessionToken = localStorage.getItem("sessionToken");
+            if (sessionToken) {
+                connectWebSocket(sessionToken);
             }
-        } catch (err) {
-            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+            console.log("Intentando reconectar WebSocket...");
+        } else if (message.type === "join_group") {
+            currentGroup = message.group_id;
+            updateSwipeHint();
+            console.log(`Unido al grupo: ${message.group_id}`);
+        } else if (message.type === "check_group") {
+            if (!message.in_group) {
+                currentGroup = null;
+                updateSwipeHint();
+                console.log("No estás en el grupo, currentGroup restablecido a null");
+            }
+        } else if (message.type === "group_message") {
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            if (!audioBlob) {
+                console.error("No se pudo crear el Blob para el mensaje de grupo");
+                return;
+            }
+            playAudio(audioBlob);
+            const chatList = document.getElementById("group-chat-list");
+            if (!chatList) {
+                console.error("Elemento group-chat-list no encontrado en el DOM");
+                return;
+            }
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de grupo agregado al group-chat-list");
+        } else if (message.type === "flight_update") {
+            // Actualizar vuelos de TAMS en tiempo real
+            updateFlightDetails(message.flights, "#flight-details");
+            updateFlightDetails(message.flights, "#group-flight-details");
+        } else if (message.type === "aa2000_flight_update") {
+            // Actualizar vuelos de AA2000 en tiempo real
+            updateFlightDetailsAA2000(message.flights, "#flight-details");
+            updateFlightDetailsAA2000(message.flights, "#group-flight-details");
+        } else {
+            console.warn("Tipo de mensaje desconocido:", message.type);
         }
-    };
+    } catch (err) {
+        console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+    }
+};
 
+// Nueva función para mostrar vuelos de TAMS
+function updateFlightDetails(flights, containerId) {
+    const container = document.getElementById(containerId.slice(1));
+    if (!container) {
+        console.error(`Elemento ${containerId} no encontrado en el DOM`);
+        return;
+    }
+    container.innerHTML = "";
+    flights.forEach(state => {
+        const flight = state.Vuelo || "N/A";
+        const scheduled = state.STD || "N/A";
+        const position = state.Posicion || "N/A";
+        const destination = state.Destino || "N/A";
+        const registration = state.Matricula || "LV-XXX";
+        const status = state.Estado || "Desconocido";
+
+        if (flight.startsWith("AR")) {
+            const flightNumber = flight.replace("AR", "");
+            const displayFlight = `AEP${flightNumber}`;
+            const flightDiv = document.createElement("div");
+            flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+            flightDiv.innerHTML = `
+                <strong>Vuelo:</strong> ${displayFlight} | 
+                <strong>STD:</strong> ${scheduled} | 
+                <strong>Posición:</strong> ${position} | 
+                <strong>Destino:</strong> ${destination} | 
+                <strong>Matrícula:</strong> ${registration} | 
+                <strong>Estado:</strong> ${status}
+            `;
+            container.appendChild(flightDiv);
+        }
+    });
+    container.scrollTop = container.scrollHeight;
+}
+
+// Nueva función para mostrar vuelos de AA2000
+function updateFlightDetailsAA2000(flights, containerId) {
+    const container = document.getElementById(containerId.slice(1));
+    if (!container) {
+        console.error(`Elemento ${containerId} no encontrado en el DOM`);
+        return;
+    }
+    container.innerHTML = "";
+    flights.forEach(flight => {
+        const flightNumber = flight.flight_number;
+        const scheduled = flight.scheduled_time;
+        const destination = flight.origin_destination;
+        const status = flight.status;
+        const gate = flight.gate;
+        const flightType = flight.flight_type === "partidas" ? "Salida" : "Llegada";
+
+        const flightDiv = document.createElement("div");
+        flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+        flightDiv.innerHTML = `
+            <strong>Vuelo:</strong> ${flightNumber} | 
+            <strong>STD:</strong> ${scheduled} | 
+            <strong>Destino:</strong> ${destination} | 
+            <strong>Puerta:</strong> ${gate} | 
+            <strong>Tipo:</strong> ${flightType} | 
+            <strong>Estado:</strong> ${status}
+        `;
+        container.appendChild(flightDiv);
+    });
+    container.scrollTop = container.scrollHeight;
+                }
+                    
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
     };
@@ -404,99 +478,136 @@ function filterFlights() {
 }
 
 // Actualizar datos de vuelos desde /opensky
-function updateOpenSkyData() {
-    fetch('/opensky')
-        .then(response => response.json())
-        .then(data => {
-            console.log("Datos recibidos de /opensky:", data);
-            const flightDetails = document.getElementById("flight-details");
-            const groupFlightDetails = document.getElementById("group-flight-details");
-            if (!flightDetails || !groupFlightDetails) {
-                console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
-                return;
-            }
-            flightDetails.innerHTML = "";
-            groupFlightDetails.innerHTML = "";
-            flightData = data;
-            markers = [];
+// Actualizar datos de vuelos desde /opensky y /aa2000_flights
+async function updateOpenSkyData() {
+    try {
+        // Obtener datos de /opensky (TAMS y Airplanes.Live)
+        const openskyResponse = await fetch('/opensky');
+        const openskyData = await openskyResponse.json();
+        console.log("Datos recibidos de /opensky:", openskyData);
 
-            if (map) {
-                map.eachLayer(layer => {
-                    if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
-                        map.removeLayer(layer);
+        // Obtener datos de /aa2000_flights (Aeropuertos Argentina 2000)
+        const aa2000Response = await fetch('/aa2000_flights');
+        const aa2000Data = await aa2000Response.json();
+        console.log("Datos recibidos de /aa2000_flights:", aa2000Data);
+
+        const flightDetails = document.getElementById("flight-details");
+        const groupFlightDetails = document.getElementById("group-flight-details");
+        if (!flightDetails || !groupFlightDetails) {
+            console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
+            return;
+        }
+        flightDetails.innerHTML = "";
+        groupFlightDetails.innerHTML = "";
+        flightData = openskyData; // Mantener compatibilidad con el radar
+        markers = [];
+
+        if (map) {
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
+                    map.removeLayer(layer);
+                }
+            });
+        }
+
+        // Procesar datos de OpenSky (TAMS y Airplanes.Live)
+        if (openskyData.error) {
+            console.warn("Error en Airplanes.Live:", openskyData.error);
+            flightDetails.textContent = "Esperando datos de Airplanes.Live...";
+            groupFlightDetails.textContent = "Esperando datos de Airplanes.Live...";
+        } else {
+            openskyData.forEach(state => {
+                const lat = state.lat;
+                const lon = state.lon;
+                const flight = state.flight ? state.flight.trim() : 'N/A';
+                const registration = state.registration || "LV-XXX";
+                const speed = state.gs;
+                const altitude = state.alt_geom || 0;
+                const verticalRate = state.vert_rate || 0;
+                const originDest = state.origin_dest || "N/A";
+                const scheduled = state.scheduled || "N/A";
+                const position = state.position || "N/A";
+                const destination = state.destination || "N/A";
+                const status = state.status || getFlightStatus(altitude, speed, verticalRate);
+
+                if (flight.startsWith("AR") || flight.startsWith("ARG")) {
+                    const flightNumber = flight.replace("ARG", "").replace("AR", "");
+                    const displayFlight = `AEP${flightNumber}`;
+
+                    // Mostrar en #flight-details y #group-flight-details
+                    const flightDiv = document.createElement("div");
+                    flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+                    flightDiv.innerHTML = `
+                        <strong>Vuelo:</strong> ${displayFlight} | 
+                        <strong>STD:</strong> ${scheduled} | 
+                        <strong>Posición:</strong> ${position} | 
+                        <strong>Destino:</strong> ${destination} | 
+                        <strong>Matrícula:</strong> ${registration} | 
+                        <strong>Estado:</strong> ${status}
+                    `;
+                    flightDetails.appendChild(flightDiv);
+                    groupFlightDetails.appendChild(flightDiv.cloneNode(true));
+
+                    // Mostrar en el mapa (si está visible)
+                    if (lat && lon && map) {
+                        const marker = L.marker([lat, lon], { 
+                            icon: L.icon({
+                                iconUrl: '/templates/aero.png',
+                                iconSize: [30, 30]
+                            })
+                        }).addTo(map)
+                          .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
+                        marker.flight = flight;
+                        marker.registration = registration;
+                        markers.push(marker);
                     }
-                });
-            }
+                }
+            });
+        }
 
-            if (data.error) {
-                console.warn("Error en Airplanes.Live:", data.error);
-                flightDetails.textContent = "Esperando datos de Airplanes.Live...";
-                groupFlightDetails.textContent = "Esperando datos de Airplanes.Live...";
-            } else {
-                data.forEach(state => {
-                    const lat = state.lat;
-                    const lon = state.lon;
-                    const flight = state.flight ? state.flight.trim() : 'N/A';
-                    const registration = state.registration || "LV-XXX";
-                    const speed = state.gs;
-                    const altitude = state.alt_geom || 0;
-                    const verticalRate = state.vert_rate || 0;
-                    const originDest = state.origin_dest || "N/A";
-                    const scheduled = state.scheduled || "N/A";
-                    const position = state.position || "N/A";
-                    const destination = state.destination || "N/A";
-                    const status = state.status || getFlightStatus(altitude, speed, verticalRate);
-
-                    if (flight.startsWith("AR") || flight.startsWith("ARG")) {
-                        const flightNumber = flight.replace("ARG", "").replace("AR", "");
-                        const displayFlight = `AEP${flightNumber}`;
-
-                        // Mostrar en #flight-details
-                        const flightDiv = document.createElement("div");
-                        flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
-                        flightDiv.innerHTML = `
-                            <strong>Vuelo:</strong> ${displayFlight} | 
-                            <strong>STD:</strong> ${scheduled} | 
-                            <strong>Posición:</strong> ${position} | 
-                            <strong>Destino:</strong> ${destination} | 
-                            <strong>Matrícula:</strong> ${registration} | 
-                            <strong>Estado:</strong> ${status}
-                        `;
-                        flightDetails.appendChild(flightDiv);
-                        groupFlightDetails.appendChild(flightDiv.cloneNode(true));
-
-                        // Mostrar en el mapa (si está visible)
-                        if (lat && lon && map) {
-                            const marker = L.marker([lat, lon], { 
-                                icon: L.icon({
-                                    iconUrl: '/templates/aero.png',
-                                    iconSize: [30, 30]
-                                })
-                            }).addTo(map)
-                              .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
-                            marker.flight = flight;
-                            marker.registration = registration;
-                            markers.push(marker);
-                        }
-                    }
-                });
-                flightDetails.scrollTop = flightDetails.scrollHeight;
-                groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
+        // Procesar datos de AA2000
+        if (aa2000Data.error) {
+            console.warn("Error en AA2000:", aa2000Data.error);
+            if (!flightDetails.textContent) {
+                flightDetails.textContent = "Esperando datos de AA2000...";
+                groupFlightDetails.textContent = "Esperando datos de AA2000...";
             }
-        })
-        .catch(err => {
-            console.error("Error al cargar datos de Airplanes.Live:", err);
-            const flightDetails = document.getElementById("flight-details");
-            const groupFlightDetails = document.getElementById("group-flight-details");
-            if (flightDetails) {
-                flightDetails.textContent = "Error al conectar con Airplanes.Live";
+        } else {
+            aa2000Data.forEach(flight => {
+                const flightNumber = flight.flight_number;
+                const scheduled = flight.scheduled_time;
+                const destination = flight.origin_destination;
+                const status = flight.status;
+                const gate = flight.gate;
+                const flightType = flight.flight_type === "partidas" ? "Salida" : "Llegada";
+
+                // Mostrar en #flight-details y #group-flight-details
+                const flightDiv = document.createElement("div");
+                flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+                flightDiv.innerHTML = `
+                    <strong>Vuelo:</strong> ${flightNumber} | 
+                    <strong>STD:</strong> ${scheduled} | 
+                    <strong>Destino:</strong> ${destination} | 
+                    <strong>Puerta:</strong> ${gate} | 
+                    <strong>Tipo:</strong> ${flightType} | 
+                    <strong>Estado:</strong> ${status}
+                `;
+                flightDetails.appendChild(flightDiv);
+                groupFlightDetails.appendChild(flightDiv.cloneNode(true));
+            });
+        }
+
+        flightDetails.scrollTop = flightDetails.scrollHeight;
+        groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
+    } catch (err) {
+        console.error("Error al cargar datos de vuelos:", err);
+        const flightDetails = document.getElementById("flight-details");
+        const groupFlightDetails = document.getElementById("group-flight-details");
+        if (flightDetails) flightDetails.textContent = "Error al conectar con los servidores de vuelos";
+        if (groupFlightDetails) groupFlightDetails.textContent = "Error al conectar con los servidores de vuelos";
+    }
+    setTimeout(updateOpenSkyData, 15000); // Refrescar cada 15 segundos
             }
-            if (groupFlightDetails) {
-                groupFlightDetails.textContent = "Error al conectar con Airplanes.Live";
-            }
-        });
-    setTimeout(updateOpenSkyData, 15000);
-}
 
 // Alternar la grabación de audio
 async function toggleTalk() {
