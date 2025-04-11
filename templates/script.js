@@ -13,7 +13,6 @@ let markers = []; // Marcadores en el mapa para los vuelos
 let recognition; // Objeto para SpeechRecognition (transcripción de voz)
 let supportsSpeechRecognition = false; // Bandera para verificar soporte de SpeechRecognition
 let mutedUsers = new Set(); // Estado local para rastrear usuarios muteados
-let isGlobalMuted = true; // Inicia muteado porque #mute tiene class="active" por defecto
 
 // Mapeo de aerolíneas y letras para posibles conversiones
 const AIRLINE_MAPPING = {
@@ -115,106 +114,93 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
         updateOpenSkyData();
     };
 
-    // Actualizar ws.onmessage para manejar respuestas del servidor
-ws.onmessage = function(event) {
-    console.log("Datos recibidos del servidor:", event.data);
-    try {
-        const message = JSON.parse(event.data);
-        console.log("Mensaje parseado:", message);
+    ws.onmessage = function(event) {
+        console.log("Datos recibidos del servidor:", event.data);
+        try {
+            const message = JSON.parse(event.data);
+            console.log("Mensaje parseado:", message);
 
-        if (!message.type) {
-            console.error("Mensaje sin tipo:", message);
-            return;
-        }
+            if (!message.type) {
+                console.error("Mensaje sin tipo:", message);
+                return;
+            }
 
-        if (message.type === "connection_success") {
-            console.log("Conexión al servidor establecida:", message.message);
-        } else if (message.type === "register_success") {
-            console.log("Registro confirmado por el servidor:", message.message);
-            document.getElementById("register").style.display = "none";
-            const mainDiv = document.getElementById("main");
-            if (mainDiv) {
-                mainDiv.style.display = "block";
-                console.log("Pantalla principal mostrada tras registro exitoso");
+            if (message.type === "audio") {
+                if (!message.data) {
+                    console.error("Mensaje de audio sin datos de audio:", message);
+                    return;
+                }
+                const senderId = `${message.sender}_${message.function}`;
+                if (mutedUsers.has(senderId)) {
+                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                    return;
+                }
+                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
+                playAudio(audioBlob);
+                const chatList = document.getElementById("chat-list");
+                if (!chatList) {
+                    console.error("Elemento chat-list no encontrado en el DOM");
+                    return;
+                }
+
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "chat-message";
+                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = message.sender || "Anónimo";
+                const userFunction = message.function || "Desconocida";
+                const text = message.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+                msgDiv.onclick = () => playAudio(audioBlob);
+                chatList.appendChild(msgDiv);
+                chatList.scrollTop = chatList.scrollHeight;
+                console.log("Mensaje de audio agregado al chat-list");
+            } else if (message.type === "users") {
+                const usersDiv = document.getElementById("users");
+                usersDiv.innerHTML = `Usuarios conectados: ${message.count} `;
+                const userList = document.createElement("div");
+                userList.className = "user-list";
+                console.log("Mensaje de usuarios recibido:", message);
+                message.list.forEach(user => {
+                    console.log("Procesando usuario:", user);
+                    const userDiv = document.createElement("div");
+                    userDiv.className = "user-item";
+                    const muteButton = document.createElement("button");
+                    muteButton.className = "mute-button";
+                    const isMuted = mutedUsers.has(user.user_id);
+                    muteButton.textContent = isMuted ? "🔇" : "🔊";
+                    muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
+                    userDiv.appendChild(muteButton);
+                    const userText = document.createElement("span");
+                    let displayText = user.display;
+                    if (!displayText || displayText === user.user_id) {
+                        const parts = user.user_id.split('_');
+                        if (parts.length === 3) {
+                            const [, name, userFunction] = parts;
+                            displayText = `${name} (${userFunction})`;
+                        } else {
+                            displayText = user.user_id;
+                        }
+                    }
+                    userText.textContent = displayText;
+                    userDiv.appendChild(userText);
+                    userList.appendChild(userDiv);
+                });
+                usersDiv.appendChild(userList);
+                console.log("Lista de usuarios actualizada:", message.list);
+            } else if (message.type === "reconnect-websocket") {
+                const sessionToken = localStorage.getItem("sessionToken");
+                if (sessionToken) {
+                    connectWebSocket(sessionToken);
+                }
+                console.log("Intentando reconectar WebSocket...");
             } else {
-                console.error("Elemento #main no encontrado en el DOM");
-                alert("Error interno: No se encontró la pantalla principal.");
+                console.warn("Tipo de mensaje desconocido:", message.type);
             }
-            updateOpenSkyData();
-        } else if (message.type === "audio") {
-            if (isGlobalMuted) {
-                console.log("Audio recibido pero ignorado porque el mute global está activo");
-                return; // No reproducir audio si está muteado globalmente
-            }
-            const mutedUsers = JSON.parse(localStorage.getItem("mutedUsers") || "[]");
-            const senderId = `${message.sender}_${message.function}`;
-            if (mutedUsers.includes(senderId)) {
-                console.log(`Usuario ${senderId} está muteado localmente, audio ignorado`);
-                return; // No reproducir si el usuario está muteado individualmente
-            }
-            const audioBlob = base64ToBlob(message.data, "audio/webm");
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.play();
-            const chatList = document.getElementById("chat-list");
-            const messageDiv = document.createElement("div");
-            messageDiv.className = "chat-message";
-            messageDiv.innerHTML = `<span class="play-icon">▶</span> ${message.sender} (${message.function}): ${message.text}`;
-            messageDiv.onclick = () => audio.play();
-            chatList.appendChild(messageDiv);
-            chatList.scrollTop = chatList.scrollHeight;
-        } else if (message.type === "users") {
-    const usersDiv = document.getElementById("users");
-    usersDiv.innerHTML = `Usuarios conectados: ${message.count} `;
-    const userList = document.createElement("div");
-    userList.className = "user-list";
-    console.log("Mensaje de usuarios recibido:", message);
-    message.list.forEach(user => {
-        console.log("Procesando usuario:", user);
-        const userDiv = document.createElement("div");
-        userDiv.className = "user-item";
-        const muteButton = document.createElement("button");
-        muteButton.className = "mute-button";
-        const isMuted = mutedUsers.has(user.user_id);
-        // Usaremos emojis 🔇 y 🔊 en lugar de imágenes (esto se ajustará más adelante)
-        muteButton.textContent = isMuted ? "🔇" : "🔊";
-        muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
-        userDiv.appendChild(muteButton);
-        const userText = document.createElement("span");
-        // Si user.display no está definido, construimos el display a partir de user_id
-        let displayText = user.display;
-        if (!displayText || displayText === user.user_id) {
-            const parts = user.user_id.split('_');
-            if (parts.length === 3) {
-                const [, name, userFunction] = parts;
-                displayText = `${name} (${userFunction})`;
-            } else {
-                displayText = user.user_id; // Fallback si el formato no es correcto
-            }
+        } catch (err) {
+            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
         }
-        userText.textContent = displayText;
-        userDiv.appendChild(userText);
-        userList.appendChild(userDiv);
-    });
-    usersDiv.appendChild(userList);
-    console.log("Lista de usuarios actualizada:", message.list);
-        }
-            // ... (manejo existente de usuarios) ...
-        } else if (message.type === "mute_all_success") {
-            console.log("Muteo global activado por el servidor");
-            isGlobalMuted = true;
-            document.getElementById("mute").classList.add("active");
-        } else if (message.type === "unmute_all_success") {
-            console.log("Desmuteo global activado por el servidor");
-            isGlobalMuted = false;
-            document.getElementById("mute").classList.remove("active");
-        } else {
-            console.warn("Tipo de mensaje desconocido:", message.type);
-        }
-    } catch (err) {
-        console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
-    }
-};
+    };
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
@@ -258,6 +244,10 @@ window.onload = function() {
         mainDiv.style.display = "block";
         radarDiv.style.display = "none";
         historyDiv.style.display = "none";
+        const muteButton = document.getElementById("mute");
+        if (muteButton) {
+            muteButton.classList.add("unmuted");
+        }
         connectWebSocket(sessionToken);
     } else {
         console.log("Usuario no autenticado, mostrando pantalla de registro");
@@ -633,39 +623,32 @@ async function toggleTalk() {
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     }
-                                  }
-// Función actualizada para alternar mute/desmute sin texto
+}
 
+// Alternar el estado de muteo global
 function toggleMute() {
     const muteButton = document.getElementById("mute");
-    if (muteButton.classList.contains("active")) {
-        // Desmutear a todos
-        muteButton.classList.remove("active");
-        isGlobalMuted = false;
+    if (muteButton.classList.contains("unmuted")) {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_all" }));
-            console.log("Desmuteando a todos los usuarios");
-        } else {
-            console.error("WebSocket no conectado al intentar desmutear a todos");
+            ws.send(JSON.stringify({ type: "mute" }));
         }
+        muteButton.classList.remove("unmuted");
+        muteButton.classList.add("muted");
     } else {
-        // Mutear a todos
-        muteButton.classList.add("active");
-        isGlobalMuted = true;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_all" }));
-            console.log("Muteando a todos los usuarios");
-        } else {
-            console.error("WebSocket no conectado al intentar mutear a todos");
+            ws.send(JSON.stringify({ type: "unmute" }));
         }
+        muteButton.classList.remove("muted");
+        muteButton.classList.add("unmuted");
     }
 }
 
+// Alternar el muteo de un usuario específico
 function toggleMuteUser(userId, button) {
     if (mutedUsers.has(userId)) {
         // Desmutear
         mutedUsers.delete(userId);
-        button.textContent = "🔊";
+        button.textContent = "🔊"; // Mostrar 🔊 para mutear
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "unmute_user", target_user_id: userId }));
         }
@@ -673,7 +656,7 @@ function toggleMuteUser(userId, button) {
     } else {
         // Mutear
         mutedUsers.add(userId);
-        button.textContent = "🔇";
+        button.textContent = "🔇"; // Mostrar 🔇 para desmutear
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "mute_user", target_user_id: userId }));
         }
@@ -681,6 +664,7 @@ function toggleMuteUser(userId, button) {
     }
 }
 
+// Cerrar sesión
 function logout() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
@@ -700,6 +684,7 @@ function logout() {
     console.log("Sesión cerrada");
 }
 
+// Mostrar la pantalla del radar
 function showRadar() {
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "block";
@@ -712,6 +697,7 @@ function showRadar() {
     }
 }
 
+// Volver a la pantalla principal desde el radar
 function backToMainFromRadar() {
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
@@ -719,6 +705,7 @@ function backToMainFromRadar() {
     filterFlights();
 }
 
+// Mostrar el historial de mensajes
 function showHistory() {
     fetch('/history')
         .then(response => response.json())
@@ -744,11 +731,13 @@ function showHistory() {
         .catch(err => console.error("Error al cargar historial:", err));
 }
 
+// Volver a la pantalla principal desde el historial
 function backToMain() {
     document.getElementById("history-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
 }
 
+// Convertir Base64 a Blob para audio
 function base64ToBlob(base64, mime) {
     try {
         const byteString = atob(base64);
@@ -764,21 +753,6 @@ function base64ToBlob(base64, mime) {
     }
 }
 
-function playNextAudio() {
-    if (audioQueue.length === 0 || isPlaying) return;
-    isPlaying = true;
-    const audio = audioQueue.shift();
-    audio.play().then(() => {
-        console.log("Audio reproducido exitosamente");
-        isPlaying = false;
-        playNextAudio();
-    }).catch(err => {
-        console.error("Error reproduciendo audio:", err);
-        isPlaying = false;
-        playNextAudio();
-    });
-}
-
 // Agregar event listener para el botón de registro
 document.addEventListener('DOMContentLoaded', () => {
     const registerButton = document.getElementById('register-button');
@@ -787,5 +761,96 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error("Botón de registro no encontrado en el DOM");
     }
+    checkNotificationPermission();
 });
-        
+
+// Registro del Service Worker para PWA (opcional)
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        // Verificamos si el archivo sw.js existe antes de intentar registrarlo
+        fetch('/templates/sw.js', { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    navigator.serviceWorker.register('/templates/sw.js')
+                        .then(() => console.log('Service Worker registrado'))
+                        .catch(err => console.error('Error al registrar Service Worker:', err));
+                } else {
+                    console.warn('Archivo sw.js no encontrado. Funcionalidad de Service Worker no disponible.');
+                }
+            })
+            .catch(err => {
+                console.warn('No se pudo verificar la existencia de sw.js. Funcionalidad de Service Worker no disponible:', err);
+            });
+    } else {
+        console.warn('Service Worker no soportado en este navegador.');
+    }
+}
+
+// Manejo de notificaciones push (opcional, si el servidor lo soporta)
+function subscribeToPush() {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY') // Reemplazar con tu clave VAPID pública
+            }).then(subscription => {
+                console.log("Suscripción a push exitosa:", subscription);
+                fetch('/subscribe', {
+                    method: 'POST',
+                    body: JSON.stringify(subscription),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(err => {
+                    console.error("Error al enviar suscripción al servidor:", err);
+                });
+            }).catch(err => {
+                console.error("Error al suscribirse a push:", err);
+            });
+        }).catch(err => {
+            console.error("Error al obtener el Service Worker:", err);
+        });
+    } else {
+        console.warn('Notificaciones push no soportadas en este navegador.');
+    }
+}
+
+function urlBase64ToUint8Array(base64String) {
+    try {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    } catch (err) {
+        console.error("Error al convertir Base64 a Uint8Array:", err);
+        return null;
+    }
+}
+
+function checkNotificationPermission() {
+    try {
+        if (Notification.permission === "granted") {
+            subscribeToPush();
+        } else if (Notification.permission !== "denied") {
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    subscribeToPush();
+                }
+            }).catch(err => {
+                console.error("Error al solicitar permiso de notificaciones:", err);
+            });
+        }
+    } catch (err) {
+        console.error("Error al verificar permisos de notificaciones:", err);
+    }
+}
+
+// Inicializar Service Worker y notificaciones push al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    registerServiceWorker();
+    checkNotificationPermission();
+});
