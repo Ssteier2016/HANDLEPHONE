@@ -51,9 +51,10 @@ ICAO_ALPHABET = {
 def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-# Diccionarios para manejar usuarios y colas
-users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription, "muted_users": set}}
+# Diccionarios para manejar usuarios, colas y grupos
+users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription, "muted_users": set, "group_id": str or None}}
 audio_queue = asyncio.Queue()
+groups = {}  # {group_id: [lista de tokens de usuarios]}
 
 # Variable global para rastrear el muteo general
 global_mute_active = False  # Inicia desmuteado por defecto
@@ -346,6 +347,10 @@ async def process_audio_queue():
                 if sender_id in muted_users:
                     logger.info(f"Usuario {user['name']} ha muteado a {sender_id}, no recibirá el mensaje")
                     continue
+                # Si el usuario está en un grupo, no recibirá mensajes generales
+                if user.get("group_id"):
+                    logger.info(f"Usuario {user['name']} está en un grupo ({user['group_id']}), no recibirá mensajes generales")
+                    continue
                 ws = user.get("websocket")
                 if ws:
                     try:
@@ -381,7 +386,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "logged_in": True,
                 "websocket": websocket,
                 "muted_users": set(),  # Lista de usuarios muteados (como "name_function")
-                "subscription": None
+                "subscription": None,
+                "group_id": None  # Nuevo: campo para rastrear el grupo al que pertenece el usuario
             }
 
         # Enviar confirmación de conexión al cliente
@@ -419,6 +425,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
             elif message["type"] == "logout":
                 if token in users:
+                    group_id = users[token]["group_id"]
+                    if group_id and group_id in groups:
+                        if token in groups[group_id]:
+                            groups[group_id].remove(token)
+                        if not groups[group_id]:  # Si el grupo está vacío, eliminarlo
+                            del groups[group_id]
                     users[token]["logged_in"] = False
                     del users[token]
                 await broadcast_users()
@@ -442,11 +454,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 else:
                     logger.error("Mensaje de unmute_user sin target_user_id")
 
-            elif message["type"] == "mute_all":
-                global_mute_active = True
-                await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
-                logger.info(f"Usuario {users[token]['name']} activó muteo global")
-
             elif message["type"] == "unmute_all":
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
@@ -460,15 +467,113 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 logger.info(f"Usuario {users[token]['name']} desactivó mute local")
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
 
+            # Nuevos tipos de mensajes para grupos privados
+            elif message["type"] == "join_group":
+                group_id = message["group_id"]
+                if group_id not in groups:
+                    groups[group_id] = []
+                if token not in groups[group_id]:
+                    groups[group_id].append(token)
+                users[token]["group_id"] = group_id
+                await websocket.send_json({"type": "join_group", "group_id": group_id})
+                logger.info(f"Usuario {users[token]['name']} se unió al grupo {group_id}")
+                await broadcast_users()
+
+            elif message["type"] == "leave_group":
+                group_id = message["group_id"]
+                if token and group_id in groups:
+                    if token in groups[group_id]:
+                        groups[group_id].remove(token)
+                    if not groups[group_id]:  # Si el grupo está vacío, eliminarlo
+                        del groups[group_id]
+                    users[token]["group_id"] = None
+                    await broadcast_users()
+                    logger.info(f"Usuario {users[token]['name']} salió del grupo {group_id}")
+
+            elif message["type"] == "check_group":
+                group_id = message["group_id"]
+                in_group = False
+                if token and group_id in groups and token in groups[group_id]:
+                    in_group = True
+                await websocket.send_json({"type": "check_group", "group_id": group_id, "in_group": in_group})
+                logger.info(f"Verificación de grupo para {users[token]['name']}: {'está' if in_group else 'no está'} en el grupo {group_id}")
+
+            elif message["type"] == "group_message":
+                group_id = users[token]["group_id"]
+                if group_id and group_id in groups:
+                    audio_data = message.get("data")
+                    if not audio_data:
+                        logger.error("Mensaje de grupo sin datos de audio")
+                        continue
+                    text = message.get("text", "Sin transcripción")
+                    timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
+
+                    # Si el cliente no proporcionó una transcripción, transcribir en el servidor
+                    if text == "Sin transcripción" or text == "Pendiente de transcripción":
+                        logger.info("Transcribiendo audio de grupo en el servidor...")
+                        text = await transcribe_audio(audio_data)
+                        logger.info(f"Transcripción del servidor para mensaje de grupo: {text}")
+
+                    # Guardar el mensaje en la base de datos
+                    user_id = f"{users[token]['name']}_{users[token]['function']}"
+                    try:
+                        save_message(user_id, audio_data, f"[Grupo {group_id}] {text}", timestamp)
+                    except Exception as e:
+                        logger.error(f"Error al guardar el mensaje de grupo en la base de datos: {e}")
+
+                    # Enviar el mensaje solo a los usuarios del grupo
+                    broadcast_message = {
+                        "type": "group_message",
+                        "sender": users[token]["name"],
+                        "function": users[token]["function"],
+                        "text": text,
+                        "timestamp": timestamp,
+                        "data": audio_data,
+                        "group_id": group_id
+                    }
+                    for user_token in groups[group_id]:
+                        if user_token == token:
+                            continue
+                        if user_token in users:
+                            user = users[user_token]
+                            # Verificar si el usuario ha muteado al remitente
+                            muted_users = user.get("muted_users", set())
+                            sender_id = f"{users[token]['name']}_{users[token]['function']}"
+                            if sender_id in muted_users:
+                                logger.info(f"Usuario {user['name']} ha muteado a {sender_id}, no recibirá el mensaje de grupo")
+                                continue
+                            ws = user.get("websocket")
+                            if ws:
+                                try:
+                                    await ws.send_json(broadcast_message)
+                                    logger.info(f"Mensaje de grupo enviado a {user['name']} ({user_token}) en el grupo {group_id}")
+                                except Exception as e:
+                                    logger.error(f"Error al enviar mensaje de grupo a {user['name']} ({user_token}): {e}")
+                                    user["websocket"] = None
+                                    users[user_token]["logged_in"] = False
+                                    await broadcast_users()
+
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
+            group_id = users[token]["group_id"]
+            if group_id and group_id in groups:
+                if token in groups[group_id]:
+                    groups[group_id].remove(token)
+                if not groups[group_id]:
+                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
     except Exception as e:
         logger.error(f"Error en WebSocket para el cliente {token}: {str(e)}", exc_info=True)
         if token in users:
+            group_id = users[token]["group_id"]
+            if group_id and group_id in groups:
+                if token in groups[group_id]:
+                    groups[group_id].remove(token)
+                if not groups[group_id]:
+                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
@@ -494,7 +599,11 @@ async def broadcast_users():
             decoded_token = base64.b64decode(token).decode('utf-8')
             legajo, name, _ = decoded_token.split('_', 2)
             user_id = f"{users[token]['name']}_{users[token]['function']}"  # Identificador único para mutear
-            user_list.append({"display": f"{users[token]['name']} ({legajo})", "user_id": user_id})
+            user_list.append({
+                "display": f"{users[token]['name']} ({legajo})",
+                "user_id": user_id,
+                "group_id": users[token]["group_id"]  # Incluir el group_id en la lista de usuarios
+            })
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"] is not None:
             try:
@@ -503,7 +612,6 @@ async def broadcast_users():
                     "count": len(user_list),
                     "list": user_list
                 }))
-                
                 logger.info(f"Lista de usuarios enviada a {user['name']}")
             except Exception as e:
                 logger.error(f"Error al enviar lista de usuarios a un cliente: {e}")
