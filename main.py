@@ -440,13 +440,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     logger.error("Mensaje de unmute_user sin target_user_id")
 
             elif message["type"] == "mute_all":
-                global global_mute_active
+                global global_mute_active  # Declarar global al inicio del bloque
                 global_mute_active = True
                 await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
                 logger.info(f"Usuario {users[token]['name']} activó muteo global")
 
             elif message["type"] == "unmute_all":
-                global global_mute_active
+                global global_mute_active  # Declarar global al inicio del bloque
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
                 logger.info(f"Usuario {users[token]['name']} desactivó muteo global")
@@ -536,3 +536,6 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))  # Usar el puerto asignado por Render
     uvicorn.run(app, host="0.0.0.0", port=port)
+                # Mantener compatibilidad con mute individual o local si lo usas
+                logger.info(f"Usuario {users[token]['name']} activó mute local")
+                await websocket.send_json(
