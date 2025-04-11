@@ -13,6 +13,7 @@ let markers = []; // Marcadores en el mapa para los vuelos
 let recognition; // Objeto para SpeechRecognition (transcripción de voz)
 let supportsSpeechRecognition = false; // Bandera para verificar soporte de SpeechRecognition
 let mutedUsers = new Set(); // Estado local para rastrear usuarios muteados
+let isGlobalMuted = true; // Inicia muteado porque #mute tiene class="active" por defecto
 
 // Mapeo de aerolíneas y letras para posibles conversiones
 const AIRLINE_MAPPING = {
@@ -586,22 +587,29 @@ async function toggleTalk() {
 }
 
 // Función actualizada para alternar mute/desmute sin texto
+
 function toggleMute() {
     const muteButton = document.getElementById("mute");
     if (muteButton.classList.contains("active")) {
-        // Desmutear
+        // Desmutear a todos
         muteButton.classList.remove("active");
+        isGlobalMuted = false;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute" }));
+            ws.send(JSON.stringify({ type: "unmute_all" }));
+            console.log("Desmuteando a todos los usuarios");
+        } else {
+            console.error("WebSocket no conectado al intentar desmutear a todos");
         }
-        console.log("Desmuteado");
     } else {
-        // Mutear
+        // Mutear a todos
         muteButton.classList.add("active");
+        isGlobalMuted = true;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute" }));
+            ws.send(JSON.stringify({ type: "mute_all" }));
+            console.log("Muteando a todos los usuarios");
+        } else {
+            console.error("WebSocket no conectado al intentar mutear a todos");
         }
-        console.log("Muteado");
     }
 }
 
