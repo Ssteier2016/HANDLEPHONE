@@ -35,6 +35,10 @@
     <div id="main" style="display: none;">
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
+        <div id="swipe-hint" style="display: none; font-size: 12px; color: #4682B4; margin-bottom: 10px;">
+            Desliza a la izquierda para volver al grupo
+        </div>
+        <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()">Volver al Grupo</button>
         <div id="flights-window">
             <h3>Datos de Vuelos</h3>
             <div id="flight-details">
@@ -45,12 +49,40 @@
             <h3>Conversación</h3>
             <div id="chat-list"></div>
         </div>
+        <div id="group-join">
+            <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
+            <button id="join-group-btn" onclick="joinGroup()">Unirme</button>
+        </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" class="active" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
         <div id="users">Usuarios conectados: 0</div>
+    </div>
+
+    <div id="group-screen" style="display: none;">
+        <button id="back-to-main" onclick="backToMainFromGroup()">
+            <img src="/templates/volver.png" alt="Volver" class="back-icon">
+        </button>
+        <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
+        <h2>Grupo Privado</h2>
+        <div id="group-flights-window">
+            <h3>Datos de Vuelos</h3>
+            <div id="group-flight-details">
+                <!-- Los vuelos se cargarán aquí dinámicamente -->
+            </div>
+        </div>
+        <div id="group-chat-window">
+            <h3>Conversación</h3>
+            <div id="group-chat-list"></div>
+        </div>
+        <button id="group-talk" onclick="toggleGroupTalk()">Hablar</button>
+        <button id="group-mute" class="active" onclick="toggleGroupMute()"></button>
+        <button id="group-radar" onclick="showGroupRadar()">Ver Radar</button>
+        <button id="group-history" onclick="showGroupHistory()">Historial</button>
+        <button id="leave-group-btn" onclick="leaveGroup()">Salir del Grupo</button>
+        <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
     <div id="radar-screen" style="display: none;">
