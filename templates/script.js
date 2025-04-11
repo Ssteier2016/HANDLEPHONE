@@ -461,6 +461,7 @@ async function toggleTalk() {
         stream = await requestMicPermission();
         if (!stream) {
             console.error("No se pudo obtener el stream del micrófono");
+            alert("No se pudo acceder al micrófono. Por favor, verifica los permisos.");
             return;
         }
 
@@ -503,13 +504,27 @@ async function toggleTalk() {
 
         mediaRecorder.ondataavailable = function(event) {
             console.log("Datos de audio disponibles:", event.data.size, "bytes");
-            audioChunks.push(event.data);
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            } else {
+                console.warn("Fragmento de audio vacío recibido");
+            }
         };
         mediaRecorder.onstop = function() {
             console.log("Grabación detenida");
             console.log("Tamaño de audioChunks:", audioChunks.length);
+            if (audioChunks.length === 0) {
+                console.error("No se capturaron fragmentos de audio");
+                alert("No se grabó ningún audio. Verifica tu micrófono.");
+                return;
+            }
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             console.log("Audio Blob creado, tamaño:", audioBlob.size, "bytes");
+            if (audioBlob.size === 0) {
+                console.error("Audio Blob vacío");
+                alert("El audio grabado está vacío. Verifica tu micrófono.");
+                return;
+            }
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
@@ -519,15 +534,23 @@ async function toggleTalk() {
                 const sender = localStorage.getItem("userName") || "Anónimo";
                 const userFunction = localStorage.getItem("userFunction") || "Desconocida";
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ 
-                        type: "audio", 
+                    const message = {
+                        type: "audio",
                         data: base64data,
                         text: transcript,
                         timestamp: timestamp,
                         sender: sender,
                         function: userFunction
-                    }));
-                    console.log("Enviado al servidor:", { data: base64data.slice(0, 20) + "...", text: transcript, timestamp, sender, function: userFunction });
+                    };
+                    console.log("Enviando mensaje al servidor:", {
+                        type: message.type,
+                        data: message.data.slice(0, 20) + "...",
+                        text: message.text,
+                        timestamp: message.timestamp,
+                        sender: message.sender,
+                        function: message.function
+                    });
+                    ws.send(JSON.stringify(message));
                 } else {
                     console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
                     alert("No se pudo enviar el mensaje: WebSocket no está conectado.");
@@ -547,6 +570,7 @@ async function toggleTalk() {
             };
             reader.onerror = function(err) {
                 console.error("Error al leer el audio como Base64:", err);
+                alert("Error al procesar el audio: " + err.message);
             };
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
@@ -558,7 +582,7 @@ async function toggleTalk() {
         };
         mediaRecorder.onerror = function(err) {
             console.error("Error en MediaRecorder:", err);
-            alert("Error durante la grabación: " + err);
+            alert("Error durante la grabación: " + err.message);
         };
         try {
             mediaRecorder.start(100);
@@ -574,8 +598,7 @@ async function toggleTalk() {
         talkButton.textContent = "Hablar";
         talkButton.style.backgroundColor = "red";
     }
-}
-
+                                  }
 // Función actualizada para alternar mute/desmute sin texto
 
 function toggleMute() {
