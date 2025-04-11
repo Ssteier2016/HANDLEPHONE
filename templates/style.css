@@ -72,7 +72,7 @@ body {
 .close-btn {
     background-color: transparent;
     border: none;
-    color: # CampbellFF4500;
+    color: #FF4500; /* Corregido: era "CampbellFF4500" */
     font-size: 20px;
     cursor: pointer;
     padding: 5px 10px;
@@ -110,7 +110,7 @@ button:hover {
 }
 
 #talk {
-    background-color: #FF4500;
+    BACKGROUND-COLOR: #FF4500;
     font-size: 28px; /* Doble del tamaño original (14px * 2) */
     padding: 16px; /* Doble del padding original (8px * 2) */
     width: 100%;
@@ -140,37 +140,50 @@ button:hover {
 
 #users {
     margin-top: 10px;
-    font-size: 12px;
-    color: #FF4500;
-    text-shadow: 0 0 3px rgba(255, 69, 0, 0.3);
-    text-align: left; /* Alinear a la izquierda para mejor control */
+    padding: 8px;
+    background-color: #F5F5F5; /* Igual que el contenedor de chat-list */
+    border: 2px solid #4682B4; /* Igual que chat-list */
+    border-radius: 5px; /* Igual que chat-list */
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2); /* Igual que chat-list */
+    max-height: 150px; /* Igual que chat-list */
+    overflow-y: auto; /* Permitir desplazamiento si hay muchos usuarios */
+    text-align: left; /* Alinear a la izquierda para consistencia */
 }
 
 .user-item {
-    display: flex; /* Flexbox para alinear nombre, legajo y botón */
+    border: 1px solid #4682B4; /* Igual que chat-message */
+    padding: 5px; /* Igual que chat-message */
+    margin: 5px 0; /* Igual que chat-message */
+    background-color: #FFFFFF; /* Igual que chat-message */
+    border-radius: 5px; /* Igual que chat-message */
+    color: #333333; /* Igual que chat-message */
+    text-shadow: none; /* Igual que chat-message */
+    display: flex; /* Para alinear texto y botón de mute */
     align-items: center; /* Centrar verticalmente */
-    margin: 2px 0; /* Espaciado entre usuarios */
+    justify-content: space-between; /* Texto a la izquierda, botón a la derecha */
+    cursor: default; /* No es clickable como chat-message, pero mantenemos consistencia */
 }
 
 .user-item span {
-    margin-right: 5px; /* Espacio entre nombre/legajo y botón */
+    flex-grow: 1; /* Permitir que el texto ocupe el espacio disponible */
 }
 
-.user-mute-btn {
-    width: 6px; /* Mucho más pequeño (antes 10px) */
-    height: 6px; /* Mucho más pequeño (antes 10px) */
-    padding: 0; /* Sin padding */
+.mute-button { /* Cambiado de .user-mute-btn a .mute-button para coincidir con tu JavaScript */
+    background: none; /* Sin fondo para integrarse al cartel */
     border: none; /* Sin borde */
-    background-color: transparent; /* Fondo transparente */
-    background-image: url('/templates/mic.png'); /* Imagen por defecto */
-    background-size: cover; /* Ajustar imagen */
-    background-repeat: no-repeat;
+    font-size: 12px; /* Tamaño ajustado para el emoji */
     cursor: pointer;
-    vertical-align: middle; /* Alinear con el texto */
+    padding: 0; /* Sin padding */
+    margin-left: 5px; /* Espacio entre texto y botón */
+    color: #FF4500; /* Color del emoji igual que play-icon */
+    width: 16px; /* Tamaño fijo para consistencia */
+    height: 16px; /* Tamaño fijo para consistencia */
+    line-height: 16px; /* Centrar el emoji verticalmente */
+    text-align: center; /* Centrar el emoji horizontalmente */
 }
 
-.user-mute-btn.active {
-    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
+.mute-button:hover {
+    color: #FF6347; /* Hover igual que otros botones */
 }
 
 #messages, #history-screen {
@@ -341,11 +354,20 @@ select:hover {
 
     #users {
         font-size: 10px;
+        padding: 6px; /* Ajustado para pantallas pequeñas */
+        max-height: 120px; /* Igual que chat-list */
     }
 
-    .user-mute-btn {
-        width: 5px; /* Mucho más pequeño (antes 8px) */
-        height: 5px;
+    .user-item {
+        padding: 4px; /* Ligeramente menos que chat-message para pantallas pequeñas */
+        margin: 4px 0; /* Igual que chat-message ajustado */
+    }
+
+    .mute-button {
+        font-size: 10px; /* Ajustado para pantallas pequeñas */
+        width: 14px; /* Ajustado */
+        height: 14px; /* Ajustado */
+        line-height: 14px; /* Centrar el emoji */
     }
 
     h2 {
@@ -426,11 +448,20 @@ select:hover {
 
     #users {
         font-size: 14px;
+        padding: 8px; /* Igual que chat-list */
+        max-height: 200px; /* Igual que chat-list */
     }
 
-    .user-mute-btn {
-        width: 6px; /* Mucho más pequeño (antes 10px) */
-        height: 6px;
+    .user-item {
+        padding: 5px; /* Igual que chat-message */
+        margin: 5px 0; /* Igual que chat-message */
+    }
+
+    .mute-button {
+        font-size: 12px; /* Igual que pantallas grandes */
+        width: 16px; /* Tamaño fijo */
+        height: 16px; /* Tamaño fijo */
+        line-height: 16px; /* Centrar el emoji */
     }
 
     h2 {
@@ -472,4 +503,4 @@ select:hover {
 
 .flight:last-child {
     border-bottom: none;
-    }
+}
