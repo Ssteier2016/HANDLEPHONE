@@ -645,7 +645,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
 import psycopg2
 
 def setup_driver():
@@ -758,7 +757,6 @@ async def update_aa2000_flights():
         
         if all_flights:
             save_to_aa2000_database(all_flights, db_url)
-            # Emitir a clientes conectados
             for user in users.values():
                 if user["logged_in"] and user["websocket"] is not None:
                     try:
@@ -775,6 +773,42 @@ async def update_aa2000_flights():
             logger.warning("No se encontraron vuelos de AA2000")
         
         await asyncio.sleep(300)  # 5 minutos
+
+@app.get("/aa2000_flights")
+async def get_aa2000_flights():
+    try:
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT flight_number, origin_destination, scheduled_time, status, gate, flight_type 
+            FROM aa2000_flights 
+            ORDER BY scraped_at DESC
+        """)
+        flights = cursor.fetchall()
+        conn.close()
+        return [
+            {
+                "flight_number": f[0],
+                "origin_destination": f[1],
+                "scheduled_time": f[2],
+                "status": f[3],
+                "gate": f[4],
+                "flight_type": f[5]
+            } for f in flights
+        ]
+    except Exception as e:
+        logger.error(f"Error al obtener vuelos de AA2000: {e}")
+        return {"error": str(e)}
+
+# Añadir la tarea al startup
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+    asyncio.create_task(clear_messages())
+    asyncio.create_task(process_audio_queue())
+    asyncio.create_task(update_tams_flights())
+    asyncio.create_task(update_aa2000_flights())  # Añadida aquí
+    logger.info("Aplicación iniciada, tareas programadas")
         
 if __name__ == "__main__":
     import uvicorn
