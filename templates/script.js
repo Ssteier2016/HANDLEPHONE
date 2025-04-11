@@ -118,92 +118,99 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 
     ws.onmessage = function(event) {
-        console.log("Datos recibidos del servidor:", event.data);
-        try {
-            const message = JSON.parse(event.data);
-            console.log("Mensaje parseado:", message);
+    console.log("Datos recibidos del servidor:", event.data);
+    try {
+        const message = JSON.parse(event.data);
+        console.log("Mensaje parseado:", message);
 
-            if (!message.type) {
-                console.error("Mensaje sin tipo:", message);
+        if (!message.type) {
+            console.error("Mensaje sin tipo:", message);
+            return;
+        }
+
+        if (message.type === "audio") {
+            if (!message.data) {
+                console.error("Mensaje de audio sin datos de audio:", message);
+                return;
+            }
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
+            playAudio(audioBlob);
+            const chatList = document.getElementById("chat-list");
+            if (!chatList) {
+                console.error("Elemento chat-list no encontrado en el DOM");
                 return;
             }
 
-            if (message.type === "audio") {
-                if (!message.data) {
-                    console.error("Mensaje de audio sin datos de audio:", message);
-                    return;
-                }
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
-                playAudio(audioBlob);
-                const chatList = document.getElementById("chat-list");
-                if (!chatList) {
-                    console.error("Elemento chat-list no encontrado en el DOM");
-                    return;
-                }
-
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log("Mensaje de audio agregado al chat-list");
-            } else if (message.type === "users") {
-                const usersDiv = document.getElementById("users");
-                usersDiv.innerHTML = `Usuarios conectados: ${message.count} `;
-                const userList = document.createElement("div");
-                userList.className = "user-list";
-                console.log("Mensaje de usuarios recibido:", message);
-                message.list.forEach(user => {
-                    console.log("Procesando usuario:", user);
-                    const userDiv = document.createElement("div");
-                    userDiv.className = "user-item";
-                    const muteButton = document.createElement("button");
-                    muteButton.className = "mute-button";
-                    const isMuted = mutedUsers.has(user.user_id);
-                    muteButton.textContent = isMuted ? "🔇" : "🔊";
-                    muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
-                    userDiv.appendChild(muteButton);
-                    const userText = document.createElement("span");
-                    let displayText = user.display;
-                    if (!displayText || displayText === user.user_id) {
-                        const parts = user.user_id.split('_');
-                        if (parts.length === 3) {
-                            const [, name, userFunction] = parts;
-                            displayText = `${name} (${userFunction})`;
-                        } else {
-                            displayText = user.user_id;
-                        }
-                    }
-                    userText.textContent = displayText;
-                    userDiv.appendChild(userText);
-                    userList.appendChild(userDiv);
-                });
-                usersDiv.appendChild(userList);
-                console.log("Lista de usuarios actualizada:", message.list);
-            } else if (message.type === "reconnect-websocket") {
-                const sessionToken = localStorage.getItem("sessionToken");
-                if (sessionToken) {
-                    connectWebSocket(sessionToken);
-                }
-                console.log("Intentando reconectar WebSocket...");
-            } else {
-                console.warn("Tipo de mensaje desconocido:", message.type);
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de audio agregado al chat-list");
+        } else if (message.type === "users") {
+            updateUsers(message.count, message.list);
+        } else if (message.type === "reconnect-websocket") {
+            const sessionToken = localStorage.getItem("sessionToken");
+            if (sessionToken) {
+                connectWebSocket(sessionToken);
             }
-        } catch (err) {
-            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+            console.log("Intentando reconectar WebSocket...");
+        } else if (message.type === "join_group") {
+            currentGroup = message.group_id;
+            updateSwipeHint();
+            console.log(`Unido al grupo: ${message.group_id}`);
+        } else if (message.type === "check_group") {
+            if (!message.in_group) {
+                currentGroup = null;
+                updateSwipeHint();
+                console.log("No estás en el grupo, currentGroup restablecido a null");
+            }
+        } else if (message.type === "group_message") {
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            if (!audioBlob) {
+                console.error("No se pudo crear el Blob para el mensaje de grupo");
+                return;
+            }
+            playAudio(audioBlob);
+            const chatList = document.getElementById("group-chat-list");
+            if (!chatList) {
+                console.error("Elemento group-chat-list no encontrado en el DOM");
+                return;
+            }
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de grupo agregado al group-chat-list");
+        } else {
+            console.warn("Tipo de mensaje desconocido:", message.type);
         }
-    };
+    } catch (err) {
+        console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+    }
+};
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
