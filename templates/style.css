@@ -169,24 +169,7 @@ button:hover {
 }
 
 .mute-button {
-    background: none; /* Sin fondo para mostrar solo el ícono */
-    border: none; /* Sin borde para eliminar el cuadrado azul */
-    font-size: 12px; /* Tamaño del ícono */
-    cursor: pointer;
-    padding: 0; /* Sin padding */
-    margin-left: 5px; /* Espacio entre texto y botón */
-    color: #FF4500; /* Color del ícono igual que play-icon */
-    width: 16px; /* Tamaño fijo para el ícono */
-    height: 16px; /* Tamaño fijo para el ícono */
-    line-height: 16px; /* Centrar el ícono verticalmente */
-    text-align: center; /* Centrar el ícono horizontalmente */
-    box-shadow: none; /* Eliminar sombra heredada de button */
-    outline: none; /* Eliminar contorno al hacer clic */
-}
 
-.mute-button:hover {
-    color: #FF6347; /* Cambio de color al pasar el mouse */
-}
 
 #messages, #history-screen {
     margin-top: 15px;
@@ -220,6 +203,19 @@ button:hover {
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
+.mute-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    padding: 0;
+}
+
+.mute-button:hover {
+    opacity: 0.7;
+}
+    
 .chat-message {
     border: 1px solid #4682B4;
     padding: 5px;
