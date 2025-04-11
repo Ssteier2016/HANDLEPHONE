@@ -676,14 +676,67 @@ function toggleMuteUser(userId, button) {
 
 function updateUsers(count, list) {
     const usersDiv = document.getElementById('users');
+    const groupUsersDiv = document.getElementById('group-users');
+    if (!usersDiv || !groupUsersDiv) {
+        console.error("Elementos #users o #group-users no encontrados en el DOM");
+        return;
+    }
     usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
+    groupUsersDiv.innerHTML = `Usuarios conectados: ${list.filter(user => user.group_id === currentGroup).length}<br>`;
+    const userList = document.createElement("div");
+    userList.className = "user-list";
+    const groupUserList = document.createElement("div");
+    groupUserList.className = "user-list";
+
     list.forEach(user => {
-        const userItem = document.createElement('div');
-        userItem.className = 'user-item';
-        userItem.innerHTML = `<span>${user.display}</span>`;
-        usersDiv.appendChild(userItem);
+        // Lista de usuarios en la pantalla principal
+        const userDiv = document.createElement("div");
+        userDiv.className = "user-item";
+        if (user.group_id && user.group_id === currentGroup) {
+            userDiv.classList.add('in-group');
+        }
+        const muteButton = document.createElement("button");
+        muteButton.className = "mute-button";
+        const isMuted = mutedUsers.has(user.user_id);
+        muteButton.textContent = isMuted ? "🔇" : "🔊";
+        muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
+        userDiv.appendChild(muteButton);
+        const userText = document.createElement("span");
+        let displayText = user.display;
+        if (!displayText || displayText === user.user_id) {
+            const parts = user.user_id.split('_');
+            if (parts.length === 3) {
+                const [, name, userFunction] = parts;
+                displayText = `${name} (${userFunction})`;
+            } else {
+                displayText = user.user_id;
+            }
+        }
+        userText.textContent = displayText;
+        userDiv.appendChild(userText);
+        userList.appendChild(userDiv);
+
+        // Lista de usuarios en la pantalla del grupo
+        if (user.group_id === currentGroup) {
+            const groupUserDiv = document.createElement("div");
+            groupUserDiv.className = "user-item";
+            const groupMuteButton = document.createElement("button");
+            groupMuteButton.className = "mute-button";
+            groupMuteButton.textContent = isMuted ? "🔇" : "🔊";
+            groupMuteButton.onclick = () => toggleMuteUser(user.user_id, groupMuteButton);
+            groupUserDiv.appendChild(groupMuteButton);
+            const groupUserText = document.createElement("span");
+            groupUserText.textContent = displayText;
+            groupUserDiv.appendChild(groupUserText);
+            groupUserList.appendChild(groupUserDiv);
+        }
     });
+
+    usersDiv.appendChild(userList);
+    groupUsersDiv.appendChild(groupUserList);
+    console.log("Lista de usuarios actualizada:", list);
 }
+
 
 function addMessage(sender, userFunction, text, audioData, timestamp) {
     const chatList = document.getElementById('chat-list');
