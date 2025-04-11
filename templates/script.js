@@ -13,7 +13,10 @@ let markers = []; // Marcadores en el mapa para los vuelos
 let recognition; // Objeto para SpeechRecognition (transcripción de voz)
 let supportsSpeechRecognition = false; // Bandera para verificar soporte de SpeechRecognition
 let mutedUsers = new Set(); // Estado local para rastrear usuarios muteados
-
+let currentGroup = null; // Nuevo
+let isSwiping = false;  // Nuevo
+let startX = 0;         // Nuevo
+let currentX = 0;       // Nuevo
 // Mapeo de aerolíneas y letras para posibles conversiones
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
@@ -663,6 +666,201 @@ function toggleMuteUser(userId, button) {
         console.log(`Usuario ${userId} muteado`);
     }
 }
+
+function updateUsers(count, list) {
+    const usersDiv = document.getElementById('users');
+    usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
+    list.forEach(user => {
+        const userItem = document.createElement('div');
+        userItem.className = 'user-item';
+        userItem.innerHTML = `<span>${user.display}</span>`;
+        usersDiv.appendChild(userItem);
+    });
+}
+
+function addMessage(sender, userFunction, text, audioData, timestamp) {
+    const chatList = document.getElementById('chat-list');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message';
+    messageDiv.innerHTML = `<span class="play-icon">▶</span>${sender} (${userFunction}): ${text} (${timestamp})`;
+    messageDiv.onclick = () => {
+        const audio = new Audio(`data:audio/webm;base64,${audioData}`);
+        audio.play();
+    };
+    chatList.appendChild(messageDiv);
+    chatList.scrollTop = chatList.scrollHeight;
+}
+
+// ... (código existente)
+
+// Función para unirse a un grupo
+function joinGroup() {
+    const groupId = document.getElementById('group-id').value.trim();
+    if (!groupId) {
+        alert('Por favor, ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'join_group', group_id: groupId }));
+        currentGroup = groupId;
+        document.getElementById('main').style.display = 'none';
+        document.getElementById('group-screen').style.display = 'block';
+        updateSwipeHint();
+    } else {
+        alert('No estás connected al servidor. Por favor, intenta de nuevo.');
+    }
+}
+
+// Función para salir de un grupo
+function leaveGroup() {
+    if (socket && socket.readyState === WebSocket.OPEN && currentGroup) {
+        socket.send(JSON.stringify({ type: 'leave_group', group_id: currentGroup }));
+        currentGroup = null;
+        document.getElementById('group-screen').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        document.getElementById('group-chat-list').innerHTML = ''; // Limpiar el chat del grupo
+        document.getElementById('group-flight-details').innerHTML = ''; // Limpiar los vuelos del grupo
+        updateSwipeHint();
+    }
+}
+
+// Función para verificar el estado del grupo
+function checkGroupStatus() {
+    if (socket && socket.readyState === WebSocket.OPEN && currentGroup) {
+        socket.send(JSON.stringify({ type: 'check_group', group_id: currentGroup }));
+    }
+}
+
+// Función para actualizar el botón "Volver al Grupo" y el texto de indicación
+function updateSwipeHint() {
+    const swipeHint = document.getElementById('swipe-hint');
+    const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (currentGroup) {
+        swipeHint.style.display = 'block';
+        returnToGroupBtn.style.display = 'block';
+    } else {
+        swipeHint.style.display = 'none';
+        returnToGroupBtn.style.display = 'none';
+    }
+}
+
+// Función para regresar al grupo desde la pantalla principal
+function returnToGroup() {
+    if (currentGroup) {
+        document.getElementById('main').classList.add('slide-left');
+        setTimeout(() => {
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('group-screen').style.display = 'block';
+            document.getElementById('main').classList.remove('slide-left');
+        }, 300);
+    }
+}
+
+// Función para volver a la pantalla principal desde el grupo
+function backToMainFromGroup() {
+    document.getElementById('group-screen').classList.add('slide-right');
+    setTimeout(() => {
+        document.getElementById('group-screen').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        document.getElementById('group-screen').classList.remove('slide-right');
+        checkGroupStatus();
+    }, 300);
+}
+
+// Funciones para manejar mensajes de voz en el grupo
+let groupRecording = false;
+let groupMediaRecorder = null;
+
+function toggleGroupTalk() {
+    const talkButton = document.getElementById('group-talk');
+    if (!groupRecording) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                groupMediaRecorder = new MediaRecorder(stream);
+                const chunks = [];
+                groupMediaRecorder.ondataavailable = e => chunks.push(e.data);
+                groupMediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const audioData = reader.result.split(',')[1];
+                        sendGroupMessage(audioData);
+                    };
+                    reader.readAsDataURL(blob);
+                };
+                groupMediaRecorder.start();
+                groupRecording = true;
+                talkButton.style.backgroundColor = '#32CD32';
+            })
+            .catch(err => {
+                console.error('Error al acceder al micrófono:', err);
+                alert('No se pudo acceder al micrófono. Por favor, verifica los permisos.');
+            });
+    } else {
+        groupMediaRecorder.stop();
+        groupRecording = false;
+        talkButton.style.backgroundColor = '#FF4500';
+    }
+}
+
+function toggleGroupMute() {
+    const muteButton = document.getElementById('group-mute');
+    muteButton.classList.toggle('active');
+}
+
+function sendGroupMessage(audioData) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        socket.send(JSON.stringify({
+            type: 'group_message',
+            data: audioData,
+            sender: localStorage.getItem('userName'),
+            function: localStorage.getItem('userFunction'),
+            timestamp: timestamp,
+            text: 'Pendiente de transcripción'
+        }));
+    }
+}
+
+// Funciones para mostrar radar e historial desde el grupo
+function showGroupRadar() {
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'block';
+    initMap();
+}
+
+function showGroupHistory() {
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('history-screen').style.display = 'block';
+    loadHistory();
+}
+
+// Event listeners para gestos de deslizamiento
+document.addEventListener('touchstart', e => {
+    if (!isSwiping) {
+        startX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchmove', e => {
+    if (!isSwiping) {
+        currentX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchend', e => {
+    if (isSwiping) return;
+    const deltaX = currentX - startX;
+    if (Math.abs(deltaX) > 50) { // Umbral de deslizamiento
+        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
+            // Deslizar a la derecha: volver a main desde group-screen
+            backToMainFromGroup();
+        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
+            // Deslizar a la izquierda: volver al grupo desde main
+            returnToGroup();
+        }
+    }
+});
 
 // Cerrar sesión
 function logout() {
