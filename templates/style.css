@@ -176,7 +176,7 @@ button:hover {
     font-size: 16px;
     margin-right: 5px;
     padding: 0;
-    color: #FF4500; /* Igual que play-icon */
+    color: #FFFFFF /* Igual que play-icon */
     outline: none; /* Eliminar borde azul al hacer focus */
     transition: opacity 0.3s; /* Transición suave para el hover */
 }
