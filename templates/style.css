@@ -119,23 +119,28 @@ button:hover {
 }
 
 #mute {
-    position: absolute; /* Posicionarlo en la esquina superior derecha */
-    right: 10px; /* Alinear a la derecha */
-    top: 10px; /* Alinear arriba */
-    width: 24px; /* Tamaño pequeño para la imagen */
-    height: 24px; /* Tamaño pequeño para la imagen */
-    padding: 0; /* Sin padding para que la imagen defina el tamaño */
-    border: none; /* Sin borde */
-    background-color: #FF4500; /* Fondo rojo para mic.png (desmuteado) */
-    background-image: url('/templates/mute.png'); /* Imagen para desmutear por defecto */
-    background-size: cover; /* Ajustar imagen al tamaño del botón */
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background-color: #FF4500; /* Fondo rojo para desmuteado */
+    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
+    background-size: cover;
     background-repeat: no-repeat;
     cursor: pointer;
 }
 
-#mute.active {
-    background-color: #32CD32; /* Fondo verde para mute.png (muteado) */
+#mute.muted {
+    background-color: #32CD32; /* Fondo verde para muteado */
     background-image: url('/templates/mic.png'); /* Imagen para mutear */
+}
+
+#mute.unmuted {
+    background-color: #FF4500; /* Fondo rojo para desmuteado */
+    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
 }
 
 #users {
