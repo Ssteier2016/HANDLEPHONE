@@ -452,12 +452,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 logger.info(f"Usuario {users[token]['name']} desactivó muteo global")
 
             elif message["type"] == "mute":
-                # Mantener compatibilidad con mute individual o local si lo usas
                 logger.info(f"Usuario {users[token]['name']} activó mute local")
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
 
             elif message["type"] == "unmute":
-                # Mantener compatibilidad con unmute individual o local si lo usas
                 logger.info(f"Usuario {users[token]['name']} desactivó mute local")
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
 
@@ -536,6 +534,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))  # Usar el puerto asignado por Render
     uvicorn.run(app, host="0.0.0.0", port=port)
-                # Mantener compatibilidad con mute individual o local si lo usas
-                logger.info(f"Usuario {users[token]['name']} activó mute local")
-                await websocket.send_json(
