@@ -409,11 +409,13 @@ function updateOpenSkyData() {
         .then(data => {
             console.log("Datos recibidos de /opensky:", data);
             const flightDetails = document.getElementById("flight-details");
-            if (!flightDetails) {
-                console.error("Elemento #flight-details no encontrado en el DOM");
+            const groupFlightDetails = document.getElementById("group-flight-details");
+            if (!flightDetails || !groupFlightDetails) {
+                console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
                 return;
             }
             flightDetails.innerHTML = "";
+            groupFlightDetails.innerHTML = "";
             flightData = data;
             markers = [];
 
@@ -428,6 +430,7 @@ function updateOpenSkyData() {
             if (data.error) {
                 console.warn("Error en Airplanes.Live:", data.error);
                 flightDetails.textContent = "Esperando datos de Airplanes.Live...";
+                groupFlightDetails.textContent = "Esperando datos de Airplanes.Live...";
             } else {
                 data.forEach(state => {
                     const lat = state.lat;
@@ -459,6 +462,7 @@ function updateOpenSkyData() {
                             <strong>Estado:</strong> ${status}
                         `;
                         flightDetails.appendChild(flightDiv);
+                        groupFlightDetails.appendChild(flightDiv.cloneNode(true));
 
                         // Mostrar en el mapa (si está visible)
                         if (lat && lon && map) {
@@ -476,13 +480,18 @@ function updateOpenSkyData() {
                     }
                 });
                 flightDetails.scrollTop = flightDetails.scrollHeight;
+                groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
             }
         })
         .catch(err => {
             console.error("Error al cargar datos de Airplanes.Live:", err);
             const flightDetails = document.getElementById("flight-details");
+            const groupFlightDetails = document.getElementById("group-flight-details");
             if (flightDetails) {
                 flightDetails.textContent = "Error al conectar con Airplanes.Live";
+            }
+            if (groupFlightDetails) {
+                groupFlightDetails.textContent = "Error al conectar con Airplanes.Live";
             }
         });
     setTimeout(updateOpenSkyData, 15000);
