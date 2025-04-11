@@ -110,7 +110,7 @@ button:hover {
 }
 
 #talk {
-    BACKGROUND-COLOR: #FF4500;
+    background-color: #FF4500;
     font-size: 28px; /* Doble del tamaño original (14px * 2) */
     padding: 16px; /* Doble del padding original (8px * 2) */
     width: 100%;
@@ -168,22 +168,24 @@ button:hover {
     flex-grow: 1; /* Permitir que el texto ocupe el espacio disponible */
 }
 
-.mute-button { /* Cambiado de .user-mute-btn a .mute-button para coincidir con tu JavaScript */
-    background: none; /* Sin fondo para integrarse al cartel */
-    border: none; /* Sin borde */
-    font-size: 12px; /* Tamaño ajustado para el emoji */
+.mute-button {
+    background: none; /* Sin fondo para mostrar solo el ícono */
+    border: none; /* Sin borde para eliminar el cuadrado azul */
+    font-size: 12px; /* Tamaño del ícono */
     cursor: pointer;
     padding: 0; /* Sin padding */
     margin-left: 5px; /* Espacio entre texto y botón */
-    color: #FF4500; /* Color del emoji igual que play-icon */
-    width: 16px; /* Tamaño fijo para consistencia */
-    height: 16px; /* Tamaño fijo para consistencia */
-    line-height: 16px; /* Centrar el emoji verticalmente */
-    text-align: center; /* Centrar el emoji horizontalmente */
+    color: #FF4500; /* Color del ícono igual que play-icon */
+    width: 16px; /* Tamaño fijo para el ícono */
+    height: 16px; /* Tamaño fijo para el ícono */
+    line-height: 16px; /* Centrar el ícono verticalmente */
+    text-align: center; /* Centrar el ícono horizontalmente */
+    box-shadow: none; /* Eliminar sombra heredada de button */
+    outline: none; /* Eliminar contorno al hacer clic */
 }
 
 .mute-button:hover {
-    color: #FF6347; /* Hover igual que otros botones */
+    color: #FF6347; /* Cambio de color al pasar el mouse */
 }
 
 #messages, #history-screen {
@@ -367,7 +369,7 @@ select:hover {
         font-size: 10px; /* Ajustado para pantallas pequeñas */
         width: 14px; /* Ajustado */
         height: 14px; /* Ajustado */
-        line-height: 14px; /* Centrar el emoji */
+        line-height: 14px; /* Centrar el ícono */
     }
 
     h2 {
@@ -461,7 +463,7 @@ select:hover {
         font-size: 12px; /* Igual que pantallas grandes */
         width: 16px; /* Tamaño fijo */
         height: 16px; /* Tamaño fijo */
-        line-height: 16px; /* Centrar el emoji */
+        line-height: 16px; /* Centrar el ícono */
     }
 
     h2 {
@@ -503,4 +505,4 @@ select:hover {
 
 .flight:last-child {
     border-bottom: none;
-}
+    }
