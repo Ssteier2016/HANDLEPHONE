@@ -19,7 +19,7 @@ body {
 
 /* Se eliminó la animación del avión volando (body::before y @keyframes fly) */
 
-#register, #main, #radar-screen, #history-screen {
+#register, #main, #group-screen, #radar-screen, #history-screen {
     background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente */
     border: 3px solid #4682B4; /* Borde azul oscuro */
     border-radius: 10px;
@@ -37,11 +37,95 @@ body {
     display: block;
 }
 
-#main {
+#main, #group-screen {
     display: none; /* Ocultar por defecto */
     position: relative; /* Necesario para posicionar #mute a la derecha */
     flex-direction: column;
     gap: 15px;
+    transition: transform 0.3s ease; /* Añadir transición para el deslizamiento */
+    transform: translateX(0); /* Posición inicial */
+}
+
+/* Clases para las transiciones de deslizamiento */
+.slide-left {
+    transform: translateX(-100%);
+}
+
+.slide-right {
+    transform: translateX(100%);
+}
+
+#group-join {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+#group-id {
+    flex-grow: 1;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    border: 2px solid #4682B4;
+    background-color: #F5F5F5;
+    color: #333333;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
+#join-group-btn {
+    background-color: #4682B4;
+    color: #FFFFFF;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#join-group-btn:hover {
+    background-color: #FF4500;
+}
+
+#swipe-hint {
+    font-size: 12px;
+    color: #4682B4;
+    margin-bottom: 10px;
+}
+
+#return-to-group-btn {
+    background-color: #4682B4;
+    color: #FFFFFF;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-bottom: 10px;
+}
+
+#return-to-group-btn:hover {
+    background-color: #FF4500;
+}
+
+#back-to-main {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.back-icon {
+    width: 24px;
+    height: 24px;
 }
 
 #radar-screen {
@@ -109,7 +193,7 @@ button:hover {
     color: #FFFFFF;
 }
 
-#talk {
+#talk, #group-talk {
     background-color: #FF4500;
     font-size: 28px; /* Doble del tamaño original (14px * 2) */
     padding: 16px; /* Doble del padding original (8px * 2) */
@@ -118,7 +202,7 @@ button:hover {
     margin: 5px auto; /* Centrarlo horizontalmente */
 }
 
-#mute {
+#mute, #group-mute {
     position: absolute;
     right: 10px;
     top: 10px;
@@ -133,17 +217,12 @@ button:hover {
     cursor: pointer;
 }
 
-#mute.muted {
+#mute.active, #group-mute.active {
     background-color: #32CD32; /* Fondo verde para muteado */
     background-image: url('/templates/mic.png'); /* Imagen para mutear */
 }
 
-#mute.unmuted {
-    background-color: #FF4500; /* Fondo rojo para desmuteado */
-    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
-}
-
-#users {
+#users, #group-users {
     margin-top: 10px;
     padding: 8px;
     background-color: #F5F5F5; /* Igual que el contenedor de chat-list */
@@ -170,6 +249,10 @@ button:hover {
     gap: 5px; /* Añadir un pequeño espacio entre el texto y el botón */
 }
 
+.user-item.in-group {
+    background-color: #90EE90; /* Verde claro para usuarios en el mismo grupo */
+}
+
 .user-item span {
     flex-grow: 1; /* Permitir que el texto ocupe el espacio disponible */
 }
@@ -181,7 +264,7 @@ button:hover {
     font-size: 16px;
     margin-right: 5px;
     padding: 0;
-    color: #FFFFFF /* Igual que play-icon */
+    color: #FF4500; /* Igual que play-icon */
     outline: none; /* Eliminar borde azul al hacer focus */
     transition: opacity 0.3s; /* Transición suave para el hover */
 }
@@ -215,12 +298,28 @@ button:hover {
     color: #333333;
 }
 
-#chat-list {
+#chat-window, #group-chat-window {
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#chat-window h3, #group-chat-window h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #4682B4;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+#chat-list, #group-chat-list {
     max-height: 150px;
     overflow-y: auto;
     text-align: left;
     padding: 8px;
-    background-color: #F5F5F5;
+    background-color: #FFFFFF;
     border: 2px solid #4682B4;
     border-radius: 5px;
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
@@ -247,20 +346,67 @@ button:hover {
     text-shadow: none;
 }
 
-.flight-en-zona {
-    background-color: #FF6347;
-    color: #FFFFFF !important;
-    text-shadow: none;
+/* Estilos para el cartel de Detalles de Vuelo */
+#flights-window, #group-flights-window {
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#flights-window h3, #group-flights-window h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #4682B4;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+#flight-details, #group-flight-details {
+    font-family: 'Orbitron', sans-serif;
+    padding: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #FFFFFF;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.flight {
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 5px;
+    font-size: 14px;
+    color: #333333;
+    background-color: #F5F5F5;
+    border: 1px solid #4682B4;
+    transition: background-color 0.3s;
+}
+
+.flight:last-child {
+    margin-bottom: 0;
 }
 
 .flight-en-vuelo {
-    background-color: #32CD32;
-    color: #FFFFFF !important;
+    background-color: #90EE90; /* Verde claro */
+    color: #333333 !important;
     text-shadow: none;
 }
 
-.flight-despegando {
-    background-color: #FFD700;
+.flight-en-tierra,
+.flight-despegando,
+.flight-salida {
+    background-color: #FFFFE0; /* Amarillo claro */
+    color: #333333 !important;
+    text-shadow: none;
+}
+
+.flight-en-zona,
+.flight-aterrizando {
+    background-color: #FFB6C1; /* Rosa claro */
     color: #333333 !important;
     text-shadow: none;
 }
@@ -322,23 +468,23 @@ select:hover {
         background-repeat: no-repeat;
     }
 
-    #register, #main, #radar-screen, #history-screen {
+    #register, #main, #group-screen, #radar-screen, #history-screen {
         padding: 10px;
         max-width: 100%; /* Ocupar todo el ancho disponible */
         margin: 0;
     }
 
-    #main {
+    #main, #group-screen {
         display: flex;
         flex-direction: column;
         gap: 10px;
     }
 
-    #flights-window, #chat-window {
+    #flights-window, #group-flights-window, #chat-window, #group-chat-window {
         width: 100%;
     }
 
-    #message-list, #chat-list, #history-list {
+    #message-list, #chat-list, #group-chat-list, #history-list {
         max-height: 120px; /* Reducir altura en pantallas pequeñas */
     }
 
@@ -347,20 +493,20 @@ select:hover {
         padding: 6px;
     }
 
-    #talk {
+    #talk, #group-talk {
         font-size: 24px; /* Ajuste para pantallas pequeñas */
         padding: 12px;
         max-width: 100%; /* Ocupar todo el ancho */
     }
 
-    #mute {
+    #mute, #group-mute {
         right: 5px; /* Menos margen en pantallas pequeñas */
         top: 5px; /* Arriba */
         width: 20px; /* Más pequeño */
         height: 20px; /* Más pequeño */
     }
 
-    #users {
+    #users, #group-users {
         font-size: 10px;
         padding: 6px; /* Ajustado para pantallas pequeñas */
         max-height: 120px; /* Igual que chat-list */
@@ -399,6 +545,16 @@ select:hover {
     #map {
         height: calc(100% - 50px); /* Ajustar altura del mapa */
     }
+
+    #back-to-main {
+        left: 5px;
+        top: 5px;
+    }
+
+    .back-icon {
+        width: 20px;
+        height: 20px;
+    }
 }
 
 /* Media query para pantallas grandes (computadoras, min-width: 769px) */
@@ -411,22 +567,22 @@ select:hover {
         background-repeat: no-repeat;
     }
 
-    #register, #main, #radar-screen, #history-screen {
+    #register, #main, #group-screen, #radar-screen, #history-screen {
         padding: 20px;
         max-width: 600px;
     }
 
-    #main {
+    #main, #group-screen {
         display: flex;
         flex-direction: column;
         gap: 15px;
     }
 
-    #flights-window, #chat-window {
+    #flights-window, #group-flights-window, #chat-window, #group-chat-window {
         width: 100%;
     }
 
-    #message-list, #chat-list, #history-list {
+    #message-list, #chat-list, #group-chat-list, #history-list {
         max-height: 200px;
     }
 
@@ -442,20 +598,20 @@ select:hover {
         margin: 5px auto;
     }
 
-    #talk {
+    #talk, #group-talk {
         font-size: 32px; /* Más grande en pantallas grandes */
         padding: 20px;
         max-width: 400px;
     }
 
-    #mute {
+    #mute, #group-mute {
         right: 10px;
         top: 10px; /* Arriba */
         width: 24px; /* Tamaño pequeño */
         height: 24px; /* Tamaño pequeño */
     }
 
-    #users {
+    #users, #group-users {
         font-size: 14px;
         padding: 8px; /* Igual que chat-list */
         max-height: 200px; /* Igual que chat-list */
@@ -494,23 +650,14 @@ select:hover {
     #map {
         height: calc(100% - 60px);
     }
-}
 
-/* Estilos para el cartel de Detalles de Vuelo */
-#flight-details {
-    font-family: 'Orbitron', sans-serif;
-    padding: 10px;
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.flight {
-    padding: 8px;
-    border-bottom: 1px solid #333;
-    color: #fff;
-    font-size: 14px;
-}
-
-.flight:last-child {
-    border-bottom: none;
+    #back-to-main {
+        left: 10px;
+        top: 10px;
     }
+
+    .back-icon {
+        width: 24px;
+        height: 24px;
+    }
+}
