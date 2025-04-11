@@ -1,20 +1,73 @@
+// Nombre del caché para esta versión del Service Worker
+const CACHE_NAME = 'handlephone-cache-v1';
+
+// Recursos que se cachearán para soporte offline
+const urlsToCache = [
+    '/',
+    '/templates/index.html',
+    '/templates/script.js',
+    '/templates/style.css',
+    '/templates/walkie-talkie.png',
+    '/templates/airport.png',
+    '/templates/aero.png'
+];
+
+// Evento 'install': Se ejecuta cuando el Service Worker se instala
 self.addEventListener('install', (event) => {
     console.log('Service Worker instalado');
+    // Cachear los recursos estáticos
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            console.log('Cacheando recursos');
+            return cache.addAll(urlsToCache);
+        }).catch((err) => {
+            console.error('Error al cachear recursos:', err);
+        })
+    );
     // Forzar la activación inmediata del Service Worker
     self.skipWaiting();
 });
 
+// Evento 'activate': Se ejecuta cuando el Service Worker se activa
 self.addEventListener('activate', (event) => {
     console.log('Service Worker activado');
+    // Limpiar cachés antiguos
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    if (cacheName !== CACHE_NAME) {
+                        console.log('Eliminando caché antiguo:', cacheName);
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        }).catch((err) => {
+            console.error('Error al limpiar cachés antiguos:', err);
+        })
+    );
     // Tomar control de las páginas inmediatamente
     self.clients.claim();
 });
 
+// Evento 'fetch': Maneja las solicitudes de red
 self.addEventListener('fetch', (event) => {
-    // Manejar las solicitudes de red (fetch) de manera predeterminada
-    event.respondWith(fetch(event.request));
+    event.respondWith(
+        caches.match(event.request).then((response) => {
+            if (response) {
+                console.log('Sirviendo desde caché:', event.request.url);
+                return response; // Devuelve el recurso desde el caché
+            }
+            return fetch(event.request).catch(() => {
+                // Si no hay conexión y el recurso no está en caché, devuelve la página principal
+                console.log('No hay conexión, sirviendo fallback:', event.request.url);
+                return caches.match('/templates/index.html');
+            });
+        })
+    );
 });
 
+// Evento 'push': Maneja las notificaciones push
 self.addEventListener('push', (event) => {
     let data;
     try {
@@ -32,7 +85,9 @@ self.addEventListener('push', (event) => {
             badge: '/templates/walkie-talkie.png',
             data: {
                 url: 'https://handlephone.onrender.com/'
-            }
+            },
+            tag: 'audio-message', // Agrupar notificaciones
+            renotify: true // Hacer que la notificación vibre/sonide incluso si ya existe
         };
         event.waitUntil(
             self.registration.showNotification(title, options)
@@ -40,6 +95,7 @@ self.addEventListener('push', (event) => {
     }
 });
 
+// Evento 'notificationclick': Maneja el clic en una notificación
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const url = event.notification.data.url || 'https://handlephone.onrender.com/';
@@ -59,6 +115,7 @@ self.addEventListener('notificationclick', (event) => {
     );
 });
 
+// Evento 'sync': Maneja la sincronización en segundo plano
 self.addEventListener('sync', (event) => {
     if (event.tag === 'reconnect-websocket') {
         event.waitUntil(
