@@ -162,6 +162,7 @@ button:hover {
     align-items: center; /* Centrar verticalmente */
     justify-content: space-between; /* Texto a la izquierda, botón a la derecha */
     cursor: default; /* No es clickable como chat-message, pero mantenemos consistencia */
+    gap: 5px; /* Añadir un pequeño espacio entre el texto y el botón */
 }
 
 .user-item span {
@@ -169,7 +170,24 @@ button:hover {
 }
 
 .mute-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    padding: 0;
+    color: #FF4500; /* Igual que play-icon */
+    outline: none; /* Eliminar borde azul al hacer focus */
+    transition: opacity 0.3s; /* Transición suave para el hover */
+}
 
+.mute-button:hover {
+    opacity: 0.7;
+}
+
+.mute-button:focus {
+    outline: none; /* Asegurar que no haya borde azul al hacer focus */
+}
 
 #messages, #history-screen {
     margin-top: 15px;
@@ -203,19 +221,6 @@ button:hover {
     box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.mute-button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    margin-right: 5px;
-    padding: 0;
-}
-
-.mute-button:hover {
-    opacity: 0.7;
-}
-    
 .chat-message {
     border: 1px solid #4682B4;
     padding: 5px;
@@ -283,8 +288,8 @@ h3 {
 }
 
 .logo {
-    width: 48px;
-    height: 48px;
+    width: 24px; /* Reducido de 48px a 24px */
+    height: 24px; /* Reducido de 48px a 24px */
     margin: 0 auto 8px;
     display: block;
 }
@@ -306,7 +311,7 @@ select:hover {
 @media (max-width: 768px) {
     body {
         padding: 5px;
-        background-image: url('/templates/borde.png'); /* Asegurar que el fondo se aplique */
+        background-image: url('/templates/borde.png');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -362,10 +367,11 @@ select:hover {
     }
 
     .mute-button {
-        font-size: 10px; /* Ajustado para pantallas pequeñas */
-        width: 14px; /* Ajustado */
-        height: 14px; /* Ajustado */
-        line-height: 14px; /* Centrar el ícono */
+        font-size: 10px; /* Igual que play-icon */
+        margin-right: 4px; /* Ajustado para pantallas pequeñas */
+        width: auto; /* Dejar que el tamaño lo defina el emoji */
+        height: auto; /* Dejar que el tamaño lo defina el emoji */
+        line-height: normal; /* No forzar altura de línea */
     }
 
     h2 {
@@ -377,8 +383,8 @@ select:hover {
     }
 
     .logo {
-        width: 40px;
-        height: 40px;
+        width: 20px; /* Reducido de 40px a 20px */
+        height: 20px; /* Reducido de 40px a 20px */
     }
 
     #radar-screen {
@@ -394,7 +400,7 @@ select:hover {
 @media (min-width: 769px) {
     body {
         padding: 20px;
-        background-image: url('/templates/borde.png'); /* Asegurar que el fondo se aplique */
+        background-image: url('/templates/borde.png');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -456,10 +462,11 @@ select:hover {
     }
 
     .mute-button {
-        font-size: 12px; /* Igual que pantallas grandes */
-        width: 16px; /* Tamaño fijo */
-        height: 16px; /* Tamaño fijo */
-        line-height: 16px; /* Centrar el ícono */
+        font-size: 12px; /* Ligeramente más grande que play-icon, pero consistente */
+        margin-right: 5px;
+        width: auto; /* Dejar que el tamaño lo defina el emoji */
+        height: auto; /* Dejar que el tamaño lo defina el emoji */
+        line-height: normal; /* No forzar altura de línea */
     }
 
     h2 {
@@ -471,8 +478,8 @@ select:hover {
     }
 
     .logo {
-        width: 64px;
-        height: 64px;
+        width: 32px; /* Reducido de 64px a 32px */
+        height: 32px; /* Reducido de 64px a 32px */
     }
 
     #radar-screen {
