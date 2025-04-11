@@ -22,7 +22,7 @@
             <option value="Tractorista">Tractorista</option>
             <option value="Equipo">Equipo</option>
             <option value="Micro">Micro</option>
-            <option value="Mobilero">Mobilero</option>
+            <option value="Mobilero">Movilero</option>
             <option value="Jefatura">Jefatura</option>
             <option value="Supervisor">Supervisor</option>
             <option value="Señalero">Señalero</option>
@@ -46,17 +46,11 @@
             <div id="chat-list"></div>
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
-        <button id="mute" class="active" onclick="toggleMute()"></button> <!-- Cambio aquí: class="active" -->
+        <button id="mute" class="active" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
-        <div id="users">
-            <!-- Ejemplo de usuario dinámico -->
-            <div class="user-item">
-                <span>Usuario Ejemplo 12345</span>
-                <button class="user-mute-btn"></button>
-            </div>
-        </div>
+        <div id="users">Usuarios conectados: 0</div>
     </div>
 
     <div id="radar-screen" style="display: none;">
@@ -76,65 +70,5 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/templates/script.js"></script>
-    <script>
-        // Registro del Service Worker para PWA
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/templates/sw.js')
-                .then(() => console.log('Service Worker registrado'))
-                .catch((err) => console.error('Error al registrar Service Worker:', err));
-        }
-
-        // Manejo de notificaciones push (opcional, si el servidor lo soporta)
-        function subscribeToPush() {
-            if ('serviceWorker' in navigator && 'PushManager' in window) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY') // Reemplazar con tu clave VAPID pública
-                    }).then(subscription => {
-                        console.log("Suscripción a push exitosa:", subscription);
-                        // Enviar la suscripción al servidor si es necesario
-                        fetch('/subscribe', {
-                            method: 'POST',
-                            body: JSON.stringify(subscription),
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                    }).catch(err => {
-                        console.error("Error al suscribirse a push:", err);
-                    });
-                });
-            }
-        }
-
-        function urlBase64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) {
-                outputArray[i] = rawData.charCodeAt(i);
-            }
-            return outputArray;
-        }
-
-        function checkNotificationPermission() {
-            if (Notification.permission === "granted") {
-                subscribeToPush();
-            } else if (Notification.permission !== "denied") {
-                Notification.requestPermission().then(permission => {
-                    if (permission === "granted") {
-                        subscribeToPush();
-                    }
-                });
-            }
-        }
-
-        // Inicializar notificaciones push al cargar la página
-        document.addEventListener('DOMContentLoaded', () => {
-            checkNotificationPermission();
-        });
-    </script>
 </body>
 </html>
