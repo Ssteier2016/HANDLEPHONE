@@ -1079,6 +1079,7 @@ function subscribeToPush() {
     }
 }
 
+// Convertir una cadena Base64 a Uint8Array (usado para claves VAPID en notificaciones push)
 function urlBase64ToUint8Array(base64String) {
     try {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1086,4 +1087,47 @@ function urlBase64ToUint8Array(base64String) {
         const rawData = window.atob(base64);
         const outputArray = new Uint8Array(rawData.length);
         for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData
+            outputArray[i] = rawData.charCodeAt(i); // Completamos esta línea
+        }
+        return outputArray;
+    } catch (err) {
+        console.error("Error al convertir Base64 a Uint8Array:", err);
+        throw err;
+    }
+}
+
+// Agregar event listener para el botón de registro
+document.addEventListener('DOMContentLoaded', () => {
+    const registerButton = document.getElementById('register-button');
+    if (registerButton) {
+        registerButton.addEventListener('click', register);
+    } else {
+        console.error("Botón de registro no encontrado en el DOM");
+    }
+    checkNotificationPermission();
+});
+
+// Verificar permisos de notificación (opcional, si el servidor lo soporta)
+function checkNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+            console.log('Permiso de notificación ya concedido');
+            subscribeToPush();
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('Permiso de notificación concedido');
+                    subscribeToPush();
+                } else {
+                    console.warn('Permiso de notificación denegado');
+                }
+            }).catch(err => {
+                console.error('Error al solicitar permiso de notificación:', err);
+            });
+        } else {
+            console.warn('Permiso de notificación denegado previamente');
+        }
+    } else {
+        console.warn('Notificaciones no soportadas en este navegador');
+    }
+}
