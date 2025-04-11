@@ -1,4 +1,5 @@
 services:
+  # Servicio web existente (tu página web)
   - name: walkie-talkie
     type: web
     env: python
@@ -14,3 +15,43 @@ services:
       - key: PORT
         value: 8080
     autoDeploy: true
+
+  # Nuevo servicio: Cron Job para el script de scraping
+  - type: cron
+    name: flight-scraper
+    env: python
+    plan: starter  # Usaremos un plan de pago para evitar suspensiones
+    region: oregon  # Misma región que tu página web y base de datos
+    schedule: "0 * * * *"  # Ejecutar cada hora
+    buildCommand: |
+      apt-get update && apt-get install -y chromium chromium-driver
+      pip install -r requirements.txt
+    startCommand: python scraper.py
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: flights_db
+          property: host
+      - key: DB_USER
+        fromDatabase:
+          name: flights_db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: flights_db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: flights_db
+          property: database
+      - key: DB_PORT
+        fromDatabase:
+          name: flights_db
+          property: port
+    autoDeploy: true
+
+# Base de datos PostgreSQL
+databases:
+  - name: flights_db
+    region: oregon  # Misma región
+    plan: free  # Gratuito por 30 días
