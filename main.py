@@ -55,6 +55,9 @@ def to_icao(text):
 users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription, "muted_users": set}}
 audio_queue = asyncio.Queue()
 
+# Variable global para rastrear el muteo general
+global_mute_active = False  # Inicia desmuteado por defecto
+
 last_request_time = 0
 cached_data = None
 CACHE_DURATION = 15  # 15 segundos para evitar saturación
@@ -305,6 +308,12 @@ async def process_audio_queue():
 
             logger.info(f"Procesando mensaje de audio de {sender} ({function}) con token {token}")
 
+            # Si el muteo global está activo, no transmitir el audio
+            if global_mute_active:
+                logger.info("Muteo global activo, audio no transmitido")
+                audio_queue.task_done()
+                continue
+
             # Si el cliente no proporcionó una transcripción, transcribir en el servidor
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
                 logger.info("Transcribiendo audio en el servidor...")
@@ -430,14 +439,26 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 else:
                     logger.error("Mensaje de unmute_user sin target_user_id")
 
+            elif message["type"] == "mute_all":
+                global global_mute_active
+                global_mute_active = True
+                await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
+                logger.info(f"Usuario {users[token]['name']} activó muteo global")
+
+            elif message["type"] == "unmute_all":
+                global global_mute_active
+                global_mute_active = False
+                await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
+                logger.info(f"Usuario {users[token]['name']} desactivó muteo global")
+
             elif message["type"] == "mute":
-                # Manejar mute global (si aplica)
-                logger.info(f"Usuario {users[token]['name']} activó mute global")
+                # Mantener compatibilidad con mute individual o local si lo usas
+                logger.info(f"Usuario {users[token]['name']} activó mute local")
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
 
             elif message["type"] == "unmute":
-                # Manejar unmute global (si aplica)
-                logger.info(f"Usuario {users[token]['name']} desactivó mute global")
+                # Mantener compatibilidad con unmute individual o local si lo usas
+                logger.info(f"Usuario {users[token]['name']} desactivó mute local")
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
 
     except WebSocketDisconnect:
@@ -453,6 +474,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["logged_in"] = False
             await broadcast_users()
         await websocket.close()
+
+# Nueva función para difundir el estado de muteo global
+async def broadcast_global_mute_state(message_type, message_text):
+    for user in list(users.values()):
+        if user["logged_in"] and user["websocket"] is not None:
+            try:
+                await user["websocket"].send_json({"type": message_type, "message": message_text})
+                logger.info(f"Estado de muteo global ({message_type}) enviado a {user['name']}")
+            except Exception as e:
+                logger.error(f"Error al enviar estado de muteo global a {user['name']}: {e}")
+                user["websocket"] = None
+                user["logged_in"] = False
+                await broadcast_users()
 
 async def broadcast_users():
     user_list = []
