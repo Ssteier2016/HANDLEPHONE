@@ -164,6 +164,41 @@ ws.onmessage = function(event) {
             chatList.appendChild(messageDiv);
             chatList.scrollTop = chatList.scrollHeight;
         } else if (message.type === "users") {
+    const usersDiv = document.getElementById("users");
+    usersDiv.innerHTML = `Usuarios conectados: ${message.count} `;
+    const userList = document.createElement("div");
+    userList.className = "user-list";
+    console.log("Mensaje de usuarios recibido:", message);
+    message.list.forEach(user => {
+        console.log("Procesando usuario:", user);
+        const userDiv = document.createElement("div");
+        userDiv.className = "user-item";
+        const muteButton = document.createElement("button");
+        muteButton.className = "mute-button";
+        const isMuted = mutedUsers.has(user.user_id);
+        // Usaremos emojis 🔇 y 🔊 en lugar de imágenes (esto se ajustará más adelante)
+        muteButton.textContent = isMuted ? "🔇" : "🔊";
+        muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
+        userDiv.appendChild(muteButton);
+        const userText = document.createElement("span");
+        // Si user.display no está definido, construimos el display a partir de user_id
+        let displayText = user.display;
+        if (!displayText || displayText === user.user_id) {
+            const parts = user.user_id.split('_');
+            if (parts.length === 3) {
+                const [, name, userFunction] = parts;
+                displayText = `${name} (${userFunction})`;
+            } else {
+                displayText = user.user_id; // Fallback si el formato no es correcto
+            }
+        }
+        userText.textContent = displayText;
+        userDiv.appendChild(userText);
+        userList.appendChild(userDiv);
+    });
+    usersDiv.appendChild(userList);
+    console.log("Lista de usuarios actualizada:", message.list);
+        }
             // ... (manejo existente de usuarios) ...
         } else if (message.type === "mute_all_success") {
             console.log("Muteo global activado por el servidor");
