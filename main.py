@@ -671,55 +671,62 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         logger.info(f"Respuesta HTTP: {response.status_code}")
         
         soup = BeautifulSoup(response.text, "html.parser")
-        logger.debug(f"HTML recibido: {response.text[:500]}...")
+        logger.info(f"HTML recibido (primeros 500 caracteres): {response.text[:500]}...")
         
-        # Probar múltiples selectores
+        # Probar más selectores
         flight_list = (soup.find("div", class_="flight-table") or
-                      soup.find("table", class_="flights") or
-                      soup.find("div", id="flight-data") or
-                      soup.find("section", class_="flight-info"))
+                       soup.find("table", class_="flights") or
+                       soup.find("div", id="flight-data") or
+                       soup.find("section", class_="flight-info") or
+                       soup.find("div", class_="vuelos-lista") or
+                       soup.find("table", class_="vuelo-table") or
+                       soup.find("div", class_="flight-list") or
+                       soup.find("div", class_="flights-container"))
         if not flight_list:
-            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data, flight-info).")
+            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data, flight-info, vuelos-lista, vuelo-table, flight-list, flights-container).")
             return []
         
         flights = []
         flight_items = (flight_list.find_all("div", class_="flight-row") or
-                       flight_list.find_all("tr", class_="flight") or
-                       flight_list.find_all("div", class_="flight-item"))
+                        flight_list.find_all("tr", class_="flight") or
+                        flight_list.find_all("div", class_="flight-item") or
+                        flight_list.find_all("tr", class_="vuelo") or
+                        flight_list.find_all("div", class_="vuelo-item"))
         logger.info(f"Encontrados {len(flight_items)} elementos de vuelos")
         for item in flight_items:
             airline = (item.find("span", class_="flight-airline") or
-                      item.find("td", class_="airline") or
-                      item.find("div", class_="airline"))
+                       item.find("td", class_="airline") or
+                       item.find("div", class_="airline") or
+                       item.find("span", class_="vuelo-aerolinea"))
             airline_text = airline.text.strip() if airline else ""
             if "Aerolíneas Argentinas" not in airline_text:
                 continue
+            
+            def get_text(selector, class_name):
+                element = item.find(selector, class_name)
+                return element.text.strip() if element else "N/A"
+            
             flight = {
-                "flight_number": (item.find("span", class_="flight-number") or
-                                 item.find("td", class_="flight-number") or
-                                 item.find("div", class_="flight-number")).text.strip() if (item.find("span", class_="flight-number") or
-                                                                                         item.find("td", class_="flight-number") or
-                                                                                         item.find("div", class_="flight-number")) else "N/A",
-                "origin_destination": (item.find("span", class_="flight-destination") or
-                                     item.find("td", class_="destination") or
-                                     item.find("div", class_="destination")).text.strip() if (item.find("span", class_="flight-destination") or
-                                                                                            item.find("td", class_="destination") or
-                                                                                            item.find("div", class_="destination")) else "N/A",
-                "scheduled_time": (item.find("span", class_="flight-scheduled") or
-                                  item.find("td", class_="scheduled") or
-                                  item.find("div", class_="scheduled")).text.strip() if (item.find("span", class_="flight-scheduled") or
-                                                                                        item.find("td", class_="scheduled") or
-                                                                                        item.find("div", class_="scheduled")) else "N/A",
-                "status": (item.find("span", class_="flight-status") or
-                          item.find("td", class_="status") or
-                          item.find("div", class_="status")).text.strip() if (item.find("span", class_="flight-status") or
-                                                                             item.find("td", class_="status") or
-                                                                             item.find("div", class_="status")) else "N/A",
-                "gate": (item.find("span", class_="flight-gate") or
-                        item.find("td", class_="gate") or
-                        item.find("div", class_="gate")).text.strip() if (item.find("span", class_="flight-gate") or
-                                                                         item.find("td", class_="gate") or
-                                                                         item.find("div", class_="gate")) else "N/A",
+                "flight_number": (get_text("span", "flight-number") or
+                                  get_text("td", "flight-number") or
+                                  get_text("div", "flight-number") or
+                                  get_text("span", "vuelo-numero")),
+                "origin_destination": (get_text("span", "flight-destination") or
+                                       get_text("td", "destination") or
+                                       get_text("div", "destination") or
+                                       get_text("span", "vuelo-destino")),
+                "scheduled_time": (get_text("span", "flight-scheduled") or
+                                   get_text("td", "scheduled") or
+                                   get_text("div", "scheduled") or
+                                   get_text("span", "vuelo-horario")),
+                "status": (get_text("span", "flight-status") or
+                           get_text("td", "status") or
+                           get_text("div", "status") or
+                           get_text("span", "vuelo-estado")),
+                "gate": (get_text("span", "flight-gate") or
+                         get_text("td", "gate") or
+                         get_text("div", "gate") or
+                         get_text("span", "vuelo-puerta")),
                 "flight_type": flight_type
             }
             if flight["status"].lower() != "cancelado":
