@@ -5,7 +5,24 @@ services:
     plan: free
     region: oregon
     buildCommand: |
-      apt-get update && apt-get install -y portaudio19-dev chromium chromium-driver
+      apt-get update && apt-get install -y \
+        portaudio19-dev \
+        chromium \
+        chromium-driver \
+        libnss3 \
+        libgconf-2-4 \
+        libxss1 \
+        libasound2 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libgbm1 \
+        libgtk-3-0 \
+        libnspr4 \
+        libpango-1.0-0 \
+        ca-certificates \
+        fonts-liberation
       pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
