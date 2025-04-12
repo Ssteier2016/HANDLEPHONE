@@ -654,8 +654,12 @@ app = FastAPI()
 logger = logging.getLogger(__name__)
 
 def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
-    date = datetime.now().strftime("%d-%m-%Y")
-    url = f"https://www.aeropuertosargentina.com/es/vuelos?movtp={flight_type}&idarpt={airport.replace(', ', '%2C%20')}&fecha={date}"
+    # Mapear flight_type y aeropuerto a códigos
+    movtp = "D" if flight_type.lower() == "partidas" else "A"
+    airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
+    
+    # URL de TAMS
+    url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
     
     try:
         headers = {
@@ -663,103 +667,106 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Connection": "keep-alive",
-            "Referer": "https://www.aeropuertosargentina.com/",
-            "Accept-Encoding": "gzip, deflate, br"
+            "Referer": "http://www.tams.com.ar/",
+            "Accept-Encoding": "gzip, deflate"
         }
-        logger.info(f"Intentando acceder a {url}")
-        response = requests.get(url, headers=headers, timeout=20)
+        
+        # Usar sesión para mantener cookies
+        session = requests.Session()
+        session.headers.update(headers)
+        
+        # Paso 1: GET inicial para obtener __VIEWSTATE y __EVENTVALIDATION
+        logger.info(f"Intentando GET inicial a {url}")
+        response = session.get(url, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        viewstate = soup.find("input", id="__VIEWSTATE")["value"] if soup.find("input", id="__VIEWSTATE") else ""
+        eventvalidation = soup.find("input", id="__EVENTVALIDATION")["value"] if soup.find("input", id="__EVENTVALIDATION") else ""
+        logger.info(f"__VIEWSTATE: {viewstate[:50]}... __EVENTVALIDATION: {eventvalidation[:50]}...")
+        
+        # Paso 2: POST para filtrar vuelos
+        form_data = {
+            "__EVENTTARGET": "",
+            "__EVENTARGUMENT": "",
+            "__VIEWSTATE": viewstate,
+            "__EVENTVALIDATION": eventvalidation,
+            "ddlMovTp": movtp,
+            "ddlAeropuerto": airport_code,
+            "ddlAerolinea": "AR",
+            "ddlVentanaH": "10",
+            "btnBuscar": "Buscar"
+        }
+        
+        logger.info(f"Enviando POST a {url} con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
+        response = session.post(url, data=form_data, timeout=20)
         response.raise_for_status()
         logger.info(f"Respuesta HTTP: {response.status_code}")
         
         soup = BeautifulSoup(response.text, "html.parser")
-        logger.info(f"HTML recibido (primeros 1000 caracteres): {response.text[:1000]}...")
+        logger.info(f"HTML recibido (primeros 2000 caracteres): {response.text[:2000]}...")
         
-        # Probar más selectores genéricos
-        flight_list = (soup.find("div", class_="flight-table") or
-                       soup.find("table", class_="flights") or
-                       soup.find("div", id="flight-data") or
-                       soup.find("section", class_="flight-info") or
-                       soup.find("div", class_="vuelos-lista") or
-                       soup.find("table", class_="vuelo-table") or
-                       soup.find("div", class_="flight-list") or
-                       soup.find("div", class_="flights-container") or
-                       soup.find("table", class_="vuelos") or
-                       soup.find("div", class_="vuelos-container") or
-                       soup.find("section", class_="vuelos") or
-                       soup.find("div", class_="flight-info"))
-        if not flight_list:
-            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data, flight-info, vuelos-lista, vuelo-table, flight-list, flights-container, vuelos, vuelos-container, vuelos, flight-info).")
-            # Buscar cualquier tabla o div con "vuelo" o "flight" en la clase
-            flight_list = soup.find(lambda tag: tag.name in ["table", "div", "section"] and
-                                    any(x in tag.get("class", []) for x in ["vuelo", "flight", "flights", "vuelos"]))
-            if not flight_list:
-                logger.warning("Tampoco se encontró ninguna tabla/div con 'vuelo' o 'flight' en la clase.")
-                return []
-            logger.info("Encontrada tabla/div genérica con 'vuelo' o 'flight' en la clase.")
+        # Buscar la tabla
+        flight_table = soup.find("table", id="dgGrillaA") or soup.find("table", class_="Grilla")
+        if not flight_table:
+            logger.warning("No se encontró la tabla de vuelos (probó id='dgGrillaA', class='Grilla')")
+            return []
+        logger.info(f"Tabla encontrada: {flight_table.get('id', '')} con clases {flight_table.get('class', [])}")
         
         flights = []
-        flight_items = (flight_list.find_all("div", class_="flight-row") or
-                        flight_list.find_all("tr", class_="flight") or
-                        flight_list.find_all("div", class_="flight-item") or
-                        flight_list.find_all("tr", class_="vuelo") or
-                        flight_list.find_all("div", class_="vuelo-item") or
-                        flight_list.find_all("tr") or  # Probar todas las filas si no hay clase específica
-                        flight_list.find_all("div", class_="vuelo-row"))
-        logger.info(f"Encontrados {len(flight_items)} elementos de vuelos")
-        for item in flight_items:
-            airline = (item.find("span", class_="flight-airline") or
-                       item.find("td", class_="airline") or
-                       item.find("div", class_="airline") or
-                       item.find("span", class_="vuelo-aerolinea") or
-                       item.find(lambda tag: tag.name in ["span", "td", "div"] and "aerolíneas argentinas" in tag.text.lower()))
-            airline_text = airline.text.strip() if airline else ""
-            if "Aerolíneas Argentinas" not in airline_text.lower():
+        # Ignorar la primera fila (encabezados)
+        rows = flight_table.find_all("tr")[1:]
+        logger.info(f"Encontradas {len(rows)} filas de vuelos")
+        
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 14:
+                logger.warning(f"Fila incompleta: {row.text[:100]}...")
                 continue
+                
+            airline = cols[0].text.strip()
+            if airline != "AR":
+                continue
+                
+            flight_number = cols[1].text.strip()
+            scheduled_time = cols[2].text.strip()
+            origin = cols[11].text.strip() if movtp == "A" else "N/A"
+            destination = cols[11].text.strip() if movtp == "D" else "N/A"
+            status = cols[13].text.strip()
+            gate = cols[7].text.strip() or cols[8].text.strip() or "N/A"
             
-            def get_text(selector, class_name):
-                element = item.find(selector, class_name)
-                return element.text.strip() if element else "N/A"
+            # Mapear estados
+            status_map = {
+                "DEM": "Demorado",
+                "EST": "Estimado",
+                "ATE": "Aterrizado",
+                "DES": "Despegado",
+                "CAN": "Cancelado"
+            }
+            status_text = status_map.get(status, status)
             
+            if status_text.lower() == "cancelado":
+                continue
+                
             flight = {
-                "flight_number": (get_text("span", "flight-number") or
-                                  get_text("td", "flight-number") or
-                                  get_text("div", "flight-number") or
-                                  get_text("span", "vuelo-numero") or
-                                  get_text("td", "vuelo-numero")),
-                "origin_destination": (get_text("span", "flight-destination") or
-                                       get_text("td", "destination") or
-                                       get_text("div", "destination") or
-                                       get_text("span", "vuelo-destino") or
-                                       get_text("td", "vuelo-destino")),
-                "scheduled_time": (get_text("span", "flight-scheduled") or
-                                   get_text("td", "scheduled") or
-                                   get_text("div", "scheduled") or
-                                   get_text("span", "vuelo-horario") or
-                                   get_text("td", "vuelo-horario")),
-                "status": (get_text("span", "flight-status") or
-                           get_text("td", "status") or
-                           get_text("div", "status") or
-                           get_text("span", "vuelo-estado") or
-                           get_text("td", "vuelo-estado")),
-                "gate": (get_text("span", "flight-gate") or
-                         get_text("td", "gate") or
-                         get_text("div", "gate") or
-                         get_text("span", "vuelo-puerta") or
-                         get_text("td", "vuelo-puerta")),
+                "flight_number": flight_number,
+                "origin_destination": origin if movtp == "A" else destination,
+                "scheduled_time": scheduled_time,
+                "status": status_text,
+                "gate": gate,
                 "flight_type": flight_type
             }
-            if flight["status"].lower() != "cancelado":
-                flights.append(flight)
+            flights.append(flight)
         
         logger.info(f"Scrapeados {len(flights)} vuelos válidos de {flight_type}")
         return flights
     
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error HTTP al scrapear AA2000 ({flight_type}): {str(e)}")
+        logger.error(f"Error HTTP al scrapear TAMS ({flight_type}): {str(e)}")
         return []
     except Exception as e:
-        logger.error(f"Error general al scrapear AA2000 ({flight_type}): {str(e)}")
-        return []               
+        logger.error(f"Error general al scrapear TAMS ({flight_type}): {str(e)}")
+        return []
 
 def save_to_aa2000_database(flights, db_url):
     try:
