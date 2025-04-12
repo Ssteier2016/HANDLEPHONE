@@ -683,7 +683,8 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         
         viewstate = soup.find("input", id="__VIEWSTATE")["value"] if soup.find("input", id="__VIEWSTATE") else ""
         eventvalidation = soup.find("input", id="__EVENTVALIDATION")["value"] if soup.find("input", id="__EVENTVALIDATION") else ""
-        logger.info(f"__VIEWSTATE: {viewstate[:50]}... __EVENTVALIDATION: {eventvalidation[:50]}...")
+        viewstategenerator = soup.find("input", id="__VIEWSTATEGENERATOR")["value"] if soup.find("input", id="__VIEWSTATEGENERATOR") else ""
+        logger.info(f"__VIEWSTATE: {viewstate[:50]}... __EVENTVALIDATION: {eventvalidation[:50]}... __VIEWSTATEGENERATOR: {viewstategenerator}")
         
         # Paso 2: POST para filtrar vuelos
         form_data = {
@@ -691,15 +692,21 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
             "__EVENTARGUMENT": "",
             "__VIEWSTATE": viewstate,
             "__EVENTVALIDATION": eventvalidation,
+            "__VIEWSTATEGENERATOR": viewstategenerator,
             "ddlMovTp": movtp,
             "ddlAeropuerto": airport_code,
+            "ddlSector": "-1",
             "ddlAerolinea": "AR",
+            "ddlAterrizados": "TODOS",
             "ddlVentanaH": "10",
             "btnBuscar": "Buscar"
         }
         
+        post_headers = headers.copy()
+        post_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        
         logger.info(f"Enviando POST a {url} con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
-        response = session.post(url, data=form_data, timeout=20)
+        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
         response.raise_for_status()
         logger.info(f"Respuesta HTTP: {response.status_code}")
         
