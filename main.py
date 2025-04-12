@@ -657,31 +657,39 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
     
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive"
         }
-        logger.info(f"Cargando {flight_type} para {airport} el {date} desde {url}")
-        response = requests.get(url, headers=headers, timeout=10)
+        logger.info(f"Intentando acceder a {url}")
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        logger.info(f"Respuesta HTTP: {response.status_code}")
         
-        flight_list = soup.find("div", class_="flight-table")
+        soup = BeautifulSoup(response.text, "html.parser")
+        logger.debug(f"HTML recibido: {response.text[:500]}...")  # Primeros 500 caracteres
+        
+        # Probar selectores alternativos
+        flight_list = soup.find("div", class_="flight-table") or soup.find("table", class_="flights") or soup.find("div", id="flight-data")
         if not flight_list:
-            logger.warning("No se encontró la lista de vuelos de AA2000.")
+            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data).")
             return []
         
         flights = []
-        flight_items = flight_list.find_all("div", class_="flight-row")
+        flight_items = flight_list.find_all("div", class_="flight-row") or flight_list.find_all("tr", class_="flight")
         logger.info(f"Encontrados {len(flight_items)} elementos de vuelos")
         for item in flight_items:
-            airline = item.find("span", class_="flight-airline").text.strip() if item.find("span", class_="flight-airline") else ""
-            if "Aerolíneas Argentinas" not in airline:
+            airline = item.find("span", class_="flight-airline") or item.find("td", class_="airline")
+            airline_text = airline.text.strip() if airline else ""
+            if "Aerolíneas Argentinas" not in airline_text:
                 continue
             flight = {
-                "flight_number": item.find("span", class_="flight-number").text.strip() if item.find("span", class_="flight-number") else "N/A",
-                "origin_destination": item.find("span", class_="flight-destination").text.strip() if item.find("span", class_="flight-destination") else "N/A",
-                "scheduled_time": item.find("span", class_="flight-scheduled").text.strip() if item.find("span", class_="flight-scheduled") else "N/A",
-                "status": item.find("span", class_="flight-status").text.strip() if item.find("span", class_="flight-status") else "N/A",
-                "gate": item.find("span", class_="flight-gate").text.strip() if item.find("span", class_="flight-gate") else "N/A",
+                "flight_number": (item.find("span", class_="flight-number") or item.find("td", class_="flight-number")).text.strip() if (item.find("span", class_="flight-number") or item.find("td", class_="flight-number")) else "N/A",
+                "origin_destination": (item.find("span", class_="flight-destination") or item.find("td", class_="destination")).text.strip() if (item.find("span", class_="flight-destination") or item.find("td", class_="destination")) else "N/A",
+                "scheduled_time": (item.find("span", class_="flight-scheduled") or item.find("td", class_="scheduled")).text.strip() if (item.find("span", class_="flight-scheduled") or item.find("td", class_="scheduled")) else "N/A",
+                "status": (item.find("span", class_="flight-status") or item.find("td", class_="status")).text.strip() if (item.find("span", class_="flight-status") or item.find("td", class_="status")) else "N/A",
+                "gate": (item.find("span", class_="flight-gate") or item.find("td", class_="gate")).text.strip() if (item.find("span", class_="flight-gate") or item.find("td", class_="gate")) else "N/A",
                 "flight_type": flight_type
             }
             if flight["status"].lower() != "cancelado":
@@ -690,8 +698,11 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         logger.info(f"Scrapeados {len(flights)} vuelos válidos de {flight_type}")
         return flights
     
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error HTTP al scrapear AA2000 ({flight_type}): {str(e)}")
+        return []
     except Exception as e:
-        logger.error(f"Error al scrapear AA2000 con requests ({flight_type}): {str(e)}")
+        logger.error(f"Error general al scrapear AA2000 ({flight_type}): {str(e)}")
         return []
 
 def save_to_aa2000_database(flights, db_url):
@@ -735,6 +746,56 @@ def save_to_aa2000_database(flights, db_url):
         if 'conn' in locals():
             conn.close()
 
+@app.get("/aa2000_flights")
+async def get_aa2000_flights():
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        logger.error("DATABASE_URL no está definida")
+        return {"error": "DATABASE_URL no está definida"}
+    
+    try:
+        conn = psycopg2.connect(db_url)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS aa2000_flights (
+                id SERIAL PRIMARY KEY,
+                flight_number VARCHAR(10),
+                origin_destination VARCHAR(100),
+                scheduled_time VARCHAR(20),
+                status VARCHAR(50),
+                gate VARCHAR(20),
+                flight_type VARCHAR(20),
+                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_aa2000_flight UNIQUE (flight_number, scheduled_time, flight_type)
+            );
+        """)
+        cursor.execute("""
+            SELECT flight_number, origin_destination, scheduled_time, status, gate, flight_type 
+            FROM aa2000_flights 
+            ORDER BY scraped_at DESC
+        """)
+        flights = cursor.fetchall()
+        conn.commit()
+        logger.info(f"Obtenidos {len(flights)} vuelos de AA2000 de la base de datos")
+        return [
+            {
+                "flight_number": f[0],
+                "origin_destination": f[1],
+                "scheduled_time": f[2],
+                "status": f[3],
+                "gate": f[4],
+                "flight_type": f[5]
+            } for f in flights
+        ]
+    except Exception as e:
+        logger.error(f"Error al obtener vuelos de AA2000: {e}")
+        return {"error": str(e)}
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
 async def update_aa2000_flights():
     while True:
         db_url = os.getenv("DATABASE_URL")
@@ -743,6 +804,7 @@ async def update_aa2000_flights():
             await asyncio.sleep(300)
             continue
         
+        logger.info("Iniciando actualización de vuelos AA2000")
         try:
             departures = scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP")
             arrivals = scrape_aa2000(flight_type="llegadas", airport="Aeroparque, AEP")
@@ -769,42 +831,17 @@ async def update_aa2000_flights():
         except Exception as e:
             logger.error(f"Error en update_aa2000_flights: {str(e)}")
         
+        logger.info("Finalizando ciclo de actualización AA2000, esperando 5 minutos")
         await asyncio.sleep(300)  # 5 minutos
 
-@app.get("/aa2000_flights")
-async def get_aa2000_flights():
-    try:
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT flight_number, origin_destination, scheduled_time, status, gate, flight_type 
-            FROM aa2000_flights 
-            ORDER BY scraped_at DESC
-        """)
-        flights = cursor.fetchall()
-        conn.close()
-        return [
-            {
-                "flight_number": f[0],
-                "origin_destination": f[1],
-                "scheduled_time": f[2],
-                "status": f[3],
-                "gate": f[4],
-                "flight_type": f[5]
-            } for f in flights
-        ]
-    except Exception as e:
-        logger.error(f"Error al obtener vuelos de AA2000: {e}")
-        return {"error": str(e)}
-
-# Añadir la tarea al startup
+# Startup ya está correcto, pero asegúrate de que esté
 @app.on_event("startup")
 async def startup_event():
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
     asyncio.create_task(update_tams_flights())
-    asyncio.create_task(update_aa2000_flights())  # Añadida aquí
+    asyncio.create_task(update_aa2000_flights())
     logger.info("Aplicación iniciada, tareas programadas")
         
 if __name__ == "__main__":
