@@ -642,47 +642,27 @@ async def startup_event():
 
 import os
 import psycopg2
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import logging
+import json
+import asyncio
 
 logger = logging.getLogger(__name__)
 
-def setup_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-        logger.info("Driver de Chrome inicializado correctamente")
-        return driver
-    except Exception as e:
-        logger.error(f"Error al inicializar el driver de Chrome: {str(e)}")
-        raise
-
 def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
-    driver = None
+    date = datetime.now().strftime("%d-%m-%Y")
+    url = f"https://www.aeropuertosargentina.com/es/vuelos?movtp={flight_type}&idarpt={airport.replace(', ', '%2C%20')}&fecha={date}"
+    
     try:
-        driver = setup_driver()
-        date = datetime.now().strftime("%d-%m-%Y")
-        url = f"https://www.aeropuertosargentina.com/es/vuelos?movtp={flight_type}&idarpt={airport.replace(', ', '%2C%20')}&fecha={date}"
-        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
         logger.info(f"Cargando {flight_type} para {airport} el {date} desde {url}")
-        driver.get(url)
-        
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "flight-table"))
-        )
-        html = driver.page_source
-        soup = BeautifulSoup(html, "html.parser")
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
         
         flight_list = soup.find("div", class_="flight-table")
         if not flight_list:
@@ -711,11 +691,8 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         return flights
     
     except Exception as e:
-        logger.error(f"Error detallado al scrapear AA2000 ({flight_type}): {str(e)}")
+        logger.error(f"Error al scrapear AA2000 con requests ({flight_type}): {str(e)}")
         return []
-    finally:
-        if driver:
-            driver.quit()
 
 def save_to_aa2000_database(flights, db_url):
     try:
