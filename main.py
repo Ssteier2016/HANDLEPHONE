@@ -648,7 +648,9 @@ from datetime import datetime
 import logging
 import json
 import asyncio
+from fastapi import APIRouter, FastAPI
 
+app = FastAPI()
 logger = logging.getLogger(__name__)
 
 def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
@@ -660,7 +662,8 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
-            "Connection": "keep-alive"
+            "Connection": "keep-alive",
+            "Referer": "https://www.aeropuertosargentina.com/"
         }
         logger.info(f"Intentando acceder a {url}")
         response = requests.get(url, headers=headers, timeout=15)
@@ -668,28 +671,55 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         logger.info(f"Respuesta HTTP: {response.status_code}")
         
         soup = BeautifulSoup(response.text, "html.parser")
-        logger.debug(f"HTML recibido: {response.text[:500]}...")  # Primeros 500 caracteres
+        logger.debug(f"HTML recibido: {response.text[:500]}...")
         
-        # Probar selectores alternativos
-        flight_list = soup.find("div", class_="flight-table") or soup.find("table", class_="flights") or soup.find("div", id="flight-data")
+        # Probar múltiples selectores
+        flight_list = (soup.find("div", class_="flight-table") or
+                      soup.find("table", class_="flights") or
+                      soup.find("div", id="flight-data") or
+                      soup.find("section", class_="flight-info"))
         if not flight_list:
-            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data).")
+            logger.warning("No se encontró la lista de vuelos (probó flight-table, flights, flight-data, flight-info).")
             return []
         
         flights = []
-        flight_items = flight_list.find_all("div", class_="flight-row") or flight_list.find_all("tr", class_="flight")
+        flight_items = (flight_list.find_all("div", class_="flight-row") or
+                       flight_list.find_all("tr", class_="flight") or
+                       flight_list.find_all("div", class_="flight-item"))
         logger.info(f"Encontrados {len(flight_items)} elementos de vuelos")
         for item in flight_items:
-            airline = item.find("span", class_="flight-airline") or item.find("td", class_="airline")
+            airline = (item.find("span", class_="flight-airline") or
+                      item.find("td", class_="airline") or
+                      item.find("div", class_="airline"))
             airline_text = airline.text.strip() if airline else ""
             if "Aerolíneas Argentinas" not in airline_text:
                 continue
             flight = {
-                "flight_number": (item.find("span", class_="flight-number") or item.find("td", class_="flight-number")).text.strip() if (item.find("span", class_="flight-number") or item.find("td", class_="flight-number")) else "N/A",
-                "origin_destination": (item.find("span", class_="flight-destination") or item.find("td", class_="destination")).text.strip() if (item.find("span", class_="flight-destination") or item.find("td", class_="destination")) else "N/A",
-                "scheduled_time": (item.find("span", class_="flight-scheduled") or item.find("td", class_="scheduled")).text.strip() if (item.find("span", class_="flight-scheduled") or item.find("td", class_="scheduled")) else "N/A",
-                "status": (item.find("span", class_="flight-status") or item.find("td", class_="status")).text.strip() if (item.find("span", class_="flight-status") or item.find("td", class_="status")) else "N/A",
-                "gate": (item.find("span", class_="flight-gate") or item.find("td", class_="gate")).text.strip() if (item.find("span", class_="flight-gate") or item.find("td", class_="gate")) else "N/A",
+                "flight_number": (item.find("span", class_="flight-number") or
+                                 item.find("td", class_="flight-number") or
+                                 item.find("div", class_="flight-number")).text.strip() if (item.find("span", class_="flight-number") or
+                                                                                         item.find("td", class_="flight-number") or
+                                                                                         item.find("div", class_="flight-number")) else "N/A",
+                "origin_destination": (item.find("span", class_="flight-destination") or
+                                     item.find("td", class_="destination") or
+                                     item.find("div", class_="destination")).text.strip() if (item.find("span", class_="flight-destination") or
+                                                                                            item.find("td", class_="destination") or
+                                                                                            item.find("div", class_="destination")) else "N/A",
+                "scheduled_time": (item.find("span", class_="flight-scheduled") or
+                                  item.find("td", class_="scheduled") or
+                                  item.find("div", class_="scheduled")).text.strip() if (item.find("span", class_="flight-scheduled") or
+                                                                                        item.find("td", class_="scheduled") or
+                                                                                        item.find("div", class_="scheduled")) else "N/A",
+                "status": (item.find("span", class_="flight-status") or
+                          item.find("td", class_="status") or
+                          item.find("div", class_="status")).text.strip() if (item.find("span", class_="flight-status") or
+                                                                             item.find("td", class_="status") or
+                                                                             item.find("div", class_="status")) else "N/A",
+                "gate": (item.find("span", class_="flight-gate") or
+                        item.find("td", class_="gate") or
+                        item.find("div", class_="gate")).text.strip() if (item.find("span", class_="flight-gate") or
+                                                                         item.find("td", class_="gate") or
+                                                                         item.find("div", class_="gate")) else "N/A",
                 "flight_type": flight_type
             }
             if flight["status"].lower() != "cancelado":
@@ -707,6 +737,7 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
 
 def save_to_aa2000_database(flights, db_url):
     try:
+        logger.info("Conectando a la base de datos para guardar vuelos")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
         cursor.execute("""
@@ -737,7 +768,7 @@ def save_to_aa2000_database(flights, db_url):
                 flight["flight_type"]
             ))
         conn.commit()
-        logger.info(f"Guardados {len(flights)} vuelos de AA2000 en la base de datos.")
+        logger.info(f"Guardados {len(flights)} vuelos de AA2000 en la base de datos")
     except Exception as e:
         logger.error(f"Error al guardar vuelos de AA2000: {e}")
     finally:
@@ -754,6 +785,7 @@ async def get_aa2000_flights():
         return {"error": "DATABASE_URL no está definida"}
     
     try:
+        logger.info("Conectando a la base de datos para obtener vuelos")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
         cursor.execute("""
@@ -796,7 +828,24 @@ async def get_aa2000_flights():
         if 'conn' in locals():
             conn.close()
 
+# Endpoint temporal para debuggear
+@app.get("/debug_aa2000_scrape")
+async def debug_aa2000_scrape():
+    try:
+        logger.info("Ejecutando debug de scraping AA2000")
+        departures = scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP")
+        arrivals = scrape_aa2000(flight_type="llegadas", airport="Aeroparque, AEP")
+        all_flights = (departures or []) + (arrivals or [])
+        db_url = os.getenv("DATABASE_URL")
+        if all_flights and db_url:
+            save_to_aa2000_database(all_flights, db_url)
+        return {"flights": all_flights, "count": len(all_flights)}
+    except Exception as e:
+        logger.error(f"Error en debug_aa2000_scrape: {e}")
+        return {"error": str(e)}
+
 async def update_aa2000_flights():
+    logger.info("Tarea update_aa2000_flights iniciada")
     while True:
         db_url = os.getenv("DATABASE_URL")
         if not db_url:
@@ -804,7 +853,7 @@ async def update_aa2000_flights():
             await asyncio.sleep(300)
             continue
         
-        logger.info("Iniciando actualización de vuelos AA2000")
+        logger.info("Iniciando ciclo de actualización de vuelos AA2000")
         try:
             departures = scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP")
             arrivals = scrape_aa2000(flight_type="llegadas", airport="Aeroparque, AEP")
@@ -813,17 +862,16 @@ async def update_aa2000_flights():
             
             if all_flights:
                 save_to_aa2000_database(all_flights, db_url)
-                for user in users.values():
-                    if user["logged_in"] and user["websocket"] is not None:
-                        try:
+                try:
+                    for user in users.values():
+                        if user["logged_in"] and user["websocket"] is not None:
                             await user["websocket"].send_text(json.dumps({
                                 "type": "aa2000_flight_update",
                                 "flights": all_flights
                             }))
                             logger.info(f"Actualización de vuelos AA2000 enviada a {user['name']}")
-                        except Exception as e:
-                            logger.error(f"Error al enviar actualización de vuelos AA2000: {e}")
-                            user["websocket"] = None
+                except NameError:
+                    logger.warning("Variable 'users' no definida, omitiendo envío WebSocket")
                 logger.info(f"Enviados {len(all_flights)} vuelos de AA2000")
             else:
                 logger.warning("No se encontraron vuelos de AA2000")
@@ -831,18 +879,20 @@ async def update_aa2000_flights():
         except Exception as e:
             logger.error(f"Error en update_aa2000_flights: {str(e)}")
         
-        logger.info("Finalizando ciclo de actualización AA2000, esperando 5 minutos")
+        logger.info("Finalizando ciclo de actualización AA2000")
         await asyncio.sleep(300)  # 5 minutos
 
-# Startup ya está correcto, pero asegúrate de que esté
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    asyncio.create_task(clear_messages())
-    asyncio.create_task(process_audio_queue())
-    asyncio.create_task(update_tams_flights())
-    asyncio.create_task(update_aa2000_flights())
-    logger.info("Aplicación iniciada, tareas programadas")
+    try:
+        init_db()
+        asyncio.create_task(clear_messages())
+        asyncio.create_task(process_audio_queue())
+        asyncio.create_task(update_tams_flights())
+        asyncio.create_task(update_aa2000_flights())
+        logger.info("Aplicación iniciada, tareas programadas")
+    except Exception as e:
+        logger.error(f"Error al iniciar aplicación: {e}")
         
 if __name__ == "__main__":
     import uvicorn
