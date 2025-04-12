@@ -667,7 +667,7 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Connection": "keep-alive",
-            "Referer": "http://www.tams.com.ar/",
+            "Referer": "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx",
             "Accept-Encoding": "gzip, deflate"
         }
         
@@ -675,32 +675,30 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         session = requests.Session()
         session.headers.update(headers)
         
-        # Paso 1: GET inicial para obtener __VIEWSTATE y __EVENTVALIDATION
+        # Paso 1: GET inicial para obtener campos del formulario
         logger.info(f"Intentando GET inicial a {url}")
         response = session.get(url, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         
-        viewstate = soup.find("input", id="__VIEWSTATE")["value"] if soup.find("input", id="__VIEWSTATE") else ""
-        eventvalidation = soup.find("input", id="__EVENTVALIDATION")["value"] if soup.find("input", id="__EVENTVALIDATION") else ""
-        viewstategenerator = soup.find("input", id="__VIEWSTATEGENERATOR")["value"] if soup.find("input", id="__VIEWSTATEGENERATOR") else ""
-        logger.info(f"__VIEWSTATE: {viewstate[:50]}... __EVENTVALIDATION: {eventvalidation[:50]}... __VIEWSTATEGENERATOR: {viewstategenerator}")
+        # Extraer todos los inputs ocultos
+        form_data = {}
+        for input_tag in soup.find_all("input", type="hidden"):
+            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
+        logger.info(f"Campos ocultos encontrados: {list(form_data.keys())}")
         
         # Paso 2: POST para filtrar vuelos
-        form_data = {
+        form_data.update({
             "__EVENTTARGET": "",
             "__EVENTARGUMENT": "",
-            "__VIEWSTATE": viewstate,
-            "__EVENTVALIDATION": eventvalidation,
-            "__VIEWSTATEGENERATOR": viewstategenerator,
             "ddlMovTp": movtp,
             "ddlAeropuerto": airport_code,
-            "ddlSector": "-1",
+            "ddlSector": "-",
             "ddlAerolinea": "AR",
             "ddlAterrizados": "TODOS",
             "ddlVentanaH": "10",
             "btnBuscar": "Buscar"
-        }
+        })
         
         post_headers = headers.copy()
         post_headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -709,9 +707,9 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         response = session.post(url, headers=post_headers, data=form_data, timeout=20)
         response.raise_for_status()
         logger.info(f"Respuesta HTTP: {response.status_code}")
+        logger.info(f"HTML recibido (primeros 2000 caracteres): {response.text[:2000]}...")
         
         soup = BeautifulSoup(response.text, "html.parser")
-        logger.info(f"HTML recibido (primeros 2000 caracteres): {response.text[:2000]}...")
         
         # Buscar la tabla
         flight_table = soup.find("table", id="dgGrillaA") or soup.find("table", class_="Grilla")
@@ -770,6 +768,7 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
     
     except requests.exceptions.RequestException as e:
         logger.error(f"Error HTTP al scrapear TAMS ({flight_type}): {str(e)}")
+        logger.info(f"HTML de error (primeros 2000 caracteres): {response.text[:2000] if 'response' in locals() else 'No disponible'}...")
         return []
     except Exception as e:
         logger.error(f"Error general al scrapear TAMS ({flight_type}): {str(e)}")
