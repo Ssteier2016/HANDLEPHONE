@@ -653,6 +653,8 @@ from fastapi import APIRouter, FastAPI
 app = FastAPI()
 logger = logging.getLogger(__name__)
 
+
+
 def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
     # Mapear flight_type y aeropuerto a códigos
     movtp = "D" if flight_type.lower() == "partidas" else "A"
@@ -681,62 +683,18 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # Extraer campos ocultos
+        # Extraer campos ocultos y valores por defecto de selects
         form_data = {}
-        for input_tag in soup.find_all("input", type="hidden"):
+        for input_tag in soup.find_all("input"):
             form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        logger.info(f"Campos ocultos iniciales: {list(form_data.keys())}")
+        for select_tag in soup.find_all("select"):
+            selected = select_tag.find("option", selected=True)
+            form_data[select_tag.get("id", select_tag.get("name", ""))] = selected.get("value", "") if selected else ""
+        logger.info(f"Campos encontrados: {list(form_data.keys())}")
         
-        post_headers = headers.copy()
-        post_headers["Content-Type"] = "application/x-www-form-urlencoded"
-        
-        # Paso 2: POST para ddlMovTp
+        # Paso 2: POST para btnBuscar
         form_data.update({
-            "__EVENTTARGET": "ddlMovTp",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-",
-            "ddlAerolinea": "AR",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10"
-        })
-        logger.info(f"POST 1: Cambiando ddlMovTp a {movtp}")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Actualizar campos ocultos
-        form_data = {}
-        for input_tag in soup.find_all("input", type="hidden"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        logger.info(f"Campos ocultos tras ddlMovTp: {list(form_data.keys())}")
-        
-        # Paso 3: POST para ddlAeropuerto
-        form_data.update({
-            "__EVENTTARGET": "ddlAeropuerto",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-",
-            "ddlAerolinea": "AR",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10"
-        })
-        logger.info(f"POST 2: Cambiando ddlAeropuerto a {airport_code}")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Actualizar campos ocultos
-        form_data = {}
-        for input_tag in soup.find_all("input", type="hidden"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        logger.info(f"Campos ocultos tras ddlAeropuerto: {list(form_data.keys())}")
-        
-        # Paso 4: POST para btnBuscar
-        form_data.update({
-            "__EVENTTARGET": "btnBuscar",
+            "__EVENTTARGET": "",
             "__EVENTARGUMENT": "",
             "ddlMovTp": movtp,
             "ddlAeropuerto": airport_code,
@@ -746,7 +704,11 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
             "ddlVentanaH": "10",
             "btnBuscar": "Buscar"
         })
-        logger.info(f"POST 3: Enviando btnBuscar con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
+        
+        post_headers = headers.copy()
+        post_headers["Content-Type"] = "application/x-www-form-urlencoded"]
+        
+        logger.info(f"Enviando POST a {url} con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
         response = session.post(url, headers=post_headers, data=form_data, timeout=20)
         response.raise_for_status()
         logger.info(f"Respuesta HTTP: {response.status_code}")
@@ -816,6 +778,8 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
     except Exception as e:
         logger.error(f"Error general al scrapear TAMS ({flight_type}): {str(e)}")
         return []
+                
+            
                 
 
 def save_to_aa2000_database(flights, db_url):
