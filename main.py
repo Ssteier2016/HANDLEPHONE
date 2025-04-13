@@ -706,7 +706,7 @@ def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
         })
         
         post_headers = headers.copy()
-        post_headers["Content-Type"] = "application/x-www-form-urlencoded"]
+        post_headers["Content-Type"] = "application/x-www-form-urlencoded"
         
         logger.info(f"Enviando POST a {url} con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
         response = session.post(url, headers=post_headers, data=form_data, timeout=20)
