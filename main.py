@@ -640,218 +640,84 @@ async def startup_event():
     asyncio.create_task(update_tams_flights())
     logger.info("Aplicación iniciada, tareas programadas")
 
-import os
 import psycopg2
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import logging
-import json
 import asyncio
 from fastapi import APIRouter, FastAPI
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
 
+
 def scrape_aa2000(flight_type="partidas", airport="Aeroparque, AEP"):
     # Mapear flight_type y aeropuerto a códigos
-    movtp = "D" if flight_type.lower() == "partidas" else "A"
+    flight_type_param = "dep" if flight_type.lower() == "partidas" else "arr"
     airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
     
-    # URL de TAMS
-    url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
+    # Configuración de la API (reemplaza con tu clave)
+    api_key = "TU_API_KEY"  # Obténla en https://aviationstack.com/
+    url = "http://api.aviationstack.com/v1/flights"
+    params = {
+        "access_key": api_key,
+        f"{flight_type_param}_iata": airport_code,
+        "airline_iata": "AR",  # Aerolíneas Argentinas
+        "limit": 100
+    }
     
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Connection": "keep-alive",
-            "Referer": "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx",
-            "Accept-Encoding": "gzip, deflate"
-        }
-        
-        # Usar sesión para mantener cookies
-        session = requests.Session()
-        session.headers.update(headers)
-        
-        # Paso 1: GET inicial
-        logger.info(f"Intentando GET inicial a {url}")
-        response = session.get(url, timeout=20)
+        logger.info(f"Consultando API para {flight_type} en {airport_code}")
+        response = requests.get(url, params=params, timeout=20)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Extraer campos ocultos y valores por defecto de selects
-        form_data = {}
-        for input_tag in soup.find_all("input"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        for select_tag in soup.find_all("select"):
-            selected = select_tag.find("option", selected=True)
-            form_data[select_tag.get("id", select_tag.get("name", ""))] = selected.get("value", "") if selected else ""
-        logger.info(f"Campos encontrados: {list(form_data.keys())}")
-        
-        # Paso 2: POST para ddlMovTp
-        form_data.update({
-            "__EVENTTARGET": "ddlMovTp",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-1",
-            "ddlAerolinea": "",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10"
-        })
-        post_headers = headers.copy()
-        post_headers["Content-Type"] = "application/x-www-form-urlencoded"
-        
-        logger.info(f"POST 1: Cambiando ddlMovTp a {movtp}")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Actualizar campos ocultos
-        form_data = {}
-        for input_tag in soup.find_all("input"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        for select_tag in soup.find_all("select"):
-            selected = select_tag.find("option", selected=True)
-            form_data[select_tag.get("id", select_tag.get("name", ""))] = selected.get("value", "") if selected else ""
-        logger.info(f"Campos tras ddlMovTp: {list(form_data.keys())}")
-        
-        # Paso 3: POST para ddlAeropuerto
-        form_data.update({
-            "__EVENTTARGET": "ddlAeropuerto",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-1",
-            "ddlAerolinea": "",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10"
-        })
-        logger.info(f"POST 2: Cambiando ddlAeropuerto a {airport_code}")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Actualizar campos ocultos
-        form_data = {}
-        for input_tag in soup.find_all("input"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        for select_tag in soup.find_all("select"):
-            selected = select_tag.find("option", selected=True)
-            form_data[select_tag.get("id", select_tag.get("name", ""))] = selected.get("value", "") if selected else ""
-        logger.info(f"Campos tras ddlAeropuerto: {list(form_data.keys())}")
-        
-        # Paso 4: POST para ddlAerolinea
-        form_data.update({
-            "__EVENTTARGET": "ddlAerolinea",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-1",
-            "ddlAerolinea": "AR",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10"
-        })
-        logger.info(f"POST 3: Cambiando ddlAerolinea a AR")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Actualizar campos ocultos
-        form_data = {}
-        for input_tag in soup.find_all("input"):
-            form_data[input_tag.get("id", input_tag.get("name", ""))] = input_tag.get("value", "")
-        for select_tag in soup.find_all("select"):
-            selected = select_tag.find("option", selected=True)
-            form_data[select_tag.get("id", select_tag.get("name", ""))] = selected.get("value", "") if selected else ""
-        logger.info(f"Campos tras ddlAerolinea: {list(form_data.keys())}")
-        
-        # Paso 5: POST para btnBuscar
-        form_data.update({
-            "__EVENTTARGET": "btnBuscar",
-            "__EVENTARGUMENT": "",
-            "ddlMovTp": movtp,
-            "ddlAeropuerto": airport_code,
-            "ddlSector": "-1",
-            "ddlAerolinea": "AR",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "10",
-            "btnBuscar": "Buscar"
-        })
-        logger.info(f"POST 4: Enviando btnBuscar con MovTp={movtp}, Aeropuerto={airport_code}, Aerolinea=AR")
-        response = session.post(url, headers=post_headers, data=form_data, timeout=20)
-        response.raise_for_status()
-        logger.info(f"Respuesta HTTP: {response.status_code}")
-        logger.info(f"HTML recibido (primeros 2000 caracteres): {response.text[:2000]}...")
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Buscar la tabla
-        flight_table = soup.find("table", id="dgGrillaA") or soup.find("table", class_="Grilla")
-        if not flight_table:
-            logger.warning("No se encontró la tabla de vuelos (probó id='dgGrillaA', class='Grilla')")
-            return []
-        logger.info(f"Tabla encontrada: {flight_table.get('id', '')} con clases {flight_table.get('class', [])}")
+        data = response.json()
         
         flights = []
-        # Ignorar la primera fila (encabezados)
-        rows = flight_table.find_all("tr")[1:]
-        logger.info(f"Encontradas {len(rows)} filas de vuelos")
-        
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 14:
-                logger.warning(f"Fila incompleta: {row.text[:100]}...")
+        for flight in data.get("data", []):
+            # Filtrar solo AR
+            if flight.get("airline", {}).get("iata", "") != "AR":
                 continue
                 
-            airline = cols[0].text.strip()
-            if airline != "AR":
-                continue
-                
-            flight_number = cols[1].text.strip()
-            scheduled_time = cols[2].text.strip()
-            origin = cols[11].text.strip() if movtp == "A" else "N/A"
-            destination = cols[11].text.strip() if movtp == "D" else "N/A"
-            status = cols[13].text.strip()
-            gate = cols[7].text.strip() or cols[8].text.strip() or "N/A"
-            
             # Mapear estados
-            status_map = {
-                "DEM": "Demorado",
-                "EST": "Estimado",
-                "ATE": "Aterrizado",
-                "DES": "Despegado",
-                "CAN": "Cancelado"
-            }
-            status_text = status_map.get(status, status)
-            
-            if status_text.lower() == "cancelado":
+            status = flight.get("flight_status", "").lower()
+            if status == "cancelled":
                 continue
                 
-            flight = {
+            status_map = {
+                "scheduled": "Estimado",
+                "active": "En vuelo",
+                "landed": "Aterrizado",
+                "delayed": "Demorado",
+                "departed": "Despegado"
+            }
+            status_text = status_map.get(status, status.capitalize())
+            
+            # Obtener datos
+            flight_number = flight.get("flight", {}).get("iata", "")
+            scheduled_time = flight.get(f"{flight_type_param}_scheduled_time", "")
+            origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr" else "N/A"
+            destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep" else "N/A"
+            gate = flight.get(f"{flight_type_param}", {}).get("gate", "N/A")
+            
+            flight_data = {
                 "flight_number": flight_number,
-                "origin_destination": origin if movtp == "A" else destination,
+                "origin_destination": origin if flight_type_param == "arr" else destination,
                 "scheduled_time": scheduled_time,
                 "status": status_text,
                 "gate": gate,
                 "flight_type": flight_type
             }
-            flights.append(flight)
+            flights.append(flight_data)
         
-        logger.info(f"Scrapeados {len(flights)} vuelos válidos de {flight_type}")
+        logger.info(f"Obtenidos {len(flights)} vuelos válidos de {flight_type}")
         return flights
     
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error HTTP al scrapear TAMS ({flight_type}): {str(e)}")
-        logger.info(f"HTML de error (primeros 2000 caracteres): {response.text[:2000] if 'response' in locals() else 'No disponible'}...")
+        logger.error(f"Error al consultar API ({flight_type}): {str(e)}")
         return []
     except Exception as e:
-        logger.error(f"Error general al scrapear TAMS ({flight_type}): {str(e)}")
-        return []
-
-
+        logger.error(f"Error general al procesar API ({flight_type}): {str(e)}")
+        return []         
                 
 
 def save_to_aa2000_database(flights, db_url):
