@@ -323,7 +323,7 @@ button:hover {
 #mute,
 #group-mute {
     background-color: #008000;
-    background-image: url('/templates/mute.png');
+    background-image: url('/templates/mic.png');
     background-repeat: no-repeat;
     background-size: cover;
     border: none;
@@ -342,7 +342,7 @@ button:hover {
 #mute.muted,
 #group-mute.muted {
     background-color: #ff0000;
-    background-image: url('/templates/mic.png');
+    background-image: url('/templates/mute.png');
 }
 
 #mute:hover,
