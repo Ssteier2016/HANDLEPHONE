@@ -36,6 +36,16 @@
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="display: none; font-size: 12px; color: #4682B4; margin-bottom: 10px;">
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Ej. Vuelos a SCL">
+        <button id="search-button">Consultar</button>
+    </div>
+    <div id="flights-window">
+        <h3>Información de Vuelos</h3>
+        <div id="flight-details"></div>
+    </div>
+    <!-- Resto sin cambios: #chat-window, #talk, #users, etc. -->
+            </div>
             Desliza a la izquierda para volver al grupo
         </div>
         <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()">Volver al Grupo</button>
