@@ -1,164 +1,75 @@
+/* Estilos generales */
 body {
-    background-color: #87CEEB; /* Color de respaldo por si la imagen no carga */
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    color: #333333; /* Texto oscuro para mejor contraste */
-    margin: 0;
-    padding: 10px;
-    box-sizing: border-box;
-    background-image: url('/templates/borde.png'); /* Usar borde.png como fondo */
-    background-size: cover; /* Ajustar la imagen para que cubra toda la pantalla */
-    background-position: center; /* Centrar la imagen */
-    background-repeat: no-repeat; /* Evitar que la imagen se repita */
-    position: relative;
-    overflow-x: hidden; /* Evitar desbordamiento horizontal */
-    min-height: 100vh; /* Asegurar que el cuerpo ocupe toda la altura */
-    display: flex;
-    justify-content: center;
     align-items: center;
-}
-
-/* Se eliminó la animación del avión volando (body::before y @keyframes fly) */
-
-#register, #main, #group-screen, #radar-screen, #history-screen {
-    background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente */
-    border: 3px solid #4682B4; /* Borde azul oscuro */
-    border-radius: 10px;
-    padding: 15px;
-    width: 100%;
-    max-width: 600px; /* Máximo ancho para pantallas grandes */
-    margin: 0 auto;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    display: none;
+    background-color: #87CEEB;
+    background-image: url('/templates/borde.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
     box-sizing: border-box;
-}
-
-#register {
-    display: block;
-}
-
-#main, #group-screen {
-    display: none; /* Ocultar por defecto */
-    position: relative; /* Necesario para posicionar #mute a la derecha */
-    flex-direction: column;
-    gap: 15px;
-    transition: transform 0.3s ease; /* Añadir transición para el deslizamiento */
-    transform: translateX(0); /* Posición inicial */
-}
-
-/* Clases para las transiciones de deslizamiento */
-.slide-left {
-    transform: translateX(-100%);
-}
-
-.slide-right {
-    transform: translateX(100%);
-}
-
-#group-join {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 10px 0;
-}
-
-#group-id {
-    flex-grow: 1;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    border: 2px solid #4682B4;
-    background-color: #F5F5F5;
     color: #333333;
-    border-radius: 5px;
-    box-sizing: border-box;
-}
-
-#join-group-btn {
-    background-color: #4682B4;
-    color: #FFFFFF;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-#join-group-btn:hover {
-    background-color: #FF4500;
-}
-
-#swipe-hint {
-    font-size: 12px;
-    color: #4682B4;
-    margin-bottom: 10px;
-}
-
-#return-to-group-btn {
-    background-color: #4682B4;
-    color: #FFFFFF;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    margin-bottom: 10px;
-}
-
-#return-to-group-btn:hover {
-    background-color: #FF4500;
-}
-
-#back-to-main {
-    position: absolute;
-    left: 10px;
-    top: 10px;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-}
-
-.back-icon {
-    width: 24px;
-    height: 24px;
-}
-
-#radar-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 10px;
-    box-sizing: border-box;
-    z-index: 1000;
-}
-
-.radar-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    flex-wrap: wrap; /* Permitir que los elementos se ajusten en pantallas pequeñas */
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    justify-content: center;
+    margin: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding: 10px;
+    position: relative;
 }
 
-#search-bar {
-    flex-grow: 1;
-    margin: 5px 10px;
-    width: auto;
+/* Estilos de botones e inputs */
+button,
+input,
+select {
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-sizing: border-box;
+    color: #333333;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 8px;
+    width: 100%;
+}
+
+button {
+    background-color: #4682B4;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    position: relative;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #FF4500;
+    color: #FFFFFF;
+}
+
+/* Estilos específicos */
+.back-icon {
+    height: 24px;
+    width: 24px;
+}
+
+.chat-message {
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    cursor: pointer;
+    margin: 5px 0;
+    padding: 5px;
+    text-shadow: none;
 }
 
 .close-btn {
     background-color: transparent;
     border: none;
-    color: #FF4500; /* Corregido: era "CampbellFF4500" */
-    font-size: 20px;
+    color: #FF4500;
     cursor: pointer;
+    font-size: 20px;
     padding: 5px 10px;
     transition: color 0.3s;
 }
@@ -167,225 +78,14 @@ body {
     color: #FF6347;
 }
 
-input, button, select {
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    margin: 5px 0;
-    padding: 8px;
-    width: 100%;
-    border: 2px solid #4682B4;
-    background-color: #F5F5F5;
-    color: #333333;
-    border-radius: 5px;
-    cursor: pointer;
-    box-sizing: border-box;
-}
-
-button {
-    background-color: #4682B4;
-    transition: background-color 0.3s;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-    position: relative; /* Permitir posicionamiento de hijos */
-}
-
-button:hover {
-    background-color: #FF4500;
-    color: #FFFFFF;
-}
-
-#talk, #group-talk {
-    background-color: #FF4500;
-    font-size: 28px; /* Doble del tamaño original (14px * 2) */
-    padding: 16px; /* Doble del padding original (8px * 2) */
-    width: 100%;
-    max-width: 400px; /* Limitar el ancho máximo */
-    margin: 5px auto; /* Centrarlo horizontalmente */
-}
-
-#mute, #group-mute {
-    position: absolute;
-    right: 10px;
-    top: 10px;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    background-color: #ff0000; /* Verde para desmuteado */
-    background-image: url('/templates/mute.png'); /* Micrófono encendido */
-    background-size: cover;
-    background-repeat: no-repeat;
-    cursor: pointer;
-    border-radius: 5px; /* Consistente con "cartel" */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Sombra tipo "cartel" */
-    transition: background-color 0.3s;
-}
-
-#mute.active, #group-mute.active {
-    background-color: #32CD32; /* Fondo verde para muteado */
-    background-image: url('/templates/mic.png'); /* Imagen para mutear */
-}
-
-#users, #group-users {
-    margin-top: 10px;
-    padding: 8px;
-    background-color: #F5F5F5; /* Igual que el contenedor de chat-list */
-    border: 2px solid #4682B4; /* Igual que chat-list */
-    border-radius: 5px; /* Igual que chat-list */
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2); /* Igual que chat-list */
-    max-height: 150px; /* Igual que chat-list */
-    overflow-y: auto; /* Permitir desplazamiento si hay muchos usuarios */
-    text-align: left; /* Alinear a la izquierda para consistencia */
-}
-
-.user-item {
-    border: 1px solid #4682B4; /* Igual que chat-message */
-    padding: 5px; /* Igual que chat-message */
-    margin: 5px 0; /* Igual que chat-message */
-    background-color: #FFFFFF; /* Igual que chat-message */
-    border-radius: 5px; /* Igual que chat-message */
-    color: #333333; /* Igual que chat-message */
-    text-shadow: none; /* Igual que chat-message */
-    display: flex; /* Para alinear texto y botón de mute */
-    align-items: center; /* Centrar verticalmente */
-    justify-content: space-between; /* Texto a la izquierda, botón a la derecha */
-    cursor: default; /* No es clickable como chat-message, pero mantenemos consistencia */
-    gap: 5px; /* Añadir un pequeño espacio entre el texto y el botón */
-}
-
-.user-item.in-group {
-    background-color: #90EE90; /* Verde claro para usuarios en el mismo grupo */
-}
-
-.user-item span {
-    flex-grow: 1; /* Permitir que el texto ocupe el espacio disponible */
-}
-
-.mute-button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    margin-right: 5px;
-    padding: 0;
-    color: #FF4500; /* Igual que play-icon */
-    outline: none; /* Eliminar borde azul al hacer focus */
-    transition: opacity 0.3s; /* Transición suave para el hover */
-}
-
-.mute-button:hover {
-    opacity: 0.7;
-}
-
-.mute-button:focus {
-    outline: none; /* Asegurar que no haya borde azul al hacer focus */
-}
-
-#messages, #history-screen {
-    margin-top: 15px;
-}
-
-#message-list, #history-list {
-    max-height: 150px;
-    overflow-y: auto;
-    text-align: left;
-    padding: 8px;
-    background-color: #F5F5F5;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-#message-list div, #history-list div {
-    margin: 5px 0;
-    cursor: pointer;
-    color: #333333;
-}
-
-#chat-window, #group-chat-window {
-    background-color: #F5F5F5;
-    border: 3px solid #4682B4;
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-#chat-window h3, #group-chat-window h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #4682B4;
-    text-align: center;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
-}
-
-#chat-list, #group-chat-list {
-    max-height: 150px;
-    overflow-y: auto;
-    text-align: left;
-    padding: 8px;
-    background-color: #FFFFFF;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-.chat-message {
-    border: 1px solid #4682B4;
-    padding: 5px;
-    margin: 5px 0;
-    background-color: #FFFFFF;
-    border-radius: 5px;
-    cursor: pointer;
-    color: #333333;
-    text-shadow: none;
-}
-
-.flight-message {
-    border: 1px solid #4682B4;
-    padding: 5px;
-    margin: 5px 0;
-    background-color: #FFFFFF;
-    border-radius: 5px;
-    color: #333333;
-    text-shadow: none;
-}
-
-/* Estilos para el cartel de Detalles de Vuelo */
-#flights-window, #group-flights-window {
-    background-color: #F5F5F5;
-    border: 3px solid #4682B4;
-    border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-#flights-window h3, #group-flights-window h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #4682B4;
-    text-align: center;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
-}
-
-#flight-details, #group-flight-details {
-    font-family: 'Orbitron', sans-serif;
-    padding: 10px;
-    max-height: 200px;
-    overflow-y: auto;
-    background-color: #FFFFFF;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
-}
-
 .flight {
-    padding: 8px;
-    margin: 5px 0;
-    border-radius: 5px;
-    font-size: 14px;
-    color: #333333;
     background-color: #F5F5F5;
     border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 8px;
     transition: background-color 0.3s;
 }
 
@@ -393,154 +93,484 @@ button:hover {
     margin-bottom: 0;
 }
 
-.flight-en-vuelo {
-    background-color: #90EE90; /* Verde claro */
+.flight-aterrizando,
+.flight-en-zona {
+    background-color: #FFB6C1;
     color: #333333 !important;
     text-shadow: none;
 }
 
-.flight-en-tierra,
 .flight-despegando,
+.flight-en-tierra,
 .flight-salida {
-    background-color: #FFFFE0; /* Amarillo claro */
+    background-color: #FFFFE0;
     color: #333333 !important;
     text-shadow: none;
 }
 
-.flight-en-zona,
-.flight-aterrizando {
-    background-color: #FFB6C1; /* Rosa claro */
+.flight-en-vuelo {
+    background-color: #90EE90;
     color: #333333 !important;
     text-shadow: none;
 }
 
-.play-icon {
-    margin-right: 5px;
-    font-size: 10px;
-    color: #FF4500;
-}
-
-h2 {
-    font-size: 16px;
-    margin: 8px 0;
-    color: #4682B4;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
-}
-
-h3 {
-    font-size: 14px;
-    margin: 8px 0;
-    color: #4682B4;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
-}
-
-#map {
-    height: calc(100% - 60px);
-    border: 2px solid #4682B4;
+.flight-message {
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
     border-radius: 5px;
-    background-color: #87CEEB;
+    color: #333333;
+    margin: 5px 0;
+    padding: 5px;
+    text-shadow: none;
 }
 
 .logo {
-    width: 24px; /* Reducido de 48px a 24px */
-    height: 24px; /* Reducido de 48px a 24px */
-    margin: 0 auto 8px;
     display: block;
+    height: 24px;
+    margin: 0 auto 8px;
+    width: 24px;
 }
 
-select {
-    -webkit-appearance: none;
-    -moz-appearance: none;
+.mute-button {
+    background: transparent;
+    border: none;
+    color: #FF4500;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    outline: none;
+    padding: 0;
+    transition: opacity 0.3s;
+}
+
+.mute-button:hover {
+    opacity: 0.7;
+}
+
+.mute-button:focus {
+    outline: none;
+}
+
+.play-icon {
+    color: #FF4500;
+    font-size: 10px;
+    margin-right: 5px;
+}
+
+.radar-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.select {
     appearance: none;
     background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
     padding-right: 30px;
 }
 
-select:hover {
+.select:hover {
     background-color: #FF4500;
     color: #FFFFFF;
 }
 
-/* Media query para pantallas pequeñas (celulares, max-width: 768px) */
+.user-item {
+    align-items: center;
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    cursor: default;
+    display: flex;
+    gap: 5px;
+    justify-content: space-between;
+    margin: 5px 0;
+    padding: 5px;
+    text-shadow: none;
+}
+
+.user-item.in-group {
+    background-color: #90EE90;
+}
+
+.user-item span {
+    flex-grow: 1;
+}
+
+/* IDs específicos */
+#back-to-main {
+    background: none;
+    border: none;
+    cursor: pointer;
+    left: 10px;
+    padding: 0;
+    position: absolute;
+    top: 10px;
+}
+
+#chat-list,
+#group-chat-list,
+#history-list,
+#message-list {
+    background-color: #FFFFFF;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 8px;
+    text-align: left;
+}
+
+#chat-window,
+#group-chat-window {
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+}
+
+#chat-window h3,
+#group-chat-window h3 {
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+#flight-details,
+#group-flight-details {
+    background-color: #FFFFFF;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+    font-family: 'Orbitron', sans-serif;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+#flights-window,
+#group-flights-window {
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
+    padding: 10px;
+}
+
+#flights-window h3,
+#group-flights-window h3 {
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+#group-id {
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-sizing: border-box;
+    color: #333333;
+    flex-grow: 1;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+}
+
+#group-join {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+#join-group-btn {
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: background-color 0.3s;
+}
+
+#join-group-btn:hover {
+    background-color: #FF4500;
+}
+
+#map {
+    background-color: #87CEEB;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    height: calc(100% - 60px);
+}
+
+#messages,
+#history-screen {
+    margin-top: 15px;
+}
+
+#mute,
+#group-mute {
+    background-color: #008000;
+    background-image: url('/templates/mute.png');
+    background-repeat: no-repeat;
+    background-size: cover;
+    border: none;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    height: 24px;
+    padding: 0;
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    transition: background-color 0.3s;
+    width: 24px;
+}
+
+#mute.muted,
+#group-mute.muted {
+    background-color: #ff0000;
+    background-image: url('/templates/mic.png');
+}
+
+#mute:hover,
+#group-mute:hover {
+    opacity: 0.8;
+}
+
+#mute-non-group {
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    display: block;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 10px auto;
+    padding: 8px;
+    transition: background-color 0.3s;
+}
+
+#mute-non-group.muted {
+    background-color: #FF4500;
+}
+
+#mute-non-group:hover {
+    background-color: #FF4500;
+}
+
+#radar-screen {
+    box-sizing: border-box;
+    height: 100%;
+    left: 0;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+}
+
+#register,
+#main,
+#group-screen,
+#radar-screen,
+#history-screen {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 3px solid #4682B4;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    margin: 0 auto;
+    max-width: 600px;
+    padding: 15px;
+    text-align: center;
+    width: 100%;
+}
+
+#register {
+    display: block;
+}
+
+#return-to-group-btn {
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin-bottom: 10px;
+    padding: 8px;
+    transition: background-color 0.3s;
+}
+
+#return-to-group-btn:hover {
+    background-color: #FF4500;
+}
+
+#search-bar {
+    flex-grow: 1;
+    margin: 5px 10px;
+    width: auto;
+}
+
+#swipe-hint {
+    color: #4682B4;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+#talk,
+#group-talk {
+    background-color: #FF4500;
+    font-size: 28px;
+    margin: 5px auto;
+    max-width: 400px;
+    padding: 16px;
+    width: 100%;
+}
+
+#users,
+#group-users {
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    max-height: 150px;
+    margin-top: 10px;
+    overflow-y: auto;
+    padding: 8px;
+    text-align: left;
+}
+
+/* Clases para transiciones */
+.slide-left {
+    transform: translateX(-100%);
+}
+
+.slide-right {
+    transform: translateX(100%);
+}
+
+/* Estilos para encabezados */
+h2 {
+    color: #4682B4;
+    font-size: 16px;
+    margin: 8px 0;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+h3 {
+    color: #4682B4;
+    font-size: 14px;
+    margin: 8px 0;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+/* Media queries */
 @media (max-width: 768px) {
     body {
-        padding: 5px;
         background-image: url('/templates/borde.png');
-        background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
+        background-size: cover;
+        padding: 5px;
     }
 
-    #register, #main, #group-screen, #radar-screen, #history-screen {
-        padding: 10px;
-        max-width: 100%; /* Ocupar todo el ancho disponible */
-        margin: 0;
+    #chat-list,
+    #group-chat-list,
+    #history-list,
+    #message-list {
+        max-height: 120px;
     }
 
-    #main, #group-screen {
+    #flights-window,
+    #group-flights-window,
+    #chat-window,
+    #group-chat-window {
+        width: 100%;
+    }
+
+    #main,
+    #group-screen {
         display: flex;
         flex-direction: column;
         gap: 10px;
     }
 
-    #flights-window, #group-flights-window, #chat-window, #group-chat-window {
-        width: 100%;
+    #mute,
+    #group-mute {
+        height: 20px;
+        right: 5px;
+        top: 5px;
+        width: 20px;
     }
 
-    #message-list, #chat-list, #group-chat-list, #history-list {
-        max-height: 120px; /* Reducir altura en pantallas pequeñas */
+    #radar-screen {
+        padding: 5px;
     }
 
-    input, button, select {
-        font-size: 12px;
+    #register,
+    #main,
+    #group-screen,
+    #radar-screen,
+    #history-screen {
+        margin: 0;
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    #talk,
+    #group-talk {
+        font-size: 24px;
+        max-width: 100%;
+        padding: 12px;
+    }
+
+    #users,
+    #group-users {
+        font-size: 10px;
+        max-height: 120px;
         padding: 6px;
     }
 
-    #talk, #group-talk {
-        font-size: 24px; /* Ajuste para pantallas pequeñas */
-        padding: 12px;
-        max-width: 100%; /* Ocupar todo el ancho */
-    }
-    
-    #mute:hover, #group-mute:hover {
-    opacity: 0.8; /* Efecto hover consistente */
-    }
-    
-    #mute, #group-mute {
-    position: absolute;
-    right: 5px;
-    top: 5px;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: none;
-    background-color: #008000; /* Verde para desmuteado */
-    background-image: url('/templates/mute.png'); /* Micrófono encendido */
-    background-size: cover;
-    background-repeat: no-repeat;
-    cursor: pointer;
-    border-radius: 5px; /* Consistente con "cartel" */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Sombra tipo "cartel" */
-    transition: background-color 0.3s;
-}
-
-    #users, #group-users {
-        font-size: 10px;
-        padding: 6px; /* Ajustado para pantallas pequeñas */
-        max-height: 120px; /* Igual que chat-list */
-    }
-
-    .user-item {
-        padding: 4px; /* Ligeramente menos que chat-message para pantallas pequeñas */
-        margin: 4px 0; /* Igual que chat-message ajustado */
+    .logo {
+        height: 20px;
+        width: 20px;
     }
 
     .mute-button {
-        font-size: 10px; /* Igual que play-icon */
-        margin-right: 4px; /* Ajustado para pantallas pequeñas */
-        width: auto; /* Dejar que el tamaño lo defina el emoji */
-        height: auto; /* Dejar que el tamaño lo defina el emoji */
-        line-height: normal; /* No forzar altura de línea */
+        font-size: 10px;
+        margin-right: 4px;
+        height: auto;
+        line-height: normal;
+        width: auto;
+    }
+
+    .user-item {
+        margin: 4px 0;
+        padding: 4px;
+    }
+
+    button,
+    input,
+    select {
+        font-size: 12px;
+        padding: 6px;
     }
 
     h2 {
@@ -551,17 +581,8 @@ select:hover {
         font-size: 12px;
     }
 
-    .logo {
-        width: 20px; /* Reducido de 40px a 20px */
-        height: 20px; /* Reducido de 40px a 20px */
-    }
-
-    #radar-screen {
-        padding: 5px;
-    }
-
     #map {
-        height: calc(100% - 50px); /* Ajustar altura del mapa */
+        height: calc(100% - 50px);
     }
 
     #back-to-main {
@@ -570,82 +591,105 @@ select:hover {
     }
 
     .back-icon {
-        width: 20px;
         height: 20px;
+        width: 20px;
     }
 }
 
-/* Media query para pantallas grandes (computadoras, min-width: 769px) */
 @media (min-width: 769px) {
     body {
-        padding: 20px;
         background-image: url('/templates/borde.png');
-        background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-    }
-
-    #register, #main, #group-screen, #radar-screen, #history-screen {
+        background-size: cover;
         padding: 20px;
-        max-width: 600px;
     }
 
-    #main, #group-screen {
+    #chat-list,
+    #group-chat-list,
+    #history-list,
+    #message-list {
+        max-height: 200px;
+    }
+
+    #flights-window,
+    #group-flights-window,
+    #chat-window,
+    #group-chat-window {
+        width: 100%;
+    }
+
+    #main,
+    #group-screen {
         display: flex;
         flex-direction: column;
         gap: 15px;
     }
 
-    #flights-window, #group-flights-window, #chat-window, #group-chat-window {
-        width: 100%;
-    }
-
-    #message-list, #chat-list, #group-chat-list, #history-list {
-        max-height: 200px;
-    }
-
-    input, button, select {
-        font-size: 16px;
-        padding: 10px;
-        width: auto; /* Permitir que los botones e inputs tengan su tamaño natural */
-        max-width: 100%;
-    }
-
-    button {
-        width: 200px; /* Botones más pequeños en pantallas grandes */
-        margin: 5px auto;
-    }
-
-    #talk, #group-talk {
-        font-size: 32px; /* Más grande en pantallas grandes */
-        padding: 20px;
-        max-width: 400px;
-    }
-
-    #mute, #group-mute {
+    #mute,
+    #group-mute {
+        height: 24px;
         right: 10px;
-        top: 10px; /* Arriba */
-        width: 24px; /* Tamaño pequeño */
-        height: 24px; /* Tamaño pequeño */
+        top: 10px;
+        width: 24px;
     }
 
-    #users, #group-users {
+    #radar-screen {
+        padding: 10px;
+    }
+
+    #register,
+    #main,
+    #group-screen,
+    #radar-screen,
+    #history-screen {
+        max-width: 600px;
+        padding: 20px;
+    }
+
+    #talk,
+    #group-talk {
+        font-size: 32px;
+        max-width: 400px;
+        padding: 20px;
+    }
+
+    #users,
+    #group-users {
         font-size: 14px;
-        padding: 8px; /* Igual que chat-list */
-        max-height: 200px; /* Igual que chat-list */
+        max-height: 200px;
+        padding: 8px;
     }
 
-    .user-item {
-        padding: 5px; /* Igual que chat-message */
-        margin: 5px 0; /* Igual que chat-message */
+    .logo {
+        height: 32px;
+        width: 32px;
     }
 
     .mute-button {
-        font-size: 12px; /* Ligeramente más grande que play-icon, pero consistente */
+        font-size: 12px;
         margin-right: 5px;
-        width: auto; /* Dejar que el tamaño lo defina el emoji */
-        height: auto; /* Dejar que el tamaño lo defina el emoji */
-        line-height: normal; /* No forzar altura de línea */
+        height: auto;
+        line-height: normal;
+        width: auto;
+    }
+
+    .user-item {
+        margin: 5px 0;
+        padding: 5px;
+    }
+
+    button {
+        margin: 5px auto;
+        width: 200px;
+    }
+
+    input,
+    select {
+        font-size: 16px;
+        max-width: 100%;
+        padding: 10px;
+        width: auto;
     }
 
     h2 {
@@ -654,15 +698,6 @@ select:hover {
 
     h3 {
         font-size: 16px;
-    }
-
-    .logo {
-        width: 32px; /* Reducido de 64px a 32px */
-        height: 32px; /* Reducido de 64px a 32px */
-    }
-
-    #radar-screen {
-        padding: 10px;
     }
 
     #map {
@@ -675,7 +710,7 @@ select:hover {
     }
 
     .back-icon {
-        width: 24px;
         height: 24px;
+        width: 24px;
     }
-}
+    }
