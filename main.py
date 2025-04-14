@@ -13,7 +13,6 @@ import aiohttp
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from bs4 import BeautifulSoup
 import speech_recognition as sr
 import io
 import soundfile as sf
@@ -28,7 +27,6 @@ with open("templates/index.html", "r") as f:
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    # Agregar encabezados para evitar caché en Chrome
     response = HTMLResponse(content=INDEX_HTML)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -52,18 +50,18 @@ def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Diccionarios para manejar usuarios, colas y grupos
-users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket (o None), "subscription": push_subscription, "muted_users": set, "group_id": str or None}}
+users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket, "subscription": push_subscription, "muted_users": set, "group_id": str or None}}
 audio_queue = asyncio.Queue()
 groups = {}  # {group_id: [lista de tokens de usuarios]}
 
 # Variable global para rastrear el muteo general
-global_mute_active = False  # Inicia desmuteado por defecto
+global_mute_active = False
 
 last_request_time = 0
 cached_data = None
-CACHE_DURATION = 15  # 15 segundos para evitar saturación
+CACHE_DURATION = 15  # 15 segundos
 
-# Función para transcribir audio usando speech_recognition
+# Función para transcribir audio
 async def transcribe_audio(audio_data):
     try:
         audio_bytes = base64.b64decode(audio_data)
@@ -79,16 +77,16 @@ async def transcribe_audio(audio_data):
         with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
             text = recognizer.recognize_google(audio_data, language="es-ES")
-            logger.info("Audio transcrito exitosamente en el servidor")
+            logger.info("Audio transcrito exitosamente")
             return text
     except sr.UnknownValueError:
-        logger.warning("No se pudo transcribir el audio en el servidor")
+        logger.warning("No se pudo transcribir el audio")
         return "No se pudo transcribir"
     except sr.RequestError as e:
-        logger.error(f"Error en la transcripción en el servidor: {e}")
+        logger.error(f"Error en la transcripción: {e}")
         return f"Error en la transcripción: {e}"
     except Exception as e:
-        logger.error(f"Error al procesar el audio en el servidor: {e}")
+        logger.error(f"Error al procesar el audio: {e}")
         return f"Error al procesar el audio: {e}"
     finally:
         audio_file.close()
@@ -102,79 +100,85 @@ async def get_airplanes_live_data():
         logger.info("Devolviendo datos en caché")
         return cached_data
     try:
-        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"  # 250 millas desde Aeroparque
+        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
                     cached_data = data.get("ac", [])
                     last_request_time = current_time
-                    logger.info("Datos de Airplanes.Live obtenidos correctamente")
+                    logger.info("Datos de Airplanes.Live obtenidos")
                     return cached_data
                 else:
-                    logger.error(f"Error al obtener datos de Airplanes.Live: {response.status}")
-                    return {"error": f"Error: {response.status}"}
+                    logger.error(f"Error Airplanes.Live: {response.status}")
+                    return []
     except Exception as e:
-        logger.error(f"Error al obtener datos de Airplanes.Live: {str(e)}")
-        return {"error": str(e)}
+        logger.error(f"Error al obtener Airplanes.Live: {str(e)}")
+        return []
 
-# Función para hacer web scraping de TAMS (actualizada con reintentos y mejor manejo de errores)
-def scrape_tams():
-    url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+# Función para obtener vuelos de AviationStack
+def fetch_flights_api(flight_type="partidas", airport="Aeroparque, AEP"):
+    flight_type_param = "dep" if flight_type.lower() == "partidas" else "arr"
+    airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
+    
+    api_key = "TU_API_KEY"  # Reemplaza con tu clave de AviationStack
+    url = "http://api.aviationstack.com/v1/flights"
+    params = {
+        "access_key": api_key,
+        f"{flight_type_param}_iata": airport_code,
+        "airline_iata": "AR",
+        "limit": 100
     }
-    session = requests.Session()
-    retries = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
-    session.mount("http://", HTTPAdapter(max_retries=retries))
-
+    
     try:
-        # Verificar si el sitio está accesible
-        response = session.head(url, timeout=5)
-        if response.status_code != 200:
-            logger.warning(f"No se puede acceder a TAMS. Código de estado: {response.status_code}")
-            return []
-
-        # Hacer la solicitud completa
-        response = session.get(url, headers=headers, timeout=15)
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
+        session.mount("http://", HTTPAdapter(max_retries=retries))
+        response = session.get(url, params=params, timeout=20)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        data = response.json()
+        
         flights = []
-
-        # Buscar spans y extraer datos
-        spans = soup.find_all('span')
-        flight_data = [span.text.strip() for span in spans if span.text.strip() and " " not in span.text]
-
-        for i in range(0, len(flight_data), 17):  # Ajustado según estructura observada
-            row = flight_data[i:i+17]
-            if len(row) < 17:
+        for flight in data.get("data", []):
+            if flight.get("airline", {}).get("iata", "") != "AR":
                 continue
-
-            airline = row[1]
-            flight_number = row[2]
-            scheduled_time = row[3]
-            registration = row[4]
-            position = row[5] if len(row) > 5 else ""
-            destination = row[11] if len(row) > 11 else ""
-            status = row[15] if len(row) > 15 else "Desconocido"  # Estado del vuelo (puede incluir "Cancelado")
-
-            if airline == "AR":  # Solo vuelos de Aerolíneas Argentinas
-                flights.append({
-                    "Vuelo": f"AR{flight_number}",
-                    "STD": scheduled_time,
-                    "Posicion": position,
-                    "Destino": destination,
-                    "Matricula": registration if registration != " " else "N/A",
-                    "Estado": status  # Agregar el estado del vuelo
-                })
-
-        logger.info(f"Datos scrapeados de TAMS: {len(flights)} vuelos de Aerolíneas Argentinas encontrados")
+                
+            status = flight.get("flight_status", "").lower()
+            if status == "cancelled":
+                continue
+                
+            status_map = {
+                "scheduled": "Estimado",
+                "active": "En vuelo",
+                "landed": "Aterrizado",
+                "delayed": "Demorado",
+                "departed": "Despegado"
+            }
+            status_text = status_map.get(status, status.capitalize())
+            
+            flight_number = flight.get("flight", {}).get("iata", "")
+            scheduled_time = flight.get(f"{flight_type_param}_scheduled_time", "")
+            origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr" else "N/A"
+            destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep" else "N/A"
+            gate = flight.get(f"{flight_type_param}", {}).get("gate", "N/A")
+            
+            flights.append({
+                "Vuelo": flight_number,
+                "STD": scheduled_time,
+                "Destino": destination if flight_type_param == "dep" else origin,
+                "Estado": status_text,
+                "Posicion": gate,
+                "Matricula": "N/A"  # AviationStack no proporciona matrícula
+            })
+        
+        logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
         return flights
+    
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error al scrapear TAMS: {e}")
+        logger.error(f"Error al consultar AviationStack ({flight_type}): {str(e)}")
         return []
     except Exception as e:
-        logger.error(f"Error inesperado al scrapear TAMS: {e}")
+        logger.error(f"Error general AviationStack ({flight_type}): {str(e)}")
         return []
 
 # Función para eliminar duplicados
@@ -188,43 +192,37 @@ def remove_duplicates(flights):
             unique_flights.append(flight)
     return unique_flights
 
-# Función para actualizar vuelos de TAMS cada 5 minutos y emitir a clientes
-async def update_tams_flights():
+# Actualizar vuelos cada 5 minutos
+async def update_flights():
     while True:
-        flights = scrape_tams()
-        unique_flights = remove_duplicates(flights)
-        if unique_flights:
-            # Emitir a todos los clientes conectados
-            for user in users.values():
-                if user["logged_in"] and user["websocket"] is not None:
-                    try:
-                        await user["websocket"].send_text(json.dumps({
-                            "type": "flight_update",
-                            "flights": unique_flights
-                        }))
-                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar actualización de vuelos: {e}")
-                        user["websocket"] = None
-            logger.info(f"Enviados {len(unique_flights)} vuelos únicos")
-        else:
-            logger.warning("No se encontraron vuelos únicos en TAMS para enviar")
+        for flight_type in ["llegadas", "partidas"]:
+            flights = fetch_flights_api(flight_type=flight_type)
+            unique_flights = remove_duplicates(flights)
+            if unique_flights:
+                for user in users.values():
+                    if user["logged_in"] and user["websocket"]:
+                        try:
+                            await user["websocket"].send_text(json.dumps({
+                                "type": "flight_update",
+                                "flights": unique_flights
+                            }))
+                            logger.info(f"Actualización de {flight_type} enviada a {user['name']}")
+                        except Exception as e:
+                            logger.error(f"Error al enviar vuelos: {e}")
+                            user["websocket"] = None
+                logger.info(f"Enviados {len(unique_flights)} vuelos de {flight_type}")
+            else:
+                logger.warning(f"No se encontraron vuelos de {flight_type}")
         await asyncio.sleep(300)  # 5 minutos
 
 @app.get("/opensky")
 async def get_opensky_data():
     airplanes_data = await get_airplanes_live_data()
-    tams_data = scrape_tams()
+    arrivals = fetch_flights_api(flight_type="llegadas")
+    departures = fetch_flights_api(flight_type="partidas")
+    tams_data = arrivals + departures
     
-    if isinstance(airplanes_data, dict) and "error" in airplanes_data:
-        logger.error(f"Error en Airplanes.Live: {airplanes_data['error']}")
-        airplanes_data = []  # Continuar con datos vacíos para mostrar al menos los datos de TAMS
-    if isinstance(tams_data, dict) and "error" in tams_data:
-        logger.error(f"Error en TAMS: {tams_data['error']}")
-        tams_data = []  # Continuar con datos vacíos para mostrar al menos los datos de Airplanes.Live
-
     combined_data = []
-    # Primero, agregar vuelos activos de Airplanes.Live
     for plane in airplanes_data:
         flight = plane.get("flight", "").strip()
         registration = plane.get("r", "").strip()
@@ -239,28 +237,26 @@ async def get_opensky_data():
                 "vert_rate": plane.get("vert_rate"),
                 "origin_dest": f"{plane.get('orig', 'N/A')}-{plane.get('dest', 'N/A')}"
             }
-            # Combinar con datos de TAMS si están disponibles
             for tams_flight in tams_data:
-                if tams_flight["Matricula"] == registration:
+                if tams_flight["Vuelo"] == flight:
                     plane_info.update({
                         "scheduled": tams_flight["STD"],
                         "position": tams_flight["Posicion"],
                         "destination": tams_flight["Destino"],
-                        "status": tams_flight.get("Estado", "Desconocido")
+                        "status": tams_flight["Estado"]
                     })
                     break
             combined_data.append(plane_info)
     
-    # Agregar vuelos de TAMS que no están en Airplanes.Live (por ejemplo, cancelados o programados)
     for tams_flight in tams_data:
-        if not any(plane["registration"] == tams_flight["Matricula"] for plane in combined_data):
+        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
             combined_data.append({
                 "flight": tams_flight["Vuelo"],
                 "registration": tams_flight["Matricula"],
                 "scheduled": tams_flight["STD"],
                 "position": tams_flight["Posicion"],
                 "destination": tams_flight["Destino"],
-                "status": tams_flight.get("Estado", "Desconocido"),
+                "status": tams_flight["Estado"],
                 "lat": None,
                 "lon": None,
                 "alt_geom": None,
@@ -269,7 +265,7 @@ async def get_opensky_data():
                 "origin_dest": None
             })
 
-    logger.info(f"Datos combinados: {len(combined_data)} vuelos (Airplanes.Live: {len(airplanes_data)}, TAMS: {len(tams_data)})")
+    logger.info(f"Datos combinados: {len(combined_data)} vuelos")
     return combined_data
 
 def init_db():
@@ -288,7 +284,7 @@ def save_message(user_id, audio_data, text, timestamp):
               (user_id, audio_data, text, timestamp, date))
     conn.commit()
     conn.close()
-    logger.info(f"Mensaje guardado en la base de datos: user_id={user_id}, timestamp={timestamp}")
+    logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
 
 def get_history():
     conn = sqlite3.connect("chat_history.db")
@@ -307,28 +303,24 @@ async def process_audio_queue():
             text = message.get("text", "Sin transcripción")
             timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
 
-            logger.info(f"Procesando mensaje de audio de {sender} ({function}) con token {token}")
+            logger.info(f"Procesando audio de {sender} ({function})")
 
-            # Si el muteo global está activo, no transmitir el audio
             if global_mute_active:
                 logger.info("Muteo global activo, audio no transmitido")
                 audio_queue.task_done()
                 continue
 
-            # Si el cliente no proporcionó una transcripción, transcribir en el servidor
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
-                logger.info("Transcribiendo audio en el servidor...")
+                logger.info("Transcribiendo audio...")
                 text = await transcribe_audio(audio_data)
-                logger.info(f"Transcripción del servidor: {text}")
+                logger.info(f"Transcripción: {text}")
 
-            # Guardar el mensaje en la base de datos
             user_id = f"{sender}_{function}"
             try:
                 save_message(user_id, audio_data, text, timestamp)
             except Exception as e:
-                logger.error(f"Error al guardar el mensaje en la base de datos: {e}")
+                logger.error(f"Error al guardar mensaje: {e}")
 
-            # Retransmitir el mensaje a los usuarios conectados
             broadcast_message = {
                 "type": "audio",
                 "sender": sender,
@@ -337,27 +329,20 @@ async def process_audio_queue():
                 "timestamp": timestamp,
                 "data": audio_data
             }
-            logger.info(f"Retransmitiendo mensaje a {len(users)} usuarios")
             for user_token, user in list(users.items()):
                 if user_token == token:
                     continue
-                # Verificar si el usuario ha muteado al remitente
                 muted_users = user.get("muted_users", set())
                 sender_id = f"{sender}_{function}"
-                if sender_id in muted_users:
-                    logger.info(f"Usuario {user['name']} ha muteado a {sender_id}, no recibirá el mensaje")
-                    continue
-                # Si el usuario está en un grupo, no recibirá mensajes generales
-                if user.get("group_id"):
-                    logger.info(f"Usuario {user['name']} está en un grupo ({user['group_id']}), no recibirá mensajes generales")
+                if sender_id in muted_users or user.get("group_id"):
                     continue
                 ws = user.get("websocket")
                 if ws:
                     try:
                         await ws.send_json(broadcast_message)
-                        logger.info(f"Mensaje enviado a {user['name']} ({user_token})")
+                        logger.info(f"Mensaje enviado a {user['name']}")
                     except Exception as e:
-                        logger.error(f"Error al enviar mensaje a {user['name']} ({user_token}): {e}")
+                        logger.error(f"Error al enviar a {user['name']}: {e}")
                         user["websocket"] = None
                         users[user_token]["logged_in"] = False
                         await broadcast_users()
@@ -369,9 +354,8 @@ async def process_audio_queue():
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     await websocket.accept()
-    logger.info(f"Cliente conectado con token: {token}")
+    logger.info(f"Cliente conectado: {token}")
 
-    # Declarar global_mute_active al inicio de la función para todo el ámbito
     global global_mute_active
 
     try:
@@ -385,14 +369,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "function": "Desconocida",
                 "logged_in": True,
                 "websocket": websocket,
-                "muted_users": set(),  # Lista de usuarios muteados (como "name_function")
+                "muted_users": set(),
                 "subscription": None,
-                "group_id": None  # Nuevo: campo para rastrear el grupo al que pertenece el usuario
+                "group_id": None
             }
 
-        # Enviar confirmación de conexión al cliente
-        await websocket.send_json({"type": "connection_success", "message": "Conectado al servidor"})
-        logger.info(f"Confirmación de conexión enviada a {token}")
+        await websocket.send_json({"type": "connection_success", "message": "Conectado"})
+        logger.info(f"Confirmación enviada a {token}")
 
         await broadcast_users()
 
@@ -408,31 +391,30 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["function"] = function
                 users[token]["logged_in"] = True
                 await websocket.send_json({"type": "register_success", "message": "Registro exitoso"})
-                logger.info(f"Usuario registrado: {name} ({function}) con token {token}, confirmación enviada")
+                logger.info(f"Usuario registrado: {name} ({function})")
                 await broadcast_users()
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
-                logger.info(f"Suscripción push recibida para {token}")
+                logger.info(f"Suscripción push para {token}")
 
             elif message["type"] == "audio":
                 audio_data = message.get("data")
                 if not audio_data:
-                    logger.error("Mensaje de audio sin datos de audio")
+                    logger.error("Audio sin datos")
                     continue
                 await audio_queue.put((token, audio_data, message))
-                logger.info(f"Mensaje de audio recibido de {token} y agregado a la cola")
+                logger.info(f"Audio recibido de {token}")
 
             elif message["type"] == "logout":
-                if token in users:
-                    group_id = users[token]["group_id"]
-                    if group_id and group_id in groups:
-                        if token in groups[group_id]:
-                            groups[group_id].remove(token)
-                        if not groups[group_id]:  # Si el grupo está vacío, eliminarlo
-                            del groups[group_id]
-                    users[token]["logged_in"] = False
-                    del users[token]
+                group_id = users[token]["group_id"]
+                if group_id and group_id in groups:
+                    if token in groups[group_id]:
+                        groups[group_id].remove(token)
+                    if not groups[group_id]:
+                        del groups[group_id]
+                users[token]["logged_in"] = False
+                del users[token]
                 await broadcast_users()
                 await websocket.close()
                 logger.info(f"Usuario {token} cerró sesión")
@@ -442,32 +424,36 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 target_user_id = message.get("target_user_id")
                 if target_user_id:
                     users[token]["muted_users"].add(target_user_id)
-                    logger.info(f"Usuario {users[token]['name']} muteó a {target_user_id}")
+                    logger.info(f"{users[token]['name']} muteó a {target_user_id}")
                 else:
-                    logger.error("Mensaje de mute_user sin target_user_id")
+                    logger.error("mute_user sin target_user_id")
 
             elif message["type"] == "unmute_user":
                 target_user_id = message.get("target_user_id")
                 if target_user_id:
                     users[token]["muted_users"].discard(target_user_id)
-                    logger.info(f"Usuario {users[token]['name']} desmuteó a {target_user_id}")
+                    logger.info(f"{users[token]['name']} desmuteó a {target_user_id}")
                 else:
-                    logger.error("Mensaje de unmute_user sin target_user_id")
+                    logger.error("unmute_user sin target_user_id")
+
+            elif message["type"] == "mute_all":
+                global_mute_active = True
+                await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
+                logger.info(f"{users[token]['name']} activó muteo global")
 
             elif message["type"] == "unmute_all":
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
-                logger.info(f"Usuario {users[token]['name']} desactivó muteo global")
+                logger.info(f"{users[token]['name']} desactivó muteo global")
 
             elif message["type"] == "mute":
-                logger.info(f"Usuario {users[token]['name']} activó mute local")
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
+                logger.info(f"{users[token]['name']} activó mute local")
 
             elif message["type"] == "unmute":
-                logger.info(f"Usuario {users[token]['name']} desactivó mute local")
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
+                logger.info(f"{users[token]['name']} desactivó mute local")
 
-            # Nuevos tipos de mensajes para grupos privados
             elif message["type"] == "join_group":
                 group_id = message["group_id"]
                 if group_id not in groups:
@@ -476,7 +462,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     groups[group_id].append(token)
                 users[token]["group_id"] = group_id
                 await websocket.send_json({"type": "join_group", "group_id": group_id})
-                logger.info(f"Usuario {users[token]['name']} se unió al grupo {group_id}")
+                logger.info(f"{users[token]['name']} se unió al grupo {group_id}")
                 await broadcast_users()
 
             elif message["type"] == "leave_group":
@@ -484,11 +470,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 if token and group_id in groups:
                     if token in groups[group_id]:
                         groups[group_id].remove(token)
-                    if not groups[group_id]:  # Si el grupo está vacío, eliminarlo
+                    if not groups[group_id]:
                         del groups[group_id]
                     users[token]["group_id"] = None
                     await broadcast_users()
-                    logger.info(f"Usuario {users[token]['name']} salió del grupo {group_id}")
+                    logger.info(f"{users[token]['name']} salió del grupo {group_id}")
 
             elif message["type"] == "check_group":
                 group_id = message["group_id"]
@@ -496,32 +482,29 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 if token and group_id in groups and token in groups[group_id]:
                     in_group = True
                 await websocket.send_json({"type": "check_group", "group_id": group_id, "in_group": in_group})
-                logger.info(f"Verificación de grupo para {users[token]['name']}: {'está' if in_group else 'no está'} en el grupo {group_id}")
+                logger.info(f"Verificación grupo para {users[token]['name']}: {'está' if in_group else 'no está'} en {group_id}")
 
             elif message["type"] == "group_message":
                 group_id = users[token]["group_id"]
                 if group_id and group_id in groups:
                     audio_data = message.get("data")
                     if not audio_data:
-                        logger.error("Mensaje de grupo sin datos de audio")
+                        logger.error("Grupo mensaje sin audio")
                         continue
                     text = message.get("text", "Sin transcripción")
                     timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
 
-                    # Si el cliente no proporcionó una transcripción, transcribir en el servidor
                     if text == "Sin transcripción" or text == "Pendiente de transcripción":
-                        logger.info("Transcribiendo audio de grupo en el servidor...")
+                        logger.info("Transcribiendo grupo audio...")
                         text = await transcribe_audio(audio_data)
-                        logger.info(f"Transcripción del servidor para mensaje de grupo: {text}")
+                        logger.info(f"Transcripción grupo: {text}")
 
-                    # Guardar el mensaje en la base de datos
                     user_id = f"{users[token]['name']}_{users[token]['function']}"
                     try:
                         save_message(user_id, audio_data, f"[Grupo {group_id}] {text}", timestamp)
                     except Exception as e:
-                        logger.error(f"Error al guardar el mensaje de grupo en la base de datos: {e}")
+                        logger.error(f"Error al guardar mensaje grupo: {e}")
 
-                    # Enviar el mensaje solo a los usuarios del grupo
                     broadcast_message = {
                         "type": "group_message",
                         "sender": users[token]["name"],
@@ -536,19 +519,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             continue
                         if user_token in users:
                             user = users[user_token]
-                            # Verificar si el usuario ha muteado al remitente
                             muted_users = user.get("muted_users", set())
                             sender_id = f"{users[token]['name']}_{users[token]['function']}"
                             if sender_id in muted_users:
-                                logger.info(f"Usuario {user['name']} ha muteado a {sender_id}, no recibirá el mensaje de grupo")
                                 continue
                             ws = user.get("websocket")
                             if ws:
                                 try:
                                     await ws.send_json(broadcast_message)
-                                    logger.info(f"Mensaje de grupo enviado a {user['name']} ({user_token}) en el grupo {group_id}")
+                                    logger.info(f"Mensaje grupo enviado a {user['name']} en {group_id}")
                                 except Exception as e:
-                                    logger.error(f"Error al enviar mensaje de grupo a {user['name']} ({user_token}): {e}")
+                                    logger.error(f"Error al enviar grupo a {user['name']}: {e}")
                                     user["websocket"] = None
                                     users[user_token]["logged_in"] = False
                                     await broadcast_users()
@@ -566,7 +547,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["logged_in"] = False
             await broadcast_users()
     except Exception as e:
-        logger.error(f"Error en WebSocket para el cliente {token}: {str(e)}", exc_info=True)
+        logger.error(f"Error WebSocket {token}: {str(e)}")
         if token in users:
             group_id = users[token]["group_id"]
             if group_id and group_id in groups:
@@ -579,15 +560,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await broadcast_users()
         await websocket.close()
 
-# Nueva función para difundir el estado de muteo global
 async def broadcast_global_mute_state(message_type, message_text):
     for user in list(users.values()):
-        if user["logged_in"] and user["websocket"] is not None:
+        if user["logged_in"] and user["websocket"]:
             try:
                 await user["websocket"].send_json({"type": message_type, "message": message_text})
-                logger.info(f"Estado de muteo global ({message_type}) enviado a {user['name']}")
+                logger.info(f"Estado mute global ({message_type}) a {user['name']}")
             except Exception as e:
-                logger.error(f"Error al enviar estado de muteo global a {user['name']}: {e}")
+                logger.error(f"Error al enviar mute global a {user['name']}: {e}")
                 user["websocket"] = None
                 user["logged_in"] = False
                 await broadcast_users()
@@ -598,30 +578,30 @@ async def broadcast_users():
         if users[token]["logged_in"]:
             decoded_token = base64.b64decode(token).decode('utf-8')
             legajo, name, _ = decoded_token.split('_', 2)
-            user_id = f"{users[token]['name']}_{users[token]['function']}"  # Identificador único para mutear
+            user_id = f"{users[token]['name']}_{users[token]['function']}"
             user_list.append({
                 "display": f"{users[token]['name']} ({legajo})",
                 "user_id": user_id,
-                "group_id": users[token]["group_id"]  # Incluir el group_id en la lista de usuarios
+                "group_id": users[token]["group_id"]
             })
     for user in list(users.values()):
-        if user["logged_in"] and user["websocket"] is not None:
+        if user["logged_in"] and user["websocket"]:
             try:
                 await user["websocket"].send_text(json.dumps({
-                    "type": "users",
+                    "a["type": "users",
                     "count": len(user_list),
                     "list": user_list
                 }))
-                logger.info(f"Lista de usuarios enviada a {user['name']}")
+                logger.info(f"Lista usuarios enviada a {user['name']}")
             except Exception as e:
-                logger.error(f"Error al enviar lista de usuarios a un cliente: {e}")
+                logger.error(f"Error al enviar usuarios: {e}")
                 user["websocket"] = None
                 user["logged_in"] = False
 
 @app.get("/history")
 async def get_history_endpoint():
     history = get_history()
-    logger.info(f"Historial solicitado, {len(history)} mensajes devueltos")
+    logger.info(f"Historial: {len(history)} mensajes")
     return history
 
 async def clear_messages():
@@ -637,10 +617,10 @@ async def startup_event():
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
-    asyncio.create_task(update_tams_flights())
-    logger.info("Aplicación iniciada, tareas programadas")
+    asyncio.create_task(update_flights())
+    logger.info("Aplicación iniciada")
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))  # Usar el puerto asignado por Render
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port) 
