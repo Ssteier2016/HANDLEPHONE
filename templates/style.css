@@ -501,13 +501,28 @@ select:hover {
         padding: 12px;
         max-width: 100%; /* Ocupar todo el ancho */
     }
-
-    #mute, #group-mute {
-        right: 5px; /* Menos margen en pantallas pequeñas */
-        top: 5px; /* Arriba */
-        width: 20px; /* Más pequeño */
-        height: 20px; /* Más pequeño */
+    
+    #mute:hover, #group-mute:hover {
+    opacity: 0.8; /* Efecto hover consistente */
     }
+    
+    #mute, #group-mute {
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background-color: #008000; /* Verde para desmuteado */
+    background-image: url('/templates/mute.png'); /* Micrófono encendido */
+    background-size: cover;
+    background-repeat: no-repeat;
+    cursor: pointer;
+    border-radius: 5px; /* Consistente con "cartel" */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Sombra tipo "cartel" */
+    transition: background-color 0.3s;
+}
 
     #users, #group-users {
         font-size: 10px;
