@@ -210,11 +210,14 @@ button:hover {
     height: 24px;
     padding: 0;
     border: none;
-    background-color: #FF4500; /* Fondo rojo para desmuteado */
-    background-image: url('/templates/mute.png'); /* Imagen para desmutear */
+    background-color: #ff0000; /* Verde para desmuteado */
+    background-image: url('/templates/mute.png'); /* Micrófono encendido */
     background-size: cover;
     background-repeat: no-repeat;
     cursor: pointer;
+    border-radius: 5px; /* Consistente con "cartel" */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Sombra tipo "cartel" */
+    transition: background-color 0.3s;
 }
 
 #mute.active, #group-mute.active {
