@@ -588,7 +588,7 @@ async def broadcast_users():
         if user["logged_in"] and user["websocket"]:
             try:
                 await user["websocket"].send_text(json.dumps({
-                    "a["type": "users",
+                    "type": "users",
                     "count": len(user_list),
                     "list": user_list
                 }))
