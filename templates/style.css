@@ -201,13 +201,22 @@ button:hover {
 
 /* IDs específicos */
 #back-to-main {
-    background: none;
-    border: none;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
     cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
     left: 10px;
-    padding: 0;
+    padding: 8px;
     position: absolute;
     top: 10px;
+    transition: background-color 0.3s;
+}
+
+#back-to-main:hover {
+    background-color: #FF4500;
 }
 
 #chat-list,
@@ -323,7 +332,7 @@ button:hover {
 #mute,
 #group-mute {
     background-color: #008000;
-    background-image: url('/templates/mic.png');
+    background-image: url('/templates/mute.png');
     background-repeat: no-repeat;
     background-size: cover;
     border: none;
@@ -342,7 +351,7 @@ button:hover {
 #mute.muted,
 #group-mute.muted {
     background-color: #ff0000;
-    background-image: url('/templates/mute.png');
+    background-image: url('/templates/mic.png');
 }
 
 #mute:hover,
@@ -586,13 +595,10 @@ h3 {
     }
 
     #back-to-main {
+        font-size: 12px;
         left: 5px;
+        padding: 6px;
         top: 5px;
-    }
-
-    .back-icon {
-        height: 20px;
-        width: 20px;
     }
 }
 
@@ -705,12 +711,9 @@ h3 {
     }
 
     #back-to-main {
+        font-size: 14px;
         left: 10px;
+        padding: 8px;
         top: 10px;
     }
-
-    .back-icon {
-        height: 24px;
-        width: 24px;
-    }
-    }
+}
