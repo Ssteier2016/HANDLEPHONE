@@ -17,6 +17,7 @@ let currentGroup = null;
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
+let flightData = [];
 
 // Mapeo de aerolíneas
 const AIRLINE_MAPPING = {
