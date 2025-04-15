@@ -53,6 +53,7 @@ def to_icao(text):
 users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket, "subscription": push_subscription, "muted_users": set, "group_id": str or None}}
 audio_queue = asyncio.Queue()
 groups = {}  # {group_id: [lista de tokens de usuarios]}
+flights_cache = []  # Cache global para vuelos
 
 # Variable global para rastrear el muteo general
 global_mute_active = False
@@ -91,6 +92,24 @@ async def transcribe_audio(audio_data):
     finally:
         audio_file.close()
         wav_io.close()
+
+# Función para procesar consultas de búsqueda
+async def process_search_query(query, flights):
+    query = query.lower()
+    results = []
+    if "demorado" in query or "demorados" in query:
+        results = [f for f in flights if f["Estado"].lower() == "demorado"]
+    elif "a " in query:
+        destination = query.split("a ")[-1].strip()
+        results = [f for f in flights if destination in f["Destino"].lower()]
+    elif "ar" in query:
+        flight_number = query.upper().split("AR")[-1].strip()
+        results = [f for f in flights if f["Vuelo"] == f"AR{flight_number}"]
+    else:
+        results = flights
+    if not results:
+        return "No se encontraron vuelos para tu consulta."
+    return ", ".join([f"{f['Vuelo']} a {f['Destino']}, {f['Estado']}" for f in results])
 
 # Función para obtener datos de Airplanes.Live
 async def get_airplanes_live_data():
@@ -194,25 +213,27 @@ def remove_duplicates(flights):
 
 # Actualizar vuelos cada 5 minutos
 async def update_flights():
+    global flights_cache
     while True:
+        flights = []
         for flight_type in ["llegadas", "partidas"]:
-            flights = fetch_flights_api(flight_type=flight_type)
-            unique_flights = remove_duplicates(flights)
-            if unique_flights:
-                for user in users.values():
-                    if user["logged_in"] and user["websocket"]:
-                        try:
-                            await user["websocket"].send_text(json.dumps({
-                                "type": "flight_update",
-                                "flights": unique_flights
-                            }))
-                            logger.info(f"Actualización de {flight_type} enviada a {user['name']}")
-                        except Exception as e:
-                            logger.error(f"Error al enviar vuelos: {e}")
-                            user["websocket"] = None
-                logger.info(f"Enviados {len(unique_flights)} vuelos de {flight_type}")
-            else:
-                logger.warning(f"No se encontraron vuelos de {flight_type}")
+            flights.extend(fetch_flights_api(flight_type=flight_type))
+        flights_cache = remove_duplicates(flights)
+        if flights_cache:
+            for user in users.values():
+                if user["logged_in"] and user["websocket"]:
+                    try:
+                        await user["websocket"].send_text(json.dumps({
+                            "type": "flight_update",
+                            "flights": flights_cache
+                        }))
+                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                    except Exception as e:
+                        logger.error(f"Error al enviar vuelos: {e}")
+                        user["websocket"] = None
+            logger.info(f"Enviados {len(flights_cache)} vuelos")
+        else:
+            logger.warning("No se encontraron vuelos")
         await asyncio.sleep(300)  # 5 minutos
 
 @app.get("/opensky")
@@ -377,6 +398,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
         logger.info(f"Confirmación enviada a {token}")
 
+        await websocket.send_json({"type": "flight_update", "flights": flights_cache})
         await broadcast_users()
 
         while True:
@@ -534,6 +556,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                                     users[user_token]["logged_in"] = False
                                     await broadcast_users()
 
+            elif message["type"] == "search_query":
+                response = await process_search_query(message["query"], flights_cache)
+                await websocket.send_json({"type": "search_response", "message": response})
+                logger.info(f"Consulta procesada para {users[token]['name']}: {message['query']} -> {response}")
+
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
@@ -623,4 +650,4 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port) 
+    uvicorn.run(app, host="0.0.0.0", port=port)
