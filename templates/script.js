@@ -8,7 +8,6 @@ let stream;
 let map;
 let audioQueue = [];
 let isPlaying = false;
-let flightData = [];
 let markers = [];
 let recognition;
 let supportsSpeechRecognition = false;
@@ -17,7 +16,7 @@ let currentGroup = null;
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
-let flightData = [];
+let flightData = []; // Unificada, eliminé la declaración duplicada
 
 // Mapeo de aerolíneas
 const AIRLINE_MAPPING = {
@@ -285,6 +284,9 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
             } else if (message.type === "aa2000_flight_update") {
                 updateFlightDetailsAA2000(message.flights, "#flight-details");
                 updateFlightDetailsAA2000(message.flights, "#group-flight-details");
+            } else if (message.type === "fr24_update") {
+                updateFlightRadar24Markers(message.flights);
+                console.log("Actualización FlightRadar24 recibida:", message.flights);
             } else if (message.type === "search_response") {
                 displaySearchResponse(message.message);
             } else {
@@ -376,6 +378,28 @@ function updateFlightDetailsAA2000(flights, containerId) {
     container.scrollTop = container.scrollHeight;
 }
 
+function updateFlightRadar24Markers(flights) {
+    if (map) {
+        // Eliminamos solo marcadores de FlightRadar24 para evitar conflictos con OpenSky
+        markers = markers.filter(marker => !marker.isFlightRadar24);
+        flights.forEach(flight => {
+            if (flight.latitude && flight.longitude) {
+                const marker = L.marker([flight.latitude, flight.longitude], {
+                    icon: L.icon({
+                        iconUrl: '/templates/aero.png',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(map)
+                  .bindPopup(`Vuelo: ${flight.flight}<br>Origen: ${flight.origin}<br>Destino: ${flight.destination}<br>Estado: ${flight.status}`);
+                marker.flight = flight.flight;
+                marker.isFlightRadar24 = true; // Marcamos para distinguir
+                markers.push(marker);
+            }
+        });
+        console.log("Marcadores FlightRadar24 actualizados:", flights.length);
+    }
+}
+
 async function updateOpenSkyData() {
     try {
         const openskyResponse = await fetch('/opensky');
@@ -395,14 +419,10 @@ async function updateOpenSkyData() {
         flightDetails.innerHTML = "";
         groupFlightDetails.innerHTML = "";
         flightData = openskyData;
-        markers = [];
 
         if (map) {
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
-                    map.removeLayer(layer);
-                }
-            });
+            // Eliminamos solo marcadores de OpenSky, preservando FlightRadar24 y Aeroparque
+            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
         }
 
         if (openskyData.error) {
@@ -494,12 +514,7 @@ async function updateOpenSkyData() {
         if (flightDetails) flightDetails.textContent = "Error al conectar con los servidores de vuelos";
         if (groupFlightDetails) groupFlightDetails.textContent = "Error al conectar con los servidores de vuelos";
         if (map) {
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
-                    map.removeLayer(layer);
-                }
-            });
-            markers = [];
+            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
         }
     }
     setTimeout(updateOpenSkyData, 15000);
@@ -558,14 +573,15 @@ function getFlightStatus(altitude, speed, verticalRate) {
 function filterFlights() {
     const searchTerm = document.getElementById("search-bar").value.toUpperCase();
     markers.forEach(marker => {
-        const flight = marker.flight;
-        const registration = marker.registration;
+        const flight = marker.flight || "";
+        const registration = marker.registration || "";
         const flightNumber = flight.replace("ARG", "").replace("AR", "");
         const displayFlight = `AEP${flightNumber}`;
         const matchesSearch = 
             registration.toUpperCase().includes(searchTerm) || 
             displayFlight.toUpperCase().includes(searchTerm) ||
-            flightNumber === searchTerm;
+            flightNumber === searchTerm ||
+            flight.toUpperCase().includes(searchTerm); // Para FlightRadar24
         if (matchesSearch) {
             if (!map.hasLayer(marker)) {
                 marker.addTo(map);
@@ -1026,7 +1042,13 @@ function sendGroupMessage(audioData) {
 function showGroupRadar() {
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('radar-screen').style.display = 'block';
-    initMap();
+    if (!map) {
+        initMap();
+        updateOpenSkyData();
+    } else {
+        map.invalidateSize();
+        filterFlights();
+    }
 }
 
 function showGroupHistory() {
