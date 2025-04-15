@@ -53,7 +53,7 @@ async def read_root():
 
 # Diccionario ICAO para pronunciación fonética
 ICAO_ALPHABET = {
-    'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
+    'Alfa': 'A', 'Bravk': 'B', 'Charlie': 'C', 'Delta': 'D', 'E': 'Echo',
     'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliett',
     'K': 'Kilo', 'L': 'Lima', 'M': 'Mike', 'N': 'November', 'O': 'Oscar',
     'P': 'Papa', 'Q': 'Quebec', 'R': 'Romeo', 'S': 'Sierra', 'T': 'Tango',
