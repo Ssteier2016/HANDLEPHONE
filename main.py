@@ -19,9 +19,13 @@ import soundfile as sf
 from pydub import AudioSegment
 from FlightRadar24 import FlightRadar24API
 import math
+from dotenv import load_dotenv
 
+load_dotenv()
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+
+AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY", "f0f8d4dae62410ad03a611f080c603e5")
 
 # Cargar index.html para la ruta raíz
 with open("templates/index.html", "r") as f:
@@ -75,6 +79,23 @@ def is_near_aeroparque(lat, lon, max_distance_km=1000):
     distance_km = 6371 * c
     return distance_km <= max_distance_km
 
+async def fetch_aviationstack_flights():
+    url = f"http://api.aviationstack.com/v1/flights?access_key={AVIATIONSTACK_API_KEY}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json()
+
+# Ejemplo de tarea para enviar actualizaciones
+async def update_aviationstack_flights(websocket: WebSocket):
+    while True:
+        try:
+            data = await fetch_aviationstack_flights()
+            flights = data.get("data", [])
+            await websocket.send_json({"type": "flight_update", "flights": flights})
+        except Exception as e:
+            print(f"Error fetching AviationStack: {e}")
+        await asyncio.sleep(60)  # Actualizar cada 60 segundos
+        
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
     try:
