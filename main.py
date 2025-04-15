@@ -10,9 +10,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import logging
 import aiohttp
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import speech_recognition as sr
 import io
 import soundfile as sf
@@ -20,14 +17,29 @@ from pydub import AudioSegment
 from FlightRadar24 import FlightRadar24API
 import math
 from dotenv import load_dotenv
+from cachetools import TTLCache
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# Cargar variables de entorno
 load_dotenv()
+
+# Inicializar FastAPI
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
-AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY", "f0f8d4dae62410ad03a611f080c603e5")
+# Validar clave de AviationStack
+AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
+if not AVIATIONSTACK_API_KEY:
+    logger.error("Falta AVIATIONSTACK_API_KEY en las variables de entorno")
+    raise ValueError("AVIATIONSTACK_API_KEY no está configurada")
 
-# Cargar index.html para la ruta raíz
+# Cargar index.html
 with open("templates/index.html", "r") as f:
     INDEX_HTML = f.read()
 
@@ -39,10 +51,7 @@ async def read_root():
     response.headers["Expires"] = "0"
     return response
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# Diccionario ICAO para pronunciación fonética
 ICAO_ALPHABET = {
     'A': 'Alfa', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
     'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliett',
@@ -53,24 +62,23 @@ ICAO_ALPHABET = {
 }
 
 def to_icao(text):
+    """Convierte texto a pronunciación ICAO (ej. 'AR123' -> 'Alfa Romeo')."""
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
-# Diccionarios para manejar usuarios, colas y grupos
-users = {}  # {token: {"name": str, "function": str, "logged_in": bool, "websocket": WebSocket, "subscription": push_subscription, "muted_users": set, "group_id": str or None}}
-audio_queue = asyncio.Queue()
-groups = {}  # {group_id: [lista de tokens de usuarios]}
+# Estructuras de datos
+users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios (name, function, websocket, etc.)
+audio_queue = asyncio.Queue()  # Cola para procesar audio asincrónicamente
+groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
 flights_cache = []  # Cache global para vuelos AviationStack
 fr24_cache = []  # Cache global para vuelos FlightRadar24
+global_mute_active = False  # Estado de muteo general
 
-# Variable global para rastrear el muteo general
-global_mute_active = False
-
-last_request_time = 0
-cached_data = None
-CACHE_DURATION = 15  # 15 segundos
+# Cache para Airplanes.Live
+airplanes_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos
 
 # Función para filtrar vuelos cerca de Aeroparque
 def is_near_aeroparque(lat, lon, max_distance_km=1000):
+    """Verifica si un vuelo está a menos de max_distance_km de Aeroparque (AEP)."""
     aep_lat, aep_lon = -34.6084, -58.3732
     dlat = math.radians(lat - aep_lat)
     dlon = math.radians(lon - aep_lon)
@@ -79,25 +87,87 @@ def is_near_aeroparque(lat, lon, max_distance_km=1000):
     distance_km = 6371 * c
     return distance_km <= max_distance_km
 
-async def fetch_aviationstack_flights():
-    url = f"http://api.aviationstack.com/v1/flights?access_key={AVIATIONSTACK_API_KEY}"
+# Función unificada para obtener vuelos de AviationStack
+async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparque, AEP"):
+    """Obtiene vuelos de AviationStack para partidas o llegadas."""
+    flight_type_param = "dep_iata" if flight_type.lower() == "partidas" else "arr_iata"
+    airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
+    url = "http://api.aviationstack.com/v1/flights"
+    params = {
+        "access_key": AVIATIONSTACK_API_KEY,
+        flight_type_param: airport_code,
+        "airline_iata": "AR",
+        "limit": 100
+    }
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.json()
-
-# Ejemplo de tarea para enviar actualizaciones
-async def update_aviationstack_flights(websocket: WebSocket):
-    while True:
         try:
-            data = await fetch_aviationstack_flights()
-            flights = data.get("data", [])
-            await websocket.send_json({"type": "flight_update", "flights": flights})
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    logger.error(f"Error AviationStack ({flight_type}): {response.status} {await response.text()}")
+                    return []
+                data = await response.json()
+                flights = []
+                for flight in data.get("data", []):
+                    if flight.get("airline", {}).get("iata", "") != "AR":
+                        continue
+                    status = flight.get("flight_status", "").lower()
+                    if status == "cancelled":
+                        continue
+                    status_map = {
+                        "scheduled": "Estimado",
+                        "active": "En vuelo",
+                        "landed": "Aterrizado",
+                        "delayed": "Demorado",
+                        "departed": "Despegado"
+                    }
+                    status_text = status_map.get(status, status.capitalize())
+                    flight_number = flight.get("flight", {}).get("iata", "")
+                    scheduled_time = flight.get(f"{flight_type_param.replace('_iata', '')}_scheduled_time", "")
+                    origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr_iata" else "N/A"
+                    destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep_iata" else "N/A"
+                    gate = flight.get(f"{flight_type_param.replace('_iata', '')}", {}).get("gate", "N/A")
+                    flights.append({
+                        "Vuelo": flight_number,
+                        "STD": scheduled_time,
+                        "Destino": destination if flight_type_param == "dep_iata" else origin,
+                        "Estado": status_text,
+                        "Posicion": gate,
+                        "Matricula": "N/A"
+                    })
+                logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
+                return flights
         except Exception as e:
-            print(f"Error fetching AviationStack: {e}")
-        await asyncio.sleep(60)  # Actualizar cada 60 segundos
-        
+            logger.error(f"Error AviationStack ({flight_type}): {e}")
+            return []
+
+# Actualizar vuelos AviationStack
+async def update_flights():
+    """Actualiza el caché de vuelos y los envía a los clientes conectados."""
+    global flights_cache
+    while True:
+        flights = []
+        for flight_type in ["llegadas", "partidas"]:
+            flights.extend(await fetch_aviationstack_flights(flight_type=flight_type))
+        flights_cache = remove_duplicates(flights)
+        if flights_cache:
+            for user in users.values():
+                if user["logged_in"] and user["websocket"]:
+                    try:
+                        await user["websocket"].send_json({
+                            "type": "flight_update",
+                            "flights": flights_cache
+                        })
+                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                    except Exception as e:
+                        logger.error(f"Error al enviar vuelos: {e}")
+                        user["websocket"] = None
+        else:
+            logger.warning("No se encontraron vuelos")
+        await asyncio.sleep(300)  # 5 minutos
+
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
+    """Transcribe audio WebM a texto usando Google Speech Recognition."""
     try:
         audio_bytes = base64.b64decode(audio_data)
         audio_file = io.BytesIO(audio_bytes)
@@ -111,7 +181,7 @@ async def transcribe_audio(audio_data):
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data, language="es-ES")
+            text = recognizer.recognize_google(audio_data, language="es-ES", timeout=10)
             logger.info("Audio transcrito exitosamente")
             return text
     except sr.UnknownValueError:
@@ -129,6 +199,7 @@ async def transcribe_audio(audio_data):
 
 # Función para procesar consultas de búsqueda
 async def process_search_query(query, flights):
+    """Busca vuelos según la consulta del usuario."""
     query = query.lower()
     results = []
     if "demorado" in query or "demorados" in query:
@@ -147,21 +218,19 @@ async def process_search_query(query, flights):
 
 # Función para obtener datos de Airplanes.Live
 async def get_airplanes_live_data():
-    global last_request_time, cached_data
-    current_time = time.time()
-    if current_time - last_request_time < CACHE_DURATION and cached_data:
+    """Obtiene datos de aviones cerca de Aeroparque desde Airplanes.Live."""
+    if "data" in airplanes_cache:
         logger.info("Devolviendo datos en caché")
-        return cached_data
+        return airplanes_cache["data"]
     try:
         url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    cached_data = data.get("ac", [])
-                    last_request_time = current_time
+                    airplanes_cache["data"] = data.get("ac", [])
                     logger.info("Datos de Airplanes.Live obtenidos")
-                    return cached_data
+                    return airplanes_cache["data"]
                 else:
                     logger.error(f"Error Airplanes.Live: {response.status}")
                     return []
@@ -171,6 +240,7 @@ async def get_airplanes_live_data():
 
 # Función para obtener vuelos de FlightRadar24
 async def get_flightradar24_data():
+    """Obtiene vuelos cercanos a Aeroparque desde FlightRadar24."""
     try:
         fr_api = FlightRadar24API()
         flights = fr_api.get_flights()
@@ -194,73 +264,9 @@ async def get_flightradar24_data():
         logger.error(f"Error al obtener FlightRadar24: {str(e)}")
         return []
 
-# Función para obtener vuelos de AviationStack
-def fetch_flights_api(flight_type="partidas", airport="Aeroparque, AEP"):
-    flight_type_param = "dep" if flight_type.lower() == "partidas" else "arr"
-    airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
-
-    api_key = "TU_API_KEY"  # Reemplaza con tu clave de AviationStack
-    url = "http://api.aviationstack.com/v1/flights"
-    params = {
-        "access_key": api_key,
-        f"{flight_type_param}_iata": airport_code,
-        "airline_iata": "AR",
-        "limit": 100
-    }
-
-    try:
-        session = requests.Session()
-        retries = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
-        session.mount("http://", HTTPAdapter(max_retries=retries))
-        response = session.get(url, params=params, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-
-        flights = []
-        for flight in data.get("data", []):
-            if flight.get("airline", {}).get("iata", "") != "AR":
-                continue
-
-            status = flight.get("flight_status", "").lower()
-            if status == "cancelled":
-                continue
-
-            status_map = {
-                "scheduled": "Estimado",
-                "active": "En vuelo",
-                "landed": "Aterrizado",
-                "delayed": "Demorado",
-                "departed": "Despegado"
-            }
-            status_text = status_map.get(status, status.capitalize())
-
-            flight_number = flight.get("flight", {}).get("iata", "")
-            scheduled_time = flight.get(f"{flight_type_param}_scheduled_time", "")
-            origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr" else "N/A"
-            destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep" else "N/A"
-            gate = flight.get(f"{flight_type_param}", {}).get("gate", "N/A")
-
-            flights.append({
-                "Vuelo": flight_number,
-                "STD": scheduled_time,
-                "Destino": destination if flight_type_param == "dep" else origin,
-                "Estado": status_text,
-                "Posicion": gate,
-                "Matricula": "N/A"
-            })
-
-        logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
-        return flights
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error al consultar AviationStack ({flight_type}): {str(e)}")
-        return []
-    except Exception as e:
-        logger.error(f"Error general AviationStack ({flight_type}): {str(e)}")
-        return []
-
 # Función para eliminar duplicados
 def remove_duplicates(flights):
+    """Elimina vuelos duplicados basándose en Vuelo y STD."""
     seen = set()
     unique_flights = []
     for flight in flights:
@@ -270,32 +276,9 @@ def remove_duplicates(flights):
             unique_flights.append(flight)
     return unique_flights
 
-# Actualizar vuelos AviationStack
-async def update_flights():
-    global flights_cache
-    while True:
-        flights = []
-        for flight_type in ["llegadas", "partidas"]:
-            flights.extend(fetch_flights_api(flight_type=flight_type))
-        flights_cache = remove_duplicates(flights)
-        if flights_cache:
-            for user in users.values():
-                if user["logged_in"] and user["websocket"]:
-                    try:
-                        await user["websocket"].send_text(json.dumps({
-                            "type": "flight_update",
-                            "flights": flights_cache
-                        }))
-                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar vuelos: {e}")
-                        user["websocket"] = None
-        else:
-            logger.warning("No se encontraron vuelos")
-        await asyncio.sleep(300)  # 5 minutos
-
 # Actualizar vuelos FlightRadar24
 async def update_fr24_flights():
+    """Actualiza el caché de FlightRadar24 y lo envía a los clientes."""
     global fr24_cache
     while True:
         fr24_data = await get_flightradar24_data()
@@ -304,10 +287,10 @@ async def update_fr24_flights():
             for user in users.values():
                 if user["logged_in"] and user["websocket"]:
                     try:
-                        await user["websocket"].send_text(json.dumps({
+                        await user["websocket"].send_json({
                             "type": "fr24_update",
                             "flights": fr24_cache
-                        }))
+                        })
                         logger.info(f"Actualización FlightRadar24 enviada a {user['name']}")
                     except Exception as e:
                         logger.error(f"Error al enviar vuelos FR24: {e}")
