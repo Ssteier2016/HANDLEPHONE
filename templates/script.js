@@ -331,6 +331,8 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 console.log("Actualización FlightRadar24 recibida:", message.flights);
             } else if (message.type === "search_response") {
                 displaySearchResponse(message.message);
+            } else if (message.type === "register_success") {
+                console.log("Registro exitoso:", message.message);
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
@@ -444,13 +446,36 @@ function updateFlightRadar24Markers(flights) {
 
 async function updateOpenSkyData() {
     try {
-        const openskyResponse = await fetch('/opensky');
-        const openskyData = await openskyResponse.json();
-        console.log("Datos recibidos de /opensky:", openskyData);
+        let openskyData = [];
+        let aa2000Data = [];
 
-        const aa2000Response = await fetch('/aa2000_flights');
-        const aa2000Data = await aa2000Response.json();
-        console.log("Datos recibidos de /aa2000_flights:", aa2000Data);
+        // Obtener datos de OpenSky
+        try {
+            const openskyResponse = await fetch('/opensky');
+            if (openskyResponse.ok) {
+                openskyData = await openskyResponse.json();
+                console.log("Datos recibidos de /opensky:", openskyData);
+            } else {
+                console.warn("Error al cargar /opensky:", openskyResponse.status);
+            }
+        } catch (error) {
+            console.error("Error en la solicitud a /opensky:", error);
+        }
+
+        // Obtener datos de aa2000_flights
+        try {
+            const aa2000Response = await fetch('/aa2000_flights');
+            if (aa2000Response.ok) {
+                aa2000Data = await aa2000Response.json();
+                console.log("Datos recibidos de /aa2000_flights:", aa2000Data);
+            } else {
+                console.warn("Error al cargar /aa2000_flights:", aa2000Response.status);
+                aa2000Data = [];
+            }
+        } catch (error) {
+            console.error("Error en la solicitud a /aa2000_flights:", error);
+            aa2000Data = [];
+        }
 
         const flightDetails = document.getElementById("flight-details");
         const groupFlightDetails = document.getElementById("group-flight-details");
@@ -516,10 +541,9 @@ async function updateOpenSkyData() {
                     }
                 }
             });
-        }
-
-        if (aa2000Data.error) {
-            console.warn("Error en AA2000:", aa2000Data.error);
+    }
+        if (!Array.isArray(aa2000Data)) {
+            console.warn("Datos de AA2000 no son un array:", aa2000Data);
             if (!flightDetails.textContent) {
                 flightDetails.textContent = "Esperando datos de AA2000...";
                 groupFlightDetails.textContent = "Esperando datos de AA2000...";
@@ -809,7 +833,6 @@ function toggleMute() {
         }
     }
 }
-
 function toggleGroupMute() {
     const groupMuteButton = document.getElementById("group-mute");
     const muteButton = document.getElementById("mute");
@@ -1064,8 +1087,7 @@ function toggleGroupTalk() {
         groupRecording = false;
         talkButton.style.backgroundColor = '#FF4500';
     }
-}
-
+                                         }
 function sendGroupMessage(audioData) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1317,7 +1339,6 @@ document.addEventListener('touchend', e => {
         }
     }
 });
-
 // Verificar permisos de notificación
 function checkNotificationPermission() {
     if ('Notification' in window) {
