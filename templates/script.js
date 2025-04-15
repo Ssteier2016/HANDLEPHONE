@@ -102,6 +102,7 @@ function sendSearchQuery() {
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'search_query', query }));
+        localStorage.setItem('lastSearchQuery', query); // Guardar la consulta
         document.getElementById('search-input').value = '';
         console.log(`Consulta enviada: ${query}`);
     } else {
@@ -119,14 +120,55 @@ function displaySearchResponse(message) {
     }
     flightDetails.innerHTML = '';
     groupFlightDetails.innerHTML = '';
-    const div = document.createElement('div');
-    div.className = 'flight';
-    div.textContent = message;
-    flightDetails.appendChild(div);
-    groupFlightDetails.appendChild(div.cloneNode(true));
+
+    // Parsear el mensaje en un array de vuelos
+    const flights = parseFlightMessage(message);
+    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
+    
+    // Filtrar vuelos según la consulta
+    const filteredFlights = flights.filter(flight => 
+        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (filteredFlights.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'flight no-results';
+        div.textContent = 'No se encontraron vuelos para la búsqueda.';
+        flightDetails.appendChild(div);
+        groupFlightDetails.appendChild(div.cloneNode(true));
+    } else {
+        filteredFlights.forEach(flight => {
+            const div = document.createElement('div');
+            div.className = `flight flight-${flight.status.toLowerCase().replace(" ", "-")}`;
+            div.innerHTML = `
+                <strong>Vuelo:</strong> ${flight.flightNumber} | 
+                <strong>Destino:</strong> ${flight.destination} | 
+                <strong>Estado:</strong> ${flight.status}
+            `;
+            flightDetails.appendChild(div);
+            groupFlightDetails.appendChild(div.cloneNode(true));
+        });
+    }
+
     flightDetails.scrollTop = flightDetails.scrollHeight;
     groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
-    console.log("Respuesta de búsqueda mostrada:", message);
+    console.log("Respuesta de búsqueda mostrada:", filteredFlights);
+}
+
+// Función auxiliar para parsear el mensaje de búsqueda
+function parseFlightMessage(message) {
+    const flights = [];
+    const flightEntries = message.split(", ");
+    for (let i = 0; i < flightEntries.length; i += 3) {
+        if (flightEntries[i].startsWith("AR")) {
+            flights.push({
+                flightNumber: flightEntries[i],
+                destination: flightEntries[i + 1].split(" ")[2], // Extrae "AEP"
+                status: flightEntries[i + 2]
+            });
+        }
+    }
+    return flights;
 }
 
 // Funciones de registro y conexión
