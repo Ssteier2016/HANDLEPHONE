@@ -35,25 +35,17 @@
     <div id="main" style="display: none;">
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
-        <div id="swipe-hint" style="display: none; font-size: 12px; color: #4682B4; margin-bottom: 10px;">
-    <div id="search-container">
-        <input type="text" id="search-input" placeholder="Ej. Vuelos a SCL">
-        <button id="search-button">Consultar</button>
-    </div>
-    <div id="flights-window">
-        <h3>Información de Vuelos</h3>
-        <div id="flight-details"></div>
-    </div>
-    <!-- Resto sin cambios: #chat-window, #talk, #users, etc. -->
-            </div>
-            Desliza a la izquierda para volver al grupo
+        <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
+            Deslizá derecha para ir al grupo
         </div>
         <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()">Volver al Grupo</button>
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Ej. Vuelos a SCL">
+            <button id="search-button">Consultar</button>
+        </div>
         <div id="flights-window">
-            <h3>Datos de Vuelos</h3>
-            <div id="flight-details">
-                <!-- Los vuelos se cargarán aquí dinámicamente -->
-            </div>
+            <h3>Información de Vuelos</h3>
+            <div id="flight-details"></div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
@@ -65,6 +57,7 @@
         </div>
         <button id="talk" onclick="toggleTalk()">Hablar</button>
         <button id="mute" class="active" onclick="toggleMute()"></button>
+        <button id="mute-non-group">Mutear no grupo</button>
         <button id="radar" onclick="showRadar()">Ver Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
@@ -77,11 +70,12 @@
         </button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Grupo Privado</h2>
+        <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
+            Deslizá derecha para volver a principal
+        </div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
-            <div id="group-flight-details">
-                <!-- Los vuelos se cargarán aquí dinámicamente -->
-            </div>
+            <div id="group-flight-details"></div>
         </div>
         <div id="group-chat-window">
             <h3>Conversación</h3>
