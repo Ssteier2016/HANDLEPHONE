@@ -99,6 +99,7 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
         "airline_iata": "AR",
         "limit": 100
     }
+    
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, params=params) as response:
@@ -108,10 +109,16 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                 data = await response.json()
                 flights = []
                 for flight in data.get("data", []):
-                    if flight.get("airline", {}).get("iata", "") != "AR":
+                    # Validar airline.iata
+                    airline = flight.get("airline", {})
+                    if not airline or airline.get("iata", "") != "AR":
                         continue
-                    status = flight.get("flight_status", "").lower()
-                    if status == "cancelled":
+                    # Validar flight_status
+                    status = flight.get("flight_status")
+                    if status is None:
+                        logger.warning(f"Vuelo sin flight_status: {flight.get('flight', {}).get('iata', 'N/A')}")
+                        continue
+                    if status.lower() == "cancelled":
                         continue
                     status_map = {
                         "scheduled": "Estimado",
@@ -120,7 +127,7 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                         "delayed": "Demorado",
                         "departed": "Despegado"
                     }
-                    status_text = status_map.get(status, status.capitalize())
+                    status_text = status_map.get(status.lower(), status.capitalize())
                     flight_number = flight.get("flight", {}).get("iata", "")
                     scheduled_time = flight.get(f"{flight_type_param.replace('_iata', '')}_scheduled_time", "")
                     origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr_iata" else "N/A"
