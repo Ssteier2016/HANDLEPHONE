@@ -99,7 +99,6 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
         "airline_iata": "AR",
         "limit": 100
     }
-    
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, params=params) as response:
@@ -109,9 +108,10 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                 data = await response.json()
                 flights = []
                 for flight in data.get("data", []):
-                    # Validar airline.iata
-                    airline = flight.get("airline", {})
-                    if not airline or airline.get("iata", "") != "AR":
+                    # Validar airline
+                    airline = flight.get("airline")
+                    if not airline or airline.get("iata") != "AR":
+                        logger.debug(f"Vuelo descartado (sin airline o no AR): {flight.get('flight', {}).get('iata', 'N/A')}")
                         continue
                     # Validar flight_status
                     status = flight.get("flight_status")
@@ -308,9 +308,10 @@ async def update_fr24_flights():
 
 @app.get("/opensky")
 async def get_opensky_data():
+    """Obtiene datos combinados de Airplanes.Live y AviationStack."""
     airplanes_data = await get_airplanes_live_data()
-    arrivals = fetch_flights_api(flight_type="llegadas")
-    departures = fetch_flights_api(flight_type="partidas")
+    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
+    departures = await fetch_aviationstack_flights(flight_type="partidas")
     tams_data = arrivals + departures
 
     combined_data = []
