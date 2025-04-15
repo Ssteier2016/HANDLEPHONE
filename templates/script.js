@@ -906,7 +906,7 @@ function joinGroup() {
         document.getElementById('group-screen').style.display = 'block';
         updateSwipeHint();
     } else {
-        alert('No estás conectado al servidor. Por favor, intenta de nuevo.');
+        alert('Estamos en nuevas mejoras. Por favor, intenta más tarde.');
     }
 }
 
@@ -938,11 +938,11 @@ function updateSwipeHint() {
     if (currentGroup) {
         if (document.getElementById('main').style.display === 'block') {
             swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá derecha para ir al grupo';
+            swipeHint.textContent = 'Deslizá hacia la derecha para ir al grupo';
             returnToGroupBtn.style.display = 'block';
         } else if (document.getElementById('group-screen').style.display === 'block') {
             swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá izquierda para volver a principal';
+            swipeHint.textContent = 'Deslizá hacia la izquierda para volver';
             returnToGroupBtn.style.display = 'none';
         }
     } else {
@@ -998,7 +998,7 @@ function toggleGroupTalk() {
             })
             .catch(err => {
                 console.error('Error al acceder al micrófono:', err);
-                alert('No se pudo acceder al micrófono. Por favor, verifica los permisos.');
+                alert('No se pudo acceder al micrófono. Por favor, verifica los permisos de la app.');
             });
     } else {
         groupMediaRecorder.stop();
