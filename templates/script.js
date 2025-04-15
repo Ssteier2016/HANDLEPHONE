@@ -93,6 +93,42 @@ function playNextAudio() {
     });
 }
 
+// Funciones de búsqueda
+function sendSearchQuery() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) {
+        alert('Ingresá una consulta');
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'search_query', query }));
+        document.getElementById('search-input').value = '';
+        console.log(`Consulta enviada: ${query}`);
+    } else {
+        alert('No conectado al servidor');
+        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+    }
+}
+
+function displaySearchResponse(message) {
+    const flightDetails = document.getElementById('flight-details');
+    const groupFlightDetails = document.getElementById('group-flight-details');
+    if (!flightDetails || !groupFlightDetails) {
+        console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
+        return;
+    }
+    flightDetails.innerHTML = '';
+    groupFlightDetails.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'flight';
+    div.textContent = message;
+    flightDetails.appendChild(div);
+    groupFlightDetails.appendChild(div.cloneNode(true));
+    flightDetails.scrollTop = flightDetails.scrollHeight;
+    groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
+    console.log("Respuesta de búsqueda mostrada:", message);
+}
+
 // Funciones de registro y conexión
 function register() {
     const legajo = document.getElementById("legajo").value;
@@ -248,6 +284,8 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
             } else if (message.type === "aa2000_flight_update") {
                 updateFlightDetailsAA2000(message.flights, "#flight-details");
                 updateFlightDetailsAA2000(message.flights, "#group-flight-details");
+            } else if (message.type === "search_response") {
+                displaySearchResponse(message.message);
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
@@ -454,6 +492,14 @@ async function updateOpenSkyData() {
         const groupFlightDetails = document.getElementById("group-flight-details");
         if (flightDetails) flightDetails.textContent = "Error al conectar con los servidores de vuelos";
         if (groupFlightDetails) groupFlightDetails.textContent = "Error al conectar con los servidores de vuelos";
+        if (map) {
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
+                    map.removeLayer(layer);
+                }
+            });
+            markers = [];
+        }
     }
     setTimeout(updateOpenSkyData, 15000);
 }
@@ -467,7 +513,7 @@ function initMap() {
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'templates/airport.png',
+        iconUrl: '/templates/airport.png',
         iconSize: [30, 30],
     });
 
@@ -885,10 +931,20 @@ function checkGroupStatus() {
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
     const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (!swipeHint || !returnToGroupBtn) {
+        console.error("Elemento #swipe-hint o #return-to-group-btn no encontrado en el DOM");
+        return;
+    }
     if (currentGroup) {
-        swipeHint.style.display = 'block';
-        swipeHint.textContent = 'Deslizá izquierda para volver a principal';
-        returnToGroupBtn.style.display = 'block';
+        if (document.getElementById('main').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá derecha para ir al grupo';
+            returnToGroupBtn.style.display = 'block';
+        } else if (document.getElementById('group-screen').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá izquierda para volver a principal';
+            returnToGroupBtn.style.display = 'none';
+        }
     } else {
         swipeHint.style.display = 'none';
         returnToGroupBtn.style.display = 'none';
@@ -1062,6 +1118,74 @@ function logout() {
     console.log("Sesión cerrada");
 }
 
+// Funciones de notificaciones
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        fetch('/templates/sw.js', { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    navigator.serviceWorker.register('/templates/sw.js')
+                        .then(() => console.log('Service Worker registrado'))
+                        .catch(err => console.error('Error al registrar Service Worker:', err));
+                } else {
+                    console.warn('Archivo sw.js no encontrado.');
+                }
+            })
+            .catch(err => {
+                console.warn('No se pudo verificar sw.js:', err);
+            });
+    } else {
+        console.warn('Service Worker no soportado.');
+    }
+}
+
+function subscribeToPush() {
+    // Comentar esta función hasta que tengas una clave VAPID
+    /*
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY')
+            }).then(subscription => {
+                console.log("Suscripción a push exitosa:", subscription);
+                fetch('/subscribe', {
+                    method: 'POST',
+                    body: JSON.stringify(subscription),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(err => {
+                    console.error("Error al enviar suscripción al servidor:", err);
+                });
+            }).catch(err => {
+                console.error("Error al suscribirse a push:", err);
+            });
+        }).catch(err => {
+            console.error("Error al obtener el Service Worker:", err);
+        });
+    } else {
+        console.warn('Notificaciones push no soportadas.');
+    }
+    */
+}
+
+function urlBase64ToUint8Array(base64String) {
+    try {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    } catch (err) {
+        console.error("Error al convertir Base64 a Uint8Array:", err);
+        throw err;
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
     const registerButton = document.getElementById('register-button');
@@ -1070,6 +1194,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error("Botón de registro no encontrado en el DOM");
     }
+    
+    const searchButton = document.getElementById('search-button');
+    if (searchButton) {
+        searchButton.addEventListener('click', sendSearchQuery);
+    } else {
+        console.error("Botón de búsqueda no encontrado en el DOM");
+    }
+
     checkNotificationPermission();
 });
 
@@ -1121,84 +1253,7 @@ document.addEventListener('touchend', e => {
     }
 });
 
-// Funciones de notificaciones
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        fetch('/templates/sw.js', { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    navigator.serviceWorker.register('/templates/sw.js')
-                        .then(() => console.log('Service Worker registrado'))
-                        .catch(err => console.error('Error al registrar Service Worker:', err));
-                } else {
-                    console.warn('Archivo sw.js no encontrado.');
-                }
-            })
-            .catch(err => {
-                console.warn('No se pudo verificar sw.js:', err);
-            });
-    } else {
-        console.warn('Service Worker no soportado.');
-    }
-}
-
-function subscribeToPush() {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY')
-            }).then(subscription => {
-                console.log("Suscripción a push exitosa:", subscription);
-                fetch('/subscribe', {
-                    method: 'POST',
-                    body: JSON.stringify(subscription),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }).catch(err => {
-                    console.error("Error al enviar suscripción al servidor:", err);
-                });
-            }).catch(err => {
-                console.error("Error al suscribirse a push:", err);
-            });
-        }).catch(err => {
-            console.error("Error al obtener el Service Worker:", err);
-        });
-    } else {
-        console.warn('Notificaciones push no soportadas.');
-    }
-}
-
-// Convertir una cadena Base64 a Uint8Array (usado para claves VAPID en notificaciones push)
-function urlBase64ToUint8Array(base64String) {
-    try {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i); // Completamos esta línea
-        }
-        return outputArray;
-    } catch (err) {
-        console.error("Error al convertir Base64 a Uint8Array:", err);
-        throw err;
-    }
-}
-
-// Agregar event listener para el botón de registro
-document.addEventListener('DOMContentLoaded', () => {
-    const registerButton = document.getElementById('register-button');
-    if (registerButton) {
-        registerButton.addEventListener('click', register);
-    } else {
-        console.error("Botón de registro no encontrado en el DOM");
-    }
-    checkNotificationPermission();
-});
-
-// Verificar permisos de notificación (opcional, si el servidor lo soporta)
+// Verificar permisos de notificación
 function checkNotificationPermission() {
     if ('Notification' in window) {
         if (Notification.permission === 'granted') {
