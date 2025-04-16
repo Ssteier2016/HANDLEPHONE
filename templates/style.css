@@ -639,9 +639,9 @@ h3 {
 
     #talk,
     #group-talk {
-        height: 40px;
-        max-width: 40px;
-        width: 40px;
+        height: 65px;
+        max-width: 65px;
+        width: 65px;
     }
 
     #users,
@@ -776,9 +776,9 @@ h3 {
 
     #talk,
     #group-talk {
-        hight: 48px;
-        max-width: 48px;
-        width: 48px;
+        hight: 65px;
+        max-width: 65px;
+        width: 65px;
     }
 
     #users,
