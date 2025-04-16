@@ -77,6 +77,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     checkNotificationPermission();
+    // Escuchar mensajes del Service Worker
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'SEND_MESSAGE' && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(event.data.message));
+            console.log('Mensaje sincronizado enviado:', event.data.message);
+        } else if (event.data && event.data.type === 'SYNC_COMPLETE') {
+            console.log('Sincronización completada');
+        }
+    });
 });
 
 // Manejar visibilidad de la pestaña
