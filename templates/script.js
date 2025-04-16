@@ -95,6 +95,25 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+function queueMessageForSync(message) {
+    if ('serviceWorker' innavigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'QUEUE_MESSAGE',
+            message: message
+        });
+        console.log('Mensaje enviado al Service Worker para encolar');
+        // Registrar evento de sincronización
+        navigator.serviceWorker.ready.then(registration => {
+            registration.sync.register(SYNC_TAG).catch(err => {
+                console.error('Error al registrar sync:', err);
+            });
+        });
+    } else {
+        console.error('Service Worker no está disponible para encolar mensaje');
+        alert('No se pudo guardar el mensaje. Por favor, verifica la conexión.');
+    }
+}
+
 // Funciones de audio
 function unlockAudio() {
     if (audioContext.state === 'suspended') {
@@ -258,24 +277,32 @@ function connectWebSocket(sessionToken, retryCount = 0) {
     }
 
     ws.onopen = function() {
-        console.log("WebSocket conectado exitosamente");
-        clearInterval(reconnectInterval);
-        ws.send(JSON.stringify({
-            type: "register",
-            legajo: localStorage.getItem("userLegajo"),
-            name: localStorage.getItem("userName"),
-            function: localStorage.getItem("userFunction")
-        }));
-        document.getElementById("register").style.display = "none";
-        const mainDiv = document.getElementById("main");
-        if (mainDiv) {
-            mainDiv.style.display = "block";
-        } else {
-            console.error("Elemento #main no encontrado en el DOM");
-        }
-        updateOpenSkyData();
-        startPing();
-    };
+    console.log("WebSocket conectado exitosamente");
+    clearInterval(reconnectInterval);
+    ws.send(JSON.stringify({
+        type: "register",
+        legajo: localStorage.getItem("userLegajo"),
+        name: localStorage.getItem("userName"),
+        function: localStorage.getItem("userFunction")
+    }));
+    document.getElementById("register").style.display = "none";
+    const mainDiv = document.getElementById("main");
+    if (mainDiv) {
+        mainDiv.style.display = "block";
+    } else {
+        console.error("Elemento #main no encontrado en el DOM");
+    }
+    updateOpenSkyData();
+    startPing();
+    // Disparar sincronización
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.sync.register(SYNC_TAG).catch(err => {
+                console.error('Error al registrar sync al reconectar:', err);
+            });
+        });
+    }
+};
 
     ws.onmessage = function(event) {
         console.log("Datos recibidos del servidor:", event.data);
@@ -813,33 +840,38 @@ async function toggleTalk() {
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
-                const base64data = reader.result.split(',')[1];
-                console.log("Audio convertido a Base64, longitud:", base64data.length);
-                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = localStorage.getItem("userName") || "Anónimo";
-                const userFunction = localStorage.getItem("userFunction") || "Desconocida";
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    const message = {
-                        type: "audio",
-                        data: base64data,
-                        text: transcript,
-                        timestamp: timestamp,
-                        sender: sender,
-                        function: userFunction
-                    };
-                    console.log("Enviando mensaje al servidor:", {
-                        type: message.type,
-                        data: message.data.slice(0, 20) + "...",
-                        text: message.text,
-                        timestamp: message.timestamp,
-                        sender: message.sender,
-                        function: message.function
-                    });
-                    ws.send(JSON.stringify(message));
-                } else {
-                    console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
-                    alert("No se pudo enviar el mensaje: WebSocket no está conectado.");
-                }
+    const base64data = reader.result.split(',')[1];
+    console.log("Audio convertido a Base64, longitud:", base64data.length);
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const sender = localStorage.getItem("userName") || "Anónimo";
+    const userFunction = localStorage.getItem("userFunction") || "Desconocida";
+    const message = {
+        type: "audio",
+        data: base64data,
+        text: transcript,
+        timestamp: timestamp,
+        sender: sender,
+        function: userFunction,
+        sessionToken: localStorage.getItem("sessionToken")
+    };
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log("Enviando mensaje al servidor:", {
+            type: message.type,
+            data: message.data.slice(0, 20) + "...",
+            text: message.text,
+            timestamp: message.timestamp,
+            sender: message.sender,
+            function: message.function
+        });
+        ws.send(JSON.stringify(message));
+    } else {
+        console.warn("WebSocket no está abierto, encolando mensaje");
+        queueMessageForSync(message);
+    }
+
+    // Resto del código (agregar al chat-list) sigue igual
+};
 
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
@@ -1167,19 +1199,27 @@ function toggleGroupTalk() {
     }
 }
 
+// En sendGroupMessage(), reemplaza el bloque del WebSocket por:
 function sendGroupMessage(audioData) {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const message = {
+        type: 'group_message',
+        data: audioData,
+        sender: localStorage.getItem('userName'),
+        function: localStorage.getItem('userFunction'),
+        timestamp: timestamp,
+        text: 'Pendiente de transcripción',
+        sessionToken: localStorage.getItem("sessionToken")
+    };
+
     if (ws && ws.readyState === WebSocket.OPEN) {
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        ws.send(JSON.stringify({
-            type: 'group_message',
-            data: audioData,
-            sender: localStorage.getItem('userName'),
-            function: localStorage.getItem('userFunction'),
-            timestamp: timestamp,
-            text: 'Pendiente de transcripción'
-        }));
+        ws.send(JSON.stringify(message));
+    } else {
+        console.warn("WebSocket no está abierto, encolando mensaje de grupo");
+        queueMessageForSync(message);
     }
 }
+
 // Funciones de navegación
 function showGroupRadar() {
     document.getElementById('group-screen').style.display = 'none';
