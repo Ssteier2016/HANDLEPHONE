@@ -16,7 +16,10 @@ let currentGroup = null;
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
-let flightData = []; // Unificada, eliminé la declaración duplicada
+let flightData = [];
+let reconnectInterval = null;
+const PING_INTERVAL = 30000; // Ping cada 30 segundos
+const RECONNECT_BASE_DELAY = 5000; // Reintento base cada 5 segundos
 
 // Mapeo de aerolíneas
 const AIRLINE_MAPPING = {
@@ -38,6 +41,59 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     console.error("SpeechRecognition no soportado. Navegador:", navigator.userAgent);
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
+
+// Restaurar sesión al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    // Registrar Service Worker
+    registerServiceWorker();
+
+    // Verificar si hay una sesión activa
+    const sessionToken = localStorage.getItem('sessionToken');
+    const userName = localStorage.getItem('userName');
+    const userFunction = localStorage.getItem('userFunction');
+    const userLegajo = localStorage.getItem('userLegajo');
+
+    if (sessionToken && userName && userFunction && userLegajo) {
+        // Restaurar sesión
+        userId = `${userLegajo}_${userName}_${userFunction}`;
+        connectWebSocket(sessionToken);
+        document.getElementById('register').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        checkGroupStatus();
+    }
+
+    const registerButton = document.getElementById('register-button');
+    if (registerButton) {
+        registerButton.addEventListener('click', register);
+    } else {
+        console.error("Botón de registro no encontrado en el DOM");
+    }
+
+    const searchButton = document.getElementById('search-button');
+    if (searchButton) {
+        searchButton.addEventListener('click', sendSearchQuery);
+    } else {
+        console.error("Botón de búsqueda no encontrado en el DOM");
+    }
+
+    checkNotificationPermission();
+});
+
+// Manejar visibilidad de la pestaña
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        console.log('App en segundo plano');
+    } else {
+        console.log('App en primer plano');
+        // Verificar conexión
+        if (ws && ws.readyState !== WebSocket.OPEN) {
+            const sessionToken = localStorage.getItem('sessionToken');
+            if (sessionToken) {
+                connectWebSocket(sessionToken);
+            }
+        }
+    }
+});
 
 // Funciones de audio
 function unlockAudio() {
@@ -102,7 +158,7 @@ function sendSearchQuery() {
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'search_query', query }));
-        localStorage.setItem('lastSearchQuery', query); // Guardar la consulta
+        localStorage.setItem('lastSearchQuery', query);
         document.getElementById('search-input').value = '';
         console.log(`Consulta enviada: ${query}`);
     } else {
@@ -121,12 +177,10 @@ function displaySearchResponse(message) {
     flightDetails.innerHTML = '';
     groupFlightDetails.innerHTML = '';
 
-    // Parsear el mensaje en un array de vuelos
     const flights = parseFlightMessage(message);
     const searchQuery = localStorage.getItem('lastSearchQuery') || '';
-    
-    // Filtrar vuelos según la consulta
-    const filteredFlights = flights.filter(flight => 
+
+    const filteredFlights = flights.filter(flight =>
         flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -141,8 +195,8 @@ function displaySearchResponse(message) {
             const div = document.createElement('div');
             div.className = `flight flight-${flight.status.toLowerCase().replace(" ", "-")}`;
             div.innerHTML = `
-                <strong>Vuelo:</strong> ${flight.flightNumber} | 
-                <strong>Destino:</strong> ${flight.destination} | 
+                <strong>Vuelo:</strong> ${flight.flightNumber} |
+                <strong>Destino:</strong> ${flight.destination} |
                 <strong>Estado:</strong> ${flight.status}
             `;
             flightDetails.appendChild(div);
@@ -155,7 +209,6 @@ function displaySearchResponse(message) {
     console.log("Respuesta de búsqueda mostrada:", filteredFlights);
 }
 
-// Función auxiliar para parsear el mensaje de búsqueda
 function parseFlightMessage(message) {
     const flights = [];
     const flightEntries = message.split(", ");
@@ -163,7 +216,7 @@ function parseFlightMessage(message) {
         if (flightEntries[i].startsWith("AR")) {
             flights.push({
                 flightNumber: flightEntries[i],
-                destination: flightEntries[i + 1].split(" ")[2], // Extrae "AEP"
+                destination: flightEntries[i + 1].split(" ")[2],
                 status: flightEntries[i + 2]
             });
         }
@@ -193,9 +246,9 @@ function register() {
     connectWebSocket(sessionToken);
 }
 
-function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
+function connectWebSocket(sessionToken, retryCount = 0) {
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
-    console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1}/${maxRetries})`);
+    console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1})`);
     try {
         ws = new WebSocket(wsUrl);
     } catch (err) {
@@ -206,9 +259,10 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
 
     ws.onopen = function() {
         console.log("WebSocket conectado exitosamente");
-        ws.send(JSON.stringify({ 
-            type: "register", 
-            legajo: document.getElementById("legajo").value, 
+        clearInterval(reconnectInterval);
+        ws.send(JSON.stringify({
+            type: "register",
+            legajo: localStorage.getItem("userLegajo"),
             name: localStorage.getItem("userName"),
             function: localStorage.getItem("userFunction")
         }));
@@ -220,6 +274,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
             console.error("Elemento #main no encontrado en el DOM");
         }
         updateOpenSkyData();
+        startPing();
     };
 
     ws.onmessage = function(event) {
@@ -284,11 +339,13 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 console.log("Usuarios fuera del grupo desmuteados");
             } else if (message.type === "join_group") {
                 currentGroup = message.group_id;
+                localStorage.setItem('groupId', currentGroup);
                 updateSwipeHint();
                 console.log(`Unido al grupo: ${message.group_id}`);
             } else if (message.type === "check_group") {
                 if (!message.in_group) {
                     currentGroup = null;
+                    localStorage.removeItem('groupId');
                     updateSwipeHint();
                     console.log("No estás en el grupo, currentGroup restablecido a null");
                 }
@@ -333,6 +390,9 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 displaySearchResponse(message.message);
             } else if (message.type === "register_success") {
                 console.log("Registro exitoso:", message.message);
+            } else if (message.type === "ping") {
+                // Respuesta opcional al ping del servidor
+                console.log("Ping recibido del servidor");
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
             }
@@ -347,14 +407,37 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
 
     ws.onclose = function() {
         console.log("WebSocket cerrado");
+        stopPing();
         const sessionToken = localStorage.getItem("sessionToken");
-        if (sessionToken && retryCount < maxRetries) {
-            setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
-        } else if (retryCount >= maxRetries) {
-            console.error("Máximo número de intentos de reconexión alcanzado.");
-            alert("No se pudo reconectar al servidor. Por favor, recarga la página.");
+        if (sessionToken) {
+            const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000); // Backoff exponencial
+            reconnectInterval = setTimeout(() => {
+                connectWebSocket(sessionToken, retryCount + 1);
+            }, delay);
+        } else {
+            console.error("No hay sessionToken para reconectar");
+            document.getElementById("main").style.display = "none";
+            document.getElementById("register").style.display = "block";
         }
     };
+}
+
+// Mantener conexión viva con ping
+function startPing() {
+    stopPing();
+    pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+            console.log("Ping enviado al servidor");
+        }
+    }, PING_INTERVAL);
+}
+
+function stopPing() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
 }
 
 // Funciones de vuelos
@@ -379,11 +462,11 @@ function updateFlightDetails(flights, containerId) {
             const flightDiv = document.createElement("div");
             flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
             flightDiv.innerHTML = `
-                <strong>Vuelo:</strong> ${displayFlight} | 
-                <strong>STD:</strong> ${scheduled} | 
-                <strong>Posición:</strong> ${position} | 
-                <strong>Destino:</strong> ${destination} | 
-                <strong>Matrícula:</strong> ${registration} | 
+                <strong>Vuelo:</strong> ${displayFlight} |
+                <strong>STD:</strong> ${scheduled} |
+                <strong>Posición:</strong> ${position} |
+                <strong>Destino:</strong> ${destination} |
+                <strong>Matrícula:</strong> ${registration} |
                 <strong>Estado:</strong> ${status}
             `;
             container.appendChild(flightDiv);
@@ -410,11 +493,11 @@ function updateFlightDetailsAA2000(flights, containerId) {
         const flightDiv = document.createElement("div");
         flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
         flightDiv.innerHTML = `
-            <strong>Vuelo:</strong> ${flightNumber} | 
-            <strong>STD:</strong> ${scheduled} | 
-            <strong>Destino:</strong> ${destination} | 
-            <strong>Puerta:</strong> ${gate} | 
-            <strong>Tipo:</strong> ${flightType} | 
+            <strong>Vuelo:</strong> ${flightNumber} |
+            <strong>STD:</strong> ${scheduled} |
+            <strong>Destino:</strong> ${destination} |
+            <strong>Puerta:</strong> ${gate} |
+            <strong>Tipo:</strong> ${flightType} |
             <strong>Estado:</strong> ${status}
         `;
         container.appendChild(flightDiv);
@@ -424,7 +507,6 @@ function updateFlightDetailsAA2000(flights, containerId) {
 
 function updateFlightRadar24Markers(flights) {
     if (map) {
-        // Eliminamos solo marcadores de FlightRadar24 para evitar conflictos con OpenSky
         markers = markers.filter(marker => !marker.isFlightRadar24);
         flights.forEach(flight => {
             if (flight.latitude && flight.longitude) {
@@ -436,7 +518,7 @@ function updateFlightRadar24Markers(flights) {
                 }).addTo(map)
                   .bindPopup(`Vuelo: ${flight.flight}<br>Origen: ${flight.origin}<br>Destino: ${flight.destination}<br>Estado: ${flight.status}`);
                 marker.flight = flight.flight;
-                marker.isFlightRadar24 = true; // Marcamos para distinguir
+                marker.isFlightRadar24 = true;
                 markers.push(marker);
             }
         });
@@ -449,7 +531,6 @@ async function updateOpenSkyData() {
         let openskyData = [];
         let aa2000Data = [];
 
-        // Obtener datos de OpenSky
         try {
             const openskyResponse = await fetch('/opensky');
             if (openskyResponse.ok) {
@@ -462,7 +543,6 @@ async function updateOpenSkyData() {
             console.error("Error en la solicitud a /opensky:", error);
         }
 
-        // Obtener datos de aa2000_flights
         try {
             const aa2000Response = await fetch('/aa2000_flights');
             if (aa2000Response.ok) {
@@ -488,7 +568,6 @@ async function updateOpenSkyData() {
         flightData = openskyData;
 
         if (map) {
-            // Eliminamos solo marcadores de OpenSky, preservando FlightRadar24 y Aeroparque
             markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
         }
 
@@ -517,18 +596,18 @@ async function updateOpenSkyData() {
                     const flightDiv = document.createElement("div");
                     flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
                     flightDiv.innerHTML = `
-                        <strong>Vuelo:</strong> ${displayFlight} | 
-                        <strong>STD:</strong> ${scheduled} | 
-                        <strong>Posición:</strong> ${position} | 
-                        <strong>Destino:</strong> ${destination} | 
-                        <strong>Matrícula:</strong> ${registration} | 
+                        <strong>Vuelo:</strong> ${displayFlight} |
+                        <strong>STD:</strong> ${scheduled} |
+                        <strong>Posición:</strong> ${position} |
+                        <strong>Destino:</strong> ${destination} |
+                        <strong>Matrícula:</strong> ${registration} |
                         <strong>Estado:</strong> ${status}
                     `;
                     flightDetails.appendChild(flightDiv);
                     groupFlightDetails.appendChild(flightDiv.cloneNode(true));
 
                     if (lat && lon && map) {
-                        const marker = L.marker([lat, lon], { 
+                        const marker = L.marker([lat, lon], {
                             icon: L.icon({
                                 iconUrl: '/templates/aero.png',
                                 iconSize: [30, 30]
@@ -541,7 +620,7 @@ async function updateOpenSkyData() {
                     }
                 }
             });
-    }
+        }
         if (!Array.isArray(aa2000Data)) {
             console.warn("Datos de AA2000 no son un array:", aa2000Data);
             if (!flightDetails.textContent) {
@@ -559,11 +638,11 @@ async function updateOpenSkyData() {
                 const flightDiv = document.createElement("div");
                 flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
                 flightDiv.innerHTML = `
-                    <strong>Vuelo:</strong> ${flightNumber} | 
-                    <strong>STD:</strong> ${scheduled} | 
-                    <strong>Destino:</strong> ${destination} | 
-                    <strong>Puerta:</strong> ${gate} | 
-                    <strong>Tipo:</strong> ${flightType} | 
+                    <strong>Vuelo:</strong> ${flightNumber} |
+                    <strong>STD:</strong> ${scheduled} |
+                    <strong>Destino:</strong> ${destination} |
+                    <strong>Puerta:</strong> ${gate} |
+                    <strong>Tipo:</strong> ${flightType} |
                     <strong>Estado:</strong> ${status}
                 `;
                 flightDetails.appendChild(flightDiv);
@@ -643,11 +722,11 @@ function filterFlights() {
         const registration = marker.registration || "";
         const flightNumber = flight.replace("ARG", "").replace("AR", "");
         const displayFlight = `AEP${flightNumber}`;
-        const matchesSearch = 
-            registration.toUpperCase().includes(searchTerm) || 
+        const matchesSearch =
+            registration.toUpperCase().includes(searchTerm) ||
             displayFlight.toUpperCase().includes(searchTerm) ||
             flightNumber === searchTerm ||
-            flight.toUpperCase().includes(searchTerm); // Para FlightRadar24
+            flight.toUpperCase().includes(searchTerm);
         if (matchesSearch) {
             if (!map.hasLayer(marker)) {
                 marker.addTo(map);
@@ -658,10 +737,8 @@ function filterFlights() {
             }
         }
     });
-}
-
+        }
 // Funciones de grabación
-
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
@@ -795,18 +872,17 @@ async function toggleTalk() {
         try {
             mediaRecorder.start(100);
             console.log("Grabación iniciada");
-            talkButton.classList.add("recording"); // Añadir clase para cambiar la imagen
+            talkButton.classList.add("recording");
         } catch (err) {
             console.error("Error al iniciar la grabación:", err);
             alert("Error al iniciar la grabación: " + err.message);
         }
     } else if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
-        talkButton.classList.remove("recording"); // Quitar clase para volver a la imagen original
+        talkButton.classList.remove("recording");
     }
 }
 
-                    
 // Funciones de muteo
 function toggleMute() {
     const muteButton = document.getElementById("mute");
@@ -833,6 +909,7 @@ function toggleMute() {
         }
     }
 }
+
 function toggleGroupMute() {
     const groupMuteButton = document.getElementById("group-mute");
     const muteButton = document.getElementById("mute");
@@ -911,7 +988,6 @@ function toggleMuteUser(userId, button) {
         console.log(`Usuario ${userId} muteado`);
     }
 }
-
 // Funciones de usuarios
 function updateUsers(count, list) {
     const usersDiv = document.getElementById('users');
@@ -984,6 +1060,7 @@ function joinGroup() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'join_group', group_id: groupId }));
         currentGroup = groupId;
+        localStorage.setItem('groupId', groupId);
         document.getElementById('main').style.display = 'none';
         document.getElementById('group-screen').style.display = 'block';
         updateSwipeHint();
@@ -996,6 +1073,7 @@ function leaveGroup() {
     if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
         ws.send(JSON.stringify({ type: 'leave_group', group_id: currentGroup }));
         currentGroup = null;
+        localStorage.removeItem('groupId');
         document.getElementById('group-screen').style.display = 'none';
         document.getElementById('main').style.display = 'block';
         document.getElementById('group-chat-list').innerHTML = '';
@@ -1076,7 +1154,7 @@ function toggleGroupTalk() {
                 };
                 groupMediaRecorder.start();
                 groupRecording = true;
-                talkButton.classList.add("recording"); // Añadir clase para cambiar la imagen
+                talkButton.classList.add("recording");
             })
             .catch(err => {
                 console.error('Error al acceder al micrófono:', err);
@@ -1085,11 +1163,10 @@ function toggleGroupTalk() {
     } else {
         groupMediaRecorder.stop();
         groupRecording = false;
-        talkButton.classList.remove("recording"); // Quitar clase para volver a la imagen original
+        talkButton.classList.remove("recording");
     }
 }
 
-                                         
 function sendGroupMessage(audioData) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1103,7 +1180,6 @@ function sendGroupMessage(audioData) {
         }));
     }
 }
-
 // Funciones de navegación
 function showGroupRadar() {
     document.getElementById('group-screen').style.display = 'none';
@@ -1193,20 +1269,29 @@ function logout() {
         ws.send(JSON.stringify({ type: "logout" }));
         ws.close();
     }
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+    if (groupMediaRecorder) {
+        groupMediaRecorder.stop();
+    }
     localStorage.removeItem("sessionToken");
     localStorage.removeItem("userName");
     localStorage.removeItem("userFunction");
     localStorage.removeItem("userLegajo");
+    localStorage.removeItem("groupId");
+    localStorage.removeItem("lastSearchQuery");
+    currentGroup = null;
+    mutedUsers.clear();
+    clearInterval(reconnectInterval);
+    stopPing();
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
+    document.getElementById("group-screen").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "none";
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
     console.log("Sesión cerrada");
 }
-
 // Funciones de notificaciones
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
@@ -1276,24 +1361,6 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    const registerButton = document.getElementById('register-button');
-    if (registerButton) {
-        registerButton.addEventListener('click', register);
-    } else {
-        console.error("Botón de registro no encontrado en el DOM");
-    }
-    
-    const searchButton = document.getElementById('search-button');
-    if (searchButton) {
-        searchButton.addEventListener('click', sendSearchQuery);
-    } else {
-        console.error("Botón de búsqueda no encontrado en el DOM");
-    }
-
-    checkNotificationPermission();
-});
-
 document.addEventListener('click', unlockAudio, { once: true });
 
 let lastVolumeUpTime = 0;
@@ -1341,6 +1408,7 @@ document.addEventListener('touchend', e => {
         }
     }
 });
+
 // Verificar permisos de notificación
 function checkNotificationPermission() {
     if ('Notification' in window) {
@@ -1364,4 +1432,27 @@ function checkNotificationPermission() {
     } else {
         console.warn('Notificaciones no soportadas en este navegador');
     }
+}
+
+// Función para cargar historial (no estaba en el código original, pero se llama en showGroupHistory)
+function loadHistory() {
+    fetch('/history')
+        .then(response => response.json())
+        .then(data => {
+            const historyList = document.getElementById("history-list");
+            historyList.innerHTML = "";
+            data.forEach(msg => {
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "chat-message";
+                const utcTime = msg.timestamp.split(":");
+                const utcDate = new Date();
+                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
+                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
+                const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
+                msgDiv.onclick = () => playAudio(new Blob([base64ToBlob(msg.audio, 'audio/webm')]));
+                historyList.appendChild(msgDiv);
+            });
+        })
+        .catch(err => console.error("Error al cargar historial:", err));
 }
