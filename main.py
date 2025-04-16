@@ -66,7 +66,7 @@ def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Estructuras de datos
-users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios (name, function, websocket, etc.)
+users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios en memoria
 audio_queue = asyncio.Queue()  # Cola para procesar audio asincrónicamente
 groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
 flights_cache = []  # Cache global para vuelos AviationStack
@@ -99,53 +99,63 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
         "airline_iata": "AR",
         "limit": 100
     }
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    logger.error(f"Error AviationStack ({flight_type}): {response.status} {await response.text()}")
+    retries = 3
+    for attempt in range(retries):
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, params=params, timeout=10) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {response.status} {error_text}")
+                        if response.status == 429:  # Too Many Requests
+                            await asyncio.sleep(2 ** attempt)  # Backoff exponencial
+                            continue
+                        return []
+                    data = await response.json()
+                    flights = []
+                    for flight in data.get("data", []):
+                        # Validar airline
+                        airline = flight.get("airline")
+                        if not airline or airline.get("iata") != "AR":
+                            logger.debug(f"Vuelo descartado (sin airline o no AR): {flight.get('flight', {}).get('iata', 'N/A')}")
+                            continue
+                        # Validar flight_status
+                        status = flight.get("flight_status")
+                        if status is None:
+                            logger.warning(f"Vuelo sin flight_status: {flight.get('flight', {}).get('iata', 'N/A')}")
+                            continue
+                        if status.lower() == "cancelled":
+                            continue
+                        status_map = {
+                            "scheduled": "Estimado",
+                            "active": "En vuelo",
+                            "landed": "Aterrizado",
+                            "delayed": "Demorado",
+                            "departed": "Despegado"
+                        }
+                        status_text = status_map.get(status.lower(), status.capitalize())
+                        flight_number = flight.get("flight", {}).get("iata", "")
+                        scheduled_time = flight.get(f"{flight_type_param.replace('_iata', '')}_scheduled_time", "")
+                        origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr_iata" else "N/A"
+                        destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep_iata" else "N/A"
+                        gate = flight.get(f"{flight_type_param.replace('_iata', '')}", {}).get("gate", "N/A")
+                        flights.append({
+                            "Vuelo": flight_number,
+                            "STD": scheduled_time,
+                            "Destino": destination if flight_type_param == "dep_iata" else origin,
+                            "Estado": status_text,
+                            "Posicion": gate,
+                            "Matricula": "N/A"
+                        })
+                    logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
+                    return flights
+            except Exception as e:
+                logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
                     return []
-                data = await response.json()
-                flights = []
-                for flight in data.get("data", []):
-                    # Validar airline
-                    airline = flight.get("airline")
-                    if not airline or airline.get("iata") != "AR":
-                        logger.debug(f"Vuelo descartado (sin airline o no AR): {flight.get('flight', {}).get('iata', 'N/A')}")
-                        continue
-                    # Validar flight_status
-                    status = flight.get("flight_status")
-                    if status is None:
-                        logger.warning(f"Vuelo sin flight_status: {flight.get('flight', {}).get('iata', 'N/A')}")
-                        continue
-                    if status.lower() == "cancelled":
-                        continue
-                    status_map = {
-                        "scheduled": "Estimado",
-                        "active": "En vuelo",
-                        "landed": "Aterrizado",
-                        "delayed": "Demorado",
-                        "departed": "Despegado"
-                    }
-                    status_text = status_map.get(status.lower(), status.capitalize())
-                    flight_number = flight.get("flight", {}).get("iata", "")
-                    scheduled_time = flight.get(f"{flight_type_param.replace('_iata', '')}_scheduled_time", "")
-                    origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr_iata" else "N/A"
-                    destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep_iata" else "N/A"
-                    gate = flight.get(f"{flight_type_param.replace('_iata', '')}", {}).get("gate", "N/A")
-                    flights.append({
-                        "Vuelo": flight_number,
-                        "STD": scheduled_time,
-                        "Destino": destination if flight_type_param == "dep_iata" else origin,
-                        "Estado": status_text,
-                        "Posicion": gate,
-                        "Matricula": "N/A"
-                    })
-                logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
-                return flights
-        except Exception as e:
-            logger.error(f"Error AviationStack ({flight_type}): {e}")
-            return []
+    return []
 
 # Actualizar vuelos AviationStack
 async def update_flights():
@@ -367,14 +377,66 @@ async def get_flightradar24_flights():
     return data
 
 def init_db():
+    """Inicializa la base de datos para mensajes y sesiones."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS messages 
                  (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                  muted_users TEXT, last_active TIMESTAMP)''')
     conn.commit()
     conn.close()
 
+def save_session(token, user_id, name, function, group_id=None, muted_users=None):
+    """Guarda o actualiza una sesión en la base de datos."""
+    muted_users_str = json.dumps(list(muted_users or set()))
+    last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute('''INSERT OR REPLACE INTO sessions 
+                 (token, user_id, name, function, group_id, muted_users, last_active) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
+              (token, user_id, name, function, group_id, muted_users_str, last_active))
+    conn.commit()
+    conn.close()
+    logger.info(f"Sesión guardada para token={token}")
+
+def load_session(token):
+    """Carga una sesión desde la base de datos."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
+              (token,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        user_id, name, function, group_id, muted_users_str, last_active = row
+        try:
+            muted_users = set(json.loads(muted_users_str))
+        except json.JSONDecodeError:
+            muted_users = set()
+        return {
+            "user_id": user_id,
+            "name": name,
+            "function": function,
+            "group_id": group_id,
+            "muted_users": muted_users,
+            "last_active": last_active
+        }
+    return None
+
+def delete_session(token):
+    """Elimina una sesión de la base de datos."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+    logger.info(f"Sesión eliminada para token={token}")
+
 def save_message(user_id, audio_data, text, timestamp):
+    """Guarda un mensaje en la base de datos."""
     date = datetime.utcnow().strftime("%Y-%m-%d")
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
@@ -385,6 +447,7 @@ def save_message(user_id, audio_data, text, timestamp):
     logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
 
 def get_history():
+    """Obtiene el historial de mensajes."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
@@ -393,6 +456,7 @@ def get_history():
     return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
 async def process_audio_queue():
+    """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
             token, audio_data, message = await audio_queue.get()
@@ -449,20 +513,56 @@ async def process_audio_queue():
         finally:
             audio_queue.task_done()
 
+async def clean_expired_sessions():
+    """Elimina sesiones inactivas (más de 24 horas) de la base de datos."""
+    while True:
+        try:
+            conn = sqlite3.connect("chat_history.db")
+            c = conn.cursor()
+            expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("DELETE FROM sessions WHERE last_active < ?", (expiration_time,))
+            conn.commit()
+            deleted = c.rowcount
+            if deleted > 0:
+                logger.info(f"Eliminadas {deleted} sesiones expiradas")
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error al limpiar sesiones: {e}")
+        await asyncio.sleep(3600)  # 1 hora
+
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
+    """Maneja conexiones WebSocket para comunicación en tiempo real."""
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
     global global_mute_active
 
     try:
-        user_id = base64.b64decode(token).decode('utf-8')
-        if token in users:
-            users[token]["websocket"] = websocket
-            users[token]["logged_in"] = True
-        else:
+        # Validar y cargar sesión
+        session = load_session(token)
+        user_id = base64.b64decode(token).decode('utf-8', errors='ignore')
+        if session:
+            # Restaurar sesión existente
             users[token] = {
+                "user_id": session["user_id"],
+                "name": session["name"],
+                "function": session["function"],
+                "logged_in": True,
+                "websocket": websocket,
+                "muted_users": session["muted_users"],
+                "subscription": None,
+                "group_id": session["group_id"]
+            }
+            if session["group_id"] and session["group_id"] not in groups:
+                groups[session["group_id"]] = []
+            if session["group_id"] and token not in groups[session["group_id"]]:
+                groups[session["group_id"]].append(token)
+            logger.info(f"Sesión restaurada para {session['name']} ({token})")
+        else:
+            # Nueva sesión
+            users[token] = {
+                "user_id": user_id,
                 "name": "Anónimo",
                 "function": "Desconocida",
                 "logged_in": True,
@@ -471,6 +571,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "subscription": None,
                 "group_id": None
             }
+            save_session(token, user_id, "Anónimo", "Desconocida")
+            logger.info(f"Nueva sesión creada para {token}")
 
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
         logger.info(f"Confirmación enviada a {token}")
@@ -484,12 +586,27 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             message = json.loads(data)
             logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
 
-            if message["type"] == "register":
+            if message["type"] == "ping":
+                await websocket.send_json({"type": "pong"})
+                logger.debug(f"Ping recibido de {token}, enviado pong")
+                # Actualizar last_active
+                save_session(
+                    token,
+                    users[token]["user_id"],
+                    users[token]["name"],
+                    users[token]["function"],
+                    users[token]["group_id"],
+                    users[token]["muted_users"]
+                )
+                continue
+
+            elif message["type"] == "register":
                 name = message.get("name", "Anónimo")
                 function = message.get("function", "Desconocida")
                 users[token]["name"] = name
                 users[token]["function"] = function
                 users[token]["logged_in"] = True
+                save_session(token, user_id, name, function, users[token]["group_id"], users[token]["muted_users"])
                 await websocket.send_json({"type": "register_success", "message": "Registro exitoso"})
                 logger.info(f"Usuario registrado: {name} ({function})")
                 await broadcast_users()
@@ -514,7 +631,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     if not groups[group_id]:
                         del groups[group_id]
                 users[token]["logged_in"] = False
-                del users[token]
+                delete_session(token)
+                if token in users:
+                    del users[token]
                 await broadcast_users()
                 await websocket.close()
                 logger.info(f"Usuario {token} cerró sesión")
@@ -524,6 +643,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 target_user_id = message.get("target_user_id")
                 if target_user_id:
                     users[token]["muted_users"].add(target_user_id)
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        users[token]["group_id"],
+                        users[token]["muted_users"]
+                    )
                     logger.info(f"{users[token]['name']} muteó a {target_user_id}")
                 else:
                     logger.error("mute_user sin target_user_id")
@@ -532,6 +659,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 target_user_id = message.get("target_user_id")
                 if target_user_id:
                     users[token]["muted_users"].discard(target_user_id)
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        users[token]["group_id"],
+                        users[token]["muted_users"]
+                    )
                     logger.info(f"{users[token]['name']} desmuteó a {target_user_id}")
                 else:
                     logger.error("unmute_user sin target_user_id")
@@ -561,6 +696,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 if token not in groups[group_id]:
                     groups[group_id].append(token)
                 users[token]["group_id"] = group_id
+                save_session(
+                    token,
+                    users[token]["user_id"],
+                    users[token]["name"],
+                    users[token]["function"],
+                    group_id,
+                    users[token]["muted_users"]
+                )
                 await websocket.send_json({"type": "join_group", "group_id": group_id})
                 logger.info(f"{users[token]['name']} se unió al grupo {group_id}")
                 await broadcast_users()
@@ -573,6 +716,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     if not groups[group_id]:
                         del groups[group_id]
                     users[token]["group_id"] = None
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        None,
+                        users[token]["muted_users"]
+                    )
                     await broadcast_users()
                     logger.info(f"{users[token]['name']} salió del grupo {group_id}")
 
@@ -642,30 +793,37 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
-            group_id = users[token]["group_id"]
-            if group_id and group_id in groups:
-                if token in groups[group_id]:
-                    groups[group_id].remove(token)
-                if not groups[group_id]:
-                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
+            # Mantener sesión en la base de datos para reconexión
+            save_session(
+                token,
+                users[token]["user_id"],
+                users[token]["name"],
+                users[token]["function"],
+                users[token]["group_id"],
+                users[token]["muted_users"]
+            )
     except Exception as e:
         logger.error(f"Error WebSocket {token}: {str(e)}")
         if token in users:
-            group_id = users[token]["group_id"]
-            if group_id and group_id in groups:
-                if token in groups[group_id]:
-                    groups[group_id].remove(token)
-                if not groups[group_id]:
-                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
+            # Mantener sesión en la base de datos
+            save_session(
+                token,
+                users[token]["user_id"],
+                users[token]["name"],
+                users[token]["function"],
+                users[token]["group_id"],
+                users[token]["muted_users"]
+            )
         await websocket.close()
 
 async def broadcast_global_mute_state(message_type, message_text):
+    """Difunde el estado de muteo global a todos los usuarios conectados."""
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"]:
             try:
@@ -678,10 +836,11 @@ async def broadcast_global_mute_state(message_type, message_text):
                 await broadcast_users()
 
 async def broadcast_users():
+    """Difunde la lista de usuarios conectados."""
     user_list = []
     for token in users:
         if users[token]["logged_in"]:
-            decoded_token = base64.b64decode(token).decode('utf-8')
+            decoded_token = base64.b64decode(token).decode('utf-8', errors='ignore')
             legajo, name, _ = decoded_token.split('_', 2)
             user_id = f"{users[token]['name']}_{users[token]['function']}"
             user_list.append({
@@ -702,14 +861,16 @@ async def broadcast_users():
                 logger.error(f"Error al enviar usuarios: {e}")
                 user["websocket"] = None
                 user["logged_in"] = False
-
+                
 @app.get("/history")
 async def get_history_endpoint():
+    """Obtiene el historial de mensajes."""
     history = get_history()
     logger.info(f"Historial: {len(history)} mensajes")
     return history
 
 async def clear_messages():
+    """Programa la limpieza de mensajes (no modificada)."""
     while True:
         now = datetime.utcnow()
         start_time = datetime.utcnow().replace(hour=5, minute=30, second=0, microsecond=0)
@@ -719,11 +880,13 @@ async def clear_messages():
 
 @app.on_event("startup")
 async def startup_event():
+    """Tareas de inicio de la aplicación."""
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
     asyncio.create_task(update_flights())
     asyncio.create_task(update_fr24_flights())
+    asyncio.create_task(clean_expired_sessions())
     logger.info("Aplicación iniciada")
 
 if __name__ == "__main__":
