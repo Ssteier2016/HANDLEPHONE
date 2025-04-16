@@ -14,11 +14,17 @@
     <link rel="manifest" href="/templates/manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script>
-        // Registrar Service Worker
+        // Registrar Service Worker (usar 'navigator', NO 'innavigator')
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/templates/sw.js')
-                    .then(reg => console.log('Service Worker registrado:', reg))
+                navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
+                    .then(reg => {
+                        console.log('Service Worker registrado:', reg);
+                        // Forzar actualización si hay una nueva versión
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    })
                     .catch(err => console.error('Error al registrar Service Worker:', err));
             });
         }
