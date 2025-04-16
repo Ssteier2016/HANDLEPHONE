@@ -57,8 +57,7 @@
         </div>
         <button id="talk" onclick="toggleTalk()"></button>
         <button id="mute" class="active" onclick="toggleMute()"></button>
-        <button id="mute-non-group">Mutear no grupo</button>
-        <button id="radar" onclick="showRadar()">Ver Radar</button>
+        <button id="radar" onclick="showRadar()">Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <button id="logout-btn" onclick="logout()">Cerrar Sesión</button>
         <div id="users">Usuarios conectados: 0</div>
@@ -81,9 +80,10 @@
             <h3>Conversación</h3>
             <div id="group-chat-list"></div>
         </div>
-        <button id="group-talk" onclick="toggleGroupTalk()">Hablar</button>
-        <button id="group-mute" class="active" onclick="toggleGroupMute()"></button>
-        <button id="group-radar" onclick="showGroupRadar()">Ver Radar</button>
+        <button id="group-talk" onclick="toggleGroupTalk()"></button>
+        <button id="mute-non-group">Mutear grupo</button>
+        <button id="group-mute" class="active" onclick="toggleGroupMute()">Mutear Grupo</button>
+        <button id="group-radar" onclick="showGroupRadar()">Radar</button>
         <button id="group-history" onclick="showGroupHistory()">Historial</button>
         <button id="leave-group-btn" onclick="leaveGroup()">Salir del Grupo</button>
         <div id="group-users">Usuarios conectados: 0</div>
