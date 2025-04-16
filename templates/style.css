@@ -600,9 +600,22 @@ h3 {
         padding: 10px;
     }
 
-    #talk.recording,
-#group-talk.recording {
-    background-image: url('/templates/mic-on.png'); /* Imagen cuando graba */
+@media (max-width: 768px) {
+    #talk,
+    #group-talk {
+        height: 40px; /* Tamaño más pequeño para móviles */
+        max-width: 40px;
+        width: 40px;
+    }
+}
+
+@media (min-width: 769px) {
+    #talk,
+    #group-talk {
+        height: 48px; /* Tamaño estándar para pantallas grandes */
+        max-width: 48px;
+        width: 48px;
+    }
 }
 
     #users,
