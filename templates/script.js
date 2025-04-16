@@ -768,6 +768,113 @@ async function toggleTalk() {
                     const msgDiv = document.createElement("div");
                     msgDiv.className = "chat-message";
                     msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
+async function toggleTalk() {
+    const talkButton = document.getElementById("talk");
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        console.log("Iniciando grabación...");
+        stream = await requestMicPermission();
+        if (!stream) {
+            console.error("No se pudo obtener el stream del micrófono");
+            alert("No se pudo acceder al micrófono. Por favor, verifica los permisos.");
+            return;
+        }
+
+        try {
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            console.log("MediaRecorder creado con mimeType: audio/webm");
+        } catch (err) {
+            console.error("Error al crear MediaRecorder:", err);
+            alert("Error al iniciar la grabación: " + err.message);
+            return;
+        }
+
+        audioChunks = [];
+        let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
+
+        if (supportsSpeechRecognition && recognition) {
+            recognition.onresult = (event) => {
+                transcript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        transcript += event.results[i][0].transcript;
+                    } else {
+                        transcript += event.results[i][0].transcript;
+                    }
+                }
+                console.log("Transcripción parcial:", transcript);
+            };
+            recognition.onerror = (event) => {
+                console.error("Error en SpeechRecognition:", event.error);
+                transcript = "Error en transcripción: " + event.error;
+                alert("Error en speech-to-text: " + event.error);
+            };
+            try {
+                recognition.start();
+                console.log("SpeechRecognition iniciado");
+            } catch (err) {
+                console.error("Error al iniciar SpeechRecognition:", err);
+            }
+        }
+
+        mediaRecorder.ondataavailable = function(event) {
+            console.log("Datos de audio disponibles:", event.data.size, "bytes");
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            } else {
+                console.warn("Fragmento de audio vacío recibido");
+            }
+        };
+        mediaRecorder.onstop = function() {
+            console.log("Grabación detenida");
+            console.log("Tamaño de audioChunks:", audioChunks.length);
+            if (audioChunks.length === 0) {
+                console.error("No se capturaron fragmentos de audio");
+                alert("No se grabó ningún audio. Verifica tu micrófono.");
+                return;
+            }
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            console.log("Audio Blob creado, tamaño:", audioBlob.size, "bytes");
+            if (audioBlob.size === 0) {
+                console.error("Audio Blob vacío");
+                alert("El audio grabado está vacío. Verifica tu micrófono.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = function() {
+                const base64data = reader.result.split(',')[1];
+                console.log("Audio convertido a Base64, longitud:", base64data.length);
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = localStorage.getItem("userName") || "Anónimo";
+                const userFunction = localStorage.getItem("userFunction") || "Desconocida";
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: "audio",
+                        data: base64data,
+                        text: transcript,
+                        timestamp: timestamp,
+                        sender: sender,
+                        function: userFunction
+                    };
+                    console.log("Enviando mensaje al servidor:", {
+                        type: message.type,
+                        data: message.data.slice(0, 20) + "...",
+                        text: message.text,
+                        timestamp: message.timestamp,
+                        sender: message.sender,
+                        function: message.function
+                    });
+                    ws.send(JSON.stringify(message));
+                } else {
+                    console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+                    alert("No se pudo enviar el mensaje: WebSocket no está conectado.");
+                }
+
+                const chatList = document.getElementById("chat-list");
+                if (chatList) {
+                    const msgDiv = document.createElement("div");
+                    msgDiv.className = "chat-message";
+                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
                     msgDiv.onclick = () => playAudio(audioBlob);
                     chatList.appendChild(msgDiv);
                     chatList.scrollTop = chatList.scrollHeight;
@@ -794,19 +901,18 @@ async function toggleTalk() {
         try {
             mediaRecorder.start(100);
             console.log("Grabación iniciada");
-            talkButton.textContent = "Grabando...";
-            talkButton.style.backgroundColor = "green";
+            talkButton.classList.add("recording"); // Añadir clase para cambiar la imagen
         } catch (err) {
             console.error("Error al iniciar la grabación:", err);
             alert("Error al iniciar la grabación: " + err.message);
         }
     } else if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
-        talkButton.textContent = "Hablar";
-        talkButton.style.backgroundColor = "red";
+        talkButton.classList.remove("recording"); // Quitar clase para volver a la imagen original
     }
 }
 
+                    
 // Funciones de muteo
 function toggleMute() {
     const muteButton = document.getElementById("mute");
@@ -1076,7 +1182,7 @@ function toggleGroupTalk() {
                 };
                 groupMediaRecorder.start();
                 groupRecording = true;
-                talkButton.style.backgroundColor = '#32CD32';
+                talkButton.classList.add("recording"); // Añadir clase para cambiar la imagen
             })
             .catch(err => {
                 console.error('Error al acceder al micrófono:', err);
@@ -1085,9 +1191,11 @@ function toggleGroupTalk() {
     } else {
         groupMediaRecorder.stop();
         groupRecording = false;
-        talkButton.style.backgroundColor = '#FF4500';
+        talkButton.classList.remove("recording"); // Quitar clase para volver a la imagen original
     }
-                                         }
+}
+
+                                         
 function sendGroupMessage(audioData) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
