@@ -918,7 +918,9 @@ async function toggleTalk() {
             console.error("Error al iniciar la grabación:", err);
             alert("Error al iniciar la grabación: " + err.message);
         }
-    } else if (mediaRecorder.state === "recording") {
+    } 
+        else {
+            if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
         talkButton.classList.remove("recording");
     }
