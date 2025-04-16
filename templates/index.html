@@ -33,6 +33,7 @@
     </div>
 
     <div id="main" style="display: none;">
+        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
@@ -59,11 +60,11 @@
         <button id="mute" class="active" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
-        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
     <div id="group-screen" style="display: none;">
+        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
         </button>
@@ -90,6 +91,7 @@
     </div>
 
     <div id="radar-screen" style="display: none;">
+        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <div class="radar-header">
             <h2>Radar</h2>
             <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
@@ -99,6 +101,7 @@
     </div>
 
     <div id="history-screen" style="display: none;">
+        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
