@@ -484,30 +484,33 @@ button:hover {
     margin-bottom: 10px;
 }
 
-/* Reemplazar las definiciones actuales de #talk y #group-talk */
 #talk,
 #group-talk {
-    background-color: transparent; /* Fondo transparente para que la imagen sea visible */
-    background-image: url('/templates/mic-off.png'); /* Imagen por defecto (no grabando) */
+    background-color: transparent;
+    background-image: url('/templates/mic-off.png');
     background-position: center;
     background-repeat: no-repeat;
-    background-size: cover; /* Ajusta la imagen al tamaño del botón */
-    border: 2px solid #4682B4; /* Mantener el borde consistente */
+    background-size: cover;
+    border: 2px solid #4682B4;
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    height: 48px; /* Tamaño fijo para la imagen */
+    height: 48px;
     margin: 5px auto;
-    max-width: 48px; /* Igual al ancho para un botón cuadrado */
-    padding: 0; /* Sin padding para centrar la imagen */
-    transition: background-image 0.3s ease; /* Transición suave para el cambio de imagen */
+    max-width: 48px;
+    padding: 0;
+    transition: background-image 0.3s ease;
     width: 48px;
 }
 
-/* Asegurar que el hover sea consistente */
+#talk.recording,
+#group-talk.recording {
+    background-image: url('/templates/mic-on.png');
+}
+
 #talk:hover,
 #group-talk:hover {
-    opacity: 0.8; /* Efecto hover para indicar interactividad */
+    opacity: 0.8;
 }
 
 #users,
@@ -600,23 +603,12 @@ h3 {
         padding: 10px;
     }
 
-@media (max-width: 768px) {
     #talk,
     #group-talk {
-        height: 40px; /* Tamaño más pequeño para móviles */
+        height: 40px;
         max-width: 40px;
         width: 40px;
     }
-}
-
-@media (min-width: 769px) {
-    #talk,
-    #group-talk {
-        height: 48px; /* Tamaño estándar para pantallas grandes */
-        max-width: 48px;
-        width: 48px;
-    }
-}
 
     #users,
     #group-users {
@@ -738,10 +730,12 @@ h3 {
         padding: 20px;
     }
 
-    #talk.recording,
-#group-talk.recording {
-    background-image: url('/templates/mic-on.png'); /* Imagen cuando graba */
-}
+    #talk,
+    #group-talk {
+        height: 48px;
+        max-width: 48px;
+        width: 48px;
+    }
 
     #users,
     #group-users {
@@ -821,4 +815,4 @@ h3 {
         padding: 8px;
         width: 30%;
     }
-                 }
+    }
