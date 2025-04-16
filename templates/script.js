@@ -105,7 +105,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function queueMessageForSync(message) {
-    if ('serviceWorker' innavigator && navigator.serviceWorker.controller) {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
             type: 'QUEUE_MESSAGE',
             message: message
