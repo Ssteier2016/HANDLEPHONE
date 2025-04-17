@@ -104,6 +104,37 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+// Mostrar pantallas
+function showScreen(screenId) {
+    document.querySelectorAll('#register, #main, #group-screen, #radar-screen, #history-screen')
+        .forEach(screen => screen.style.display = 'none');
+    document.getElementById(screenId).style.display = 'block';
+
+    // Iniciar actualización de vuelos solo en la pantalla principal
+    if (screenId === 'main') {
+        fetchAEPFlights(); // Carga inicial
+        startFlightUpdates(); // Inicia el setInterval
+    } else {
+        stopFlightUpdates(); // Detiene el setInterval en otras pantallas
+    }
+}
+
+// Iniciar actualizaciones de vuelos
+function startFlightUpdates() {
+    stopFlightUpdates(); // Limpia cualquier intervalo previo
+    flightInterval = setInterval(fetchAEPFlights, 5 * 60 * 1000); // Cada 5 minutos
+    console.log('Iniciando actualizaciones de vuelos cada 5 minutos');
+}
+
+// Detener actualizaciones de vuelos
+function stopFlightUpdates() {
+    if (flightInterval) {
+        clearInterval(flightInterval);
+        flightInterval = null;
+        console.log('Actualizaciones de vuelos detenidas');
+    }
+}
+
 function queueMessageForSync(message) {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
@@ -185,6 +216,54 @@ async function fetchAEPFlights() {
         console.error('Error al cargar vuelos:', error);
     }
 }
+
+// Obtener vuelos de Aeroparque
+async function fetchAEPFlights() {
+    try {
+        const response = await fetch('/aep_flights');
+        if (!response.ok) {
+            throw new Error('Error al obtener vuelos');
+        }
+        const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        const tbody = document.querySelector('#flights-table tbody');
+        tbody.innerHTML = '';
+        data.flights.forEach(flight => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${flight.flight_number}</td>
+                <td>${flight.departure_airport}</td>
+                <td>${new Date(flight.departure_time).toLocaleString()}</td>
+                <td>${flight.arrival_airport}</td>
+                <td>${new Date(flight.arrival_time).toLocaleString()}</td>
+                <td>${flight.status}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('Error en fetchAEPFlights:', error);
+        const tbody = document.querySelector('#flights-table tbody');
+        tbody.innerHTML = '<tr><td colspan="6">Error al cargar vuelos</td></tr>';
+    }
+}
+
+// Manejo del botón de logout
+document.getElementById('logout-btn').addEventListener('click', async () => {
+    try {
+        await fetch('/logout', { method: 'POST' });
+        showScreen('register');
+        stopFlightUpdates(); // Detener actualizaciones al cerrar sesión
+    } catch (error) {
+        console.error('Error al cerrar sesión:', error);
+    }
+});
+
+// Inicialización al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    showScreen('register'); // Mostrar pantalla de login inicialmente
+});
 
 // Actualizar vuelos cada 5 minutos
 setInterval(fetchAEPFlights, 5 * 60 * 1000);
