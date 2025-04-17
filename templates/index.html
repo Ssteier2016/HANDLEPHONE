@@ -14,13 +14,12 @@
     <link rel="manifest" href="/templates/manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script>
-        // Registrar Service Worker (usar 'navigator', NO 'innavigator')
+        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
                     .then(reg => {
                         console.log('Service Worker registrado:', reg);
-                        // Forzar actualización si hay una nueva versión
                         if (reg.waiting) {
                             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                         }
@@ -84,7 +83,6 @@
     </div>
 
     <div id="group-screen" style="display: none;">
-        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
         </button>
@@ -111,7 +109,6 @@
     </div>
 
     <div id="radar-screen" style="display: none;">
-        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <div class="radar-header">
             <h2>Radar</h2>
             <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
