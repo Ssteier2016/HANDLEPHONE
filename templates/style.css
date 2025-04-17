@@ -333,8 +333,32 @@ button:hover {
 #group-join {
     align-items: center;
     display: flex;
+    flex-wrap: wrap; /* Nuevo: Permite que los elementos se reorganicen en pantallas pequeñas */
     gap: 10px;
     margin: 10px 0;
+}
+
+/* Nuevo: Estilos para labels en #group-join */
+#group-join label {
+    color: #4682B4;
+    font-size: 14px;
+    margin: 5px 0;
+    text-align: left;
+    width: 100%; /* Asegura que los labels ocupen una línea completa */
+}
+
+/* Nuevo: Estilos para el checkbox #group-private */
+#group-private {
+    width: auto; /* Anula width: 100% para checkboxes */
+    margin: 5px 10px 5px 0;
+    cursor: default; /* El cursor pointer se maneja en el label */
+}
+
+/* Nuevo: Estilos para el label de #group-private */
+#group-private + label {
+    display: inline-block;
+    cursor: pointer;
+    vertical-align: middle;
 }
 
 #join-group-btn {
@@ -349,7 +373,21 @@ button:hover {
     transition: background-color 0.3s;
 }
 
-#join-group-btn:hover {
+/* Nuevo: Estilos para #create-group-btn */
+#create-group-btn {
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: background-color 0.3s;
+}
+
+#join-group-btn:hover,
+#create-group-btn:hover {
     background-color: #FF4500;
 }
 
@@ -721,6 +759,31 @@ h3 {
         padding: 6px;
         width: 100%;
     }
+
+    /* Nuevo: Ajustes para #group-join en móviles */
+    #group-join {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #group-id,
+    #join-group-btn,
+    #create-group-btn {
+        width: 100%;
+    }
+
+    #group-private {
+        width: auto;
+        margin: 5px 0;
+    }
+
+    #group-private + label {
+        font-size: 12px;
+    }
+
+    #group-join label {
+        font-size: 12px;
+    }
 }
 
 @media (min-width: 769px) {
@@ -776,7 +839,7 @@ h3 {
 
     #talk,
     #group-talk {
-        hight: 65px;
+        height: 65px; /* Corrección: typo de "hight" a "height" */
         max-width: 65px;
         width: 65px;
     }
@@ -869,4 +932,34 @@ h3 {
         padding: 8px;
         width: 30%;
     }
+
+    /* Nuevo: Ajustes para #group-join en pantallas grandes */
+    #group-join {
+        flex-direction: row;
+        align-items: center;
     }
+
+    #group-id {
+        width: 200px;
+    }
+
+    #join-group-btn,
+    #create-group-btn {
+        width: 120px;
+    }
+
+    #group-private {
+        width: auto;
+        margin: 5px 10px 5px 0;
+    }
+
+    #group-private + label {
+        font-size: 14px;
+    }
+
+    #group-join label {
+        font-size: 14px;
+        width: auto;
+        margin-right: 10px;
+    }
+        }
