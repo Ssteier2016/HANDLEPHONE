@@ -459,7 +459,14 @@ async def process_audio_queue():
     """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
-            token, audio_data, message = await audio_queue.get()
+            # Obtener y validar elemento de la cola
+            item = await audio_queue.get()
+            if not isinstance(item, tuple) or len(item) != 3:
+                logger.error(f"Elemento mal formado en audio_queue: {item}")
+                audio_queue.task_done()
+                continue
+            token, audio_data, message = item
+
             sender = message.get("sender", "Unknown")
             function = message.get("function", "Unknown")
             text = message.get("text", "Sin transcripción")
@@ -467,15 +474,25 @@ async def process_audio_queue():
 
             logger.info(f"Procesando audio de {sender} ({function})")
 
-                        if global_mute_active:
+            # Verificar muteo global
+            if global_mute_active:
                 logger.info("Muteo global activo, audio no transmitido")
+                await broadcast_message({
+                    "type": "mute_notification",
+                    "message": "Muteo global activo, audio no transmitido"
+                })
                 audio_queue.task_done()
                 continue
 
+            # Transcribir audio si es necesario
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
                 logger.info("Transcribiendo audio...")
-                text = await transcribe_audio(audio_data)
-                logger.info(f"Transcripción: {text}")
+                try:
+                    text = await transcribe_audio(audio_data)
+                    logger.info(f"Transcripción: {text}")
+                except Exception as e:
+                    logger.error(f"Error al transcribir audio: {e}")
+                    text = "Error en transcripción"
 
             user_id = f"{sender}_{function}"
             try:
@@ -507,7 +524,7 @@ async def process_audio_queue():
                     await user["websocket"].send_json(broadcast_message)
                     logger.info(f"Mensaje audio enviado a {user['name']}")
                 except Exception as e:
-                    logger.error(f"Error al enviar a {user['name']}: {e}")
+                    logger.error(f"Error al enviar a {user['name']} ({user_token}): {e}")
                     disconnected_users.append(user_token)
 
             # Limpiar usuarios desconectados
@@ -519,11 +536,14 @@ async def process_audio_queue():
             if disconnected_users:
                 await broadcast_users()
 
+        except asyncio.CancelledError:
+            logger.info("Tarea de audio queue cancelada")
+            raise
         except Exception as e:
             logger.error(f"Error procesando audio queue: {e}")
         finally:
             audio_queue.task_done()
-
+            
 async def clean_expired_sessions():
     """Elimina sesiones inactivas (más de 24 horas) de la base de datos."""
     while True:
