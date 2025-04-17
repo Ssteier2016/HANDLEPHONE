@@ -9,44 +9,6 @@
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <!-- Añadido: Mapbox para un estilo de mapa moderno -->
-    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
-    <!-- Añadido: Leaflet.MovingMarker para animar aviones -->
-    <script src="https://unpkg.com/leaflet.movingmarker@0.2.1/MovingMarker.js"></script>
-    <!-- Añadido: Leaflet.js en head para asegurar carga antes de script.js -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
-    <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
-    <link rel="manifest" href="/templates/manifest.json">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-    <script>
-        // Registrar Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
-                    .then(reg => {
-                        console.log('Service Worker registrado:', reg);
-                        if (reg.waiting) {
-                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                        }
-                    })
-                    .catch(err => console.error('Error al registrar Service Worker:', err));
-            });
-        }
-    </script>
-</head>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#2196f3">
-    <title>HANDLEPHONE - Comunicación Aeronáutica</title>
-    <link rel="stylesheet" href="/templates/style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
     <script src="https://unpkg.com/leaflet.movingmarker@0.2.1/MovingMarker.js"></script>
@@ -106,6 +68,7 @@
         </div>
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
+            <button id="flight-details-button">Ver Detalles de Vuelos</button>
             <div id="flight-details">
                 <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
                     <thead>
@@ -152,14 +115,28 @@
         </div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
-            <div id="group-flight-details"></div>
+            <button id="flight-details-button">Ver Detalles de Vuelos</button>
+            <div id="group-flight-details">
+                <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>Origen</th>
+                            <th>Salida</th>
+                            <th>Destino</th>
+                            <th>Llegada</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div id="group-chat-window">
             <h3>Conversación</h3>
             <div id="group-chat-list"></div>
         </div>
         <button id="group-talk" onclick="toggleGroupTalk()"></button>
-        <!-- Modificado: Cambiado texto por ícono -->
         <button id="mute-non-group" title="Silenciar no grupo">
             <img src="/templates/mute.png" alt="Silenciar" style="width: 24px; height: 24px;">
         </button>
@@ -184,6 +161,26 @@
         <button onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
+    </div>
+
+    <div id="flight-details-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-modal" class="close">×</span>
+            <h2>Detalles de Vuelos</h2>
+            <table id="modal-flight-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th>Número</th>
+                        <th>Origen</th>
+                        <th>Salida</th>
+                        <th>Destino</th>
+                        <th>Llegada</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 
     <script src="/templates/script.js"></script>
