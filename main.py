@@ -52,8 +52,19 @@ CORS(app)
 GOFLIGHTLABS_API_KEY = os.getenv('GOFLIGHTLABS_API_KEY')
 API_URL = 'https://www.goflightlabs.com/flights'
 
+# Crear caché con TTL de 5 minutos (300 segundos) y máximo 100 entradas
+cache = TTLCache(maxsize=100, ttl=300)
+
 @app.route('/aep_flights', methods=['GET'])
 async def get_aep_flights():
+    # Crear una clave única para el caché basada en los parámetros
+    cache_key = 'aep_flights_ar'
+
+    # Verificar si la respuesta está en el caché
+    if cache_key in cache:
+        print('Sirviendo desde caché:', cache_key)
+        return jsonify(cache[cache_key])
+        
     try:
         # Configurar parámetros de la API
         params = {
