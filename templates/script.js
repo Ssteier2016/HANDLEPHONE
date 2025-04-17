@@ -132,6 +132,63 @@ function unlockAudio() {
         });
     }
 }
+async function fetchAEPFlights() {
+    try {
+        const response = await fetch('/aep_flights');
+        const data = await response.json();
+
+        if (data.error) {
+            console.error('Error al obtener vuelos:', data.details);
+            return;
+        }
+
+        // Limpiar marcadores existentes (si usas Mapbox)
+        if (window.flightMarkers) {
+            window.flightMarkers.forEach(marker => marker.remove());
+        }
+        window.flightMarkers = [];
+
+        // Mostrar vuelos en el radar o en una tabla
+        data.flights.forEach(flight => {
+            // Ejemplo: Añadir marcador en el radar (ajusta lat/lng según datos reales)
+            if (flight.status === 'active' && map) {  // Asumiendo que 'map' es tu instancia de Mapbox
+                const marker = new mapboxgl.Marker()
+                    .setLngLat([flight.longitude || -58.3897, flight.latitude || -34.6037])  // Ajusta con datos reales
+                    .setPopup(new mapboxgl.Popup().setHTML(`
+                        <h3>Vuelo ${flight.flight_number}</h3>
+                        <p>Origen: ${flight.departure_airport}</p>
+                        <p>Destino: ${flight.arrival_airport}</p>
+                        <p>Salida: ${new Date(flight.departure_time).toLocaleString()}</p>
+                        <p>Llegada: ${new Date(flight.arrival_time).toLocaleString()}</p>
+                        <p>Estado: ${flight.status}</p>
+                    `))
+                    .addTo(map);
+                window.flightMarkers.push(marker);
+            }
+
+            // Ejemplo: Añadir a una tabla
+            const tableBody = document.querySelector('#flights-table tbody');
+            if (tableBody) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${flight.flight_number}</td>
+                    <td>${flight.departure_airport}</td>
+                    <td>${new Date(flight.departure_time).toLocaleString()}</td>
+                    <td>${flight.arrival_airport}</td>
+                    <td>${new Date(flight.arrival_time).toLocaleString()}</td>
+                    <td>${flight.status}</td>
+                `;
+                tableBody.appendChild(row);
+            }
+        });
+    } catch (error) {
+        console.error('Error al cargar vuelos:', error);
+    }
+}
+
+// Actualizar vuelos cada 5 minutos
+setInterval(fetchAEPFlights, 5 * 60 * 1000);
+fetchAEPFlights(); // Cargar al inicio
 
 async function requestMicPermission() {
     try {
