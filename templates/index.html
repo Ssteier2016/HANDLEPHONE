@@ -8,7 +8,14 @@
     <meta name="theme-color" content="#2196f3">
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Añadido: Mapbox para un estilo de mapa moderno -->
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <!-- Añadido: Leaflet.MovingMarker para animar aviones -->
+    <script src="https://unpkg.com/leaflet.movingmarker@0.2.1/MovingMarker.js"></script>
+    <!-- Añadido: Leaflet.js en head para asegurar carga antes de script.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
     <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
     <link rel="manifest" href="/templates/manifest.json">
@@ -132,7 +139,6 @@
         <div id="history-list"></div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/templates/script.js"></script>
 </body>
 </html>
