@@ -14,7 +14,6 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
-from FlightRadar24 import FlightRadar24API
 import math
 from dotenv import load_dotenv
 from cachetools import TTLCache
@@ -69,12 +68,11 @@ def to_icao(text):
 users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios en memoria
 audio_queue = asyncio.Queue()  # Cola para procesar audio asincrónicamente
 groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
-flights_cache = []  # Cache global para vuelos AviationStack
-fr24_cache = []  # Cache global para vuelos FlightRadar24
+flights_cache = []  # Cache global para vuelos combinados (OpenSky + AviationStack)
 global_mute_active = False  # Estado de muteo general
 
-# Cache para Airplanes.Live
-airplanes_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos
+# Cache para datos de OpenSky
+opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos
 
 # Función para filtrar vuelos cerca de Aeroparque
 def is_near_aeroparque(lat, lon, max_distance_km=1500):
@@ -99,7 +97,7 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
         "airline_iata": "AR",
         "limit": 100
     }
-    retries = 5  # Aumentado para mayor robustez
+    retries = 5
     for attempt in range(retries):
         async with aiohttp.ClientSession() as session:
             try:
@@ -107,19 +105,17 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {response.status} {error_text}")
-                        if response.status == 429:  # Too Many Requests
-                            await asyncio.sleep(2 ** attempt)  # Backoff exponencial
+                        if response.status == 429:
+                            await asyncio.sleep(2 ** attempt)
                             continue
                         return []
                     data = await response.json()
                     flights = []
                     for flight in data.get("data", []):
-                        # Validar airline
                         airline = flight.get("airline")
                         if not airline or airline.get("iata") != "AR":
                             logger.debug(f"Vuelo descartado (sin airline o no AR): {flight.get('flight', {}).get('iata', 'N/A')}")
                             continue
-                        # Validar flight_status
                         status = flight.get("flight_status")
                         if status is None:
                             logger.warning(f"Vuelo sin flight_status: {flight.get('flight', {}).get('iata', 'N/A')}")
@@ -157,31 +153,129 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                     return []
     return []
 
+# Función para obtener datos de OpenSky Network
+async def get_opensky_data():
+    """Obtiene datos de vuelos cerca de Aeroparque desde OpenSky Network."""
+    if "data" in opensky_cache:
+        logger.info("Devolviendo datos en caché de OpenSky")
+        return opensky_cache["data"]
+    try:
+        # Definir área alrededor de Aeroparque (lat: -34.6084, lon: -58.3732)
+        url = "https://opensky-network.org/api/states/all"
+        params = {
+            "lamin": -35.6084,  # Latitud mínima
+            "lomin": -59.3732,  # Longitud mínima
+            "lamax": -33.6084,  # Latitud máxima
+            "lomax": -57.3732   # Longitud máxima
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    states = data.get("states", [])
+                    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
+                    departures = await fetch_aviationstack_flights(flight_type="partidas")
+                    tams_data = arrivals + departures
+                    combined_data = []
+                    for state in states:
+                        icao24, callsign, origin_country, time_position, last_contact, lon, lat, baro_altitude, on_ground, velocity, true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source = state[:17]
+                        callsign = callsign.strip() if callsign else ""
+                        if callsign and callsign.startswith("ARG"):
+                            flight_info = {
+                                "flight": callsign,
+                                "registration": icao24,
+                                "lat": lat,
+                                "lon": lon,
+                                "alt_geom": geo_altitude,
+                                "gs": velocity * 1.94384 if velocity else None,  # Convertir m/s a nudos
+                                "vert_rate": vertical_rate,
+                                "origin_dest": "N/A",
+                                "heading": true_track
+                            }
+                            for tams_flight in tams_data:
+                                if tams_flight["Vuelo"] == callsign:
+                                    flight_info.update({
+                                        "scheduled": tams_flight["STD"],
+                                        "position": tams_flight["Posicion"],
+                                        "destination": tams_flight["Destino"],
+                                        "status": tams_flight["Estado"]
+                                    })
+                                    break
+                            combined_data.append(flight_info)
+                    # Añadir vuelos de AviationStack sin datos de OpenSky
+                    for tams_flight in tams_data:
+                        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
+                            combined_data.append({
+                                "flight": tams_flight["Vuelo"],
+                                "registration": tams_flight["Matricula"],
+                                "scheduled": tams_flight["STD"],
+                                "position": tams_flight["Posicion"],
+                                "destination": tams_flight["Destino"],
+                                "status": tams_flight["Estado"],
+                                "lat": None,
+                                "lon": None,
+                                "alt_geom": None,
+                                "gs": None,
+                                "vert_rate": None,
+                                "origin_dest": None,
+                                "heading": None
+                            })
+                    opensky_cache["data"] = combined_data
+                    logger.info(f"Datos de OpenSky: {len(combined_data)} vuelos")
+                    return combined_data
+                else:
+                    logger.error(f"Error OpenSky: {response.status}")
+                    return []
+    except Exception as e:
+        logger.error(f"Error al obtener OpenSky: {str(e)}")
+        return []
+
 # Actualizar vuelos AviationStack
 async def update_flights():
-    """Actualiza el caché de vuelos y los envía a los clientes conectados."""
+    """Actualiza el caché de vuelos de AviationStack."""
     global flights_cache
     while True:
         flights = []
         for flight_type in ["llegadas", "partidas"]:
             flights.extend(await fetch_aviationstack_flights(flight_type=flight_type))
         flights_cache = remove_duplicates(flights)
-        if flights_cache:
-            for user in users.values():
-                if user["logged_in"] and user["websocket"]:
-                    try:
-                        await user["websocket"].send_json({
-                            "type": "flight_update",
-                            "flights": flights_cache
-                        })
-                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar vuelos: {e}")
-                        user["websocket"] = None
-                        user["logged_in"] = False
-        else:
-            logger.warning("No se encontraron vuelos")
+        if not flights_cache:
+            logger.warning("No se encontraron vuelos de AviationStack")
         await asyncio.sleep(300)  # 5 minutos
+
+# Actualizar vuelos OpenSky periódicamente
+async def update_flights_periodically():
+    """Actualiza el caché de vuelos de OpenSky y los envía a los clientes cada 10 segundos."""
+    global flights_cache
+    while True:
+        try:
+            flights = await get_opensky_data()
+            flights_cache.clear()
+            flights_cache.extend(flights)
+            disconnected_users = []
+            for token, user in users.items():
+                if not user["logged_in"] or not user["websocket"]:
+                    disconnected_users.append(token)
+                    continue
+                try:
+                    await user["websocket"].send_json({
+                        "type": "flight_update",
+                        "flights": flights
+                    })
+                    logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                except Exception as e:
+                    logger.error(f"Error enviando vuelos a {user['name']}: {e}")
+                    disconnected_users.append(token)
+            for token in disconnected_users:
+                if token in users:
+                    users[token]["websocket"] = None
+                    users[token]["logged_in"] = False
+                    logger.info(f"Usuario {token} marcado como desconectado")
+            if disconnected_users:
+                await broadcast_users()
+        except Exception as e:
+            logger.error(f"Error actualizando vuelos: {e}")
+        await asyncio.sleep(10)  # 10 segundos
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
@@ -220,160 +314,33 @@ async def process_search_query(query, flights):
     """Busca vuelos según la consulta del usuario."""
     query = query.lower().strip()
     results = []
-    # Búsqueda flexible
     for flight in flights:
-        if (query in flight["Vuelo"].lower() or
-            query in flight["Destino"].lower() or
-            query in flight["Estado"].lower() or
-            "ar" + query in flight["Vuelo"].lower()):
+        if (query in flight["flight"].lower() or
+            query in flight["destination"].lower() or
+            query in flight["status"].lower() or
+            "ar" + query in flight["flight"].lower()):
             results.append(flight)
     if not results:
         return "No se encontraron vuelos para tu consulta."
-    return ", ".join([f"{f['Vuelo']} a {f['Destino']}, {f['Estado']}" for f in results])
-
-# Función para obtener datos de Airplanes.Live
-async def get_airplanes_live_data():
-    """Obtiene datos de aviones cerca de Aeroparque desde Airplanes.Live."""
-    if "data" in airplanes_cache:
-        logger.info("Devolviendo datos en caché")
-        return airplanes_cache["data"]
-    try:
-        url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    airplanes_cache["data"] = data.get("ac", [])
-                    logger.info("Datos de Airplanes.Live obtenidos")
-                    return airplanes_cache["data"]
-                else:
-                    logger.error(f"Error Airplanes.Live: {response.status}")
-                    return []
-    except Exception as e:
-        logger.error(f"Error al obtener Airplanes.Live: {str(e)}")
-        return []
-
-# Función para obtener vuelos de FlightRadar24
-async def get_flightradar24_data():
-    """Obtiene vuelos cercanos a Aeroparque desde FlightRadar24."""
-    try:
-        fr_api = FlightRadar24API()
-        flights = fr_api.get_flights()
-        local_flights = [
-            flight for flight in flights
-            if is_near_aeroparque(flight.latitude, flight.longitude)
-            and flight.latitude is not None and flight.longitude is not None
-        ]
-        return [
-            {
-                "flight": flight.id,
-                "origin": flight.origin_airport_iata or "N/A",
-                "destination": flight.destination_airport_iata or "N/A",
-                "latitude": flight.latitude,
-                "longitude": flight.longitude,
-                "status": "Activo",
-                "scheduled": "N/A"
-            }
-            for flight in local_flights[:10]  # Aumentado a 10 para más resultados
-        ]
-    except Exception as e:
-        logger.error(f"Error al obtener FlightRadar24: {str(e)}")
-        return []
+    return ", ".join([f"{f['flight']} a {f['destination']}, {f['status']}" for f in results])
 
 # Función para eliminar duplicados
 def remove_duplicates(flights):
-    """Elimina vuelos duplicados basándose en Vuelo y STD."""
+    """Elimina vuelos duplicados basándose en flight y STD."""
     seen = set()
     unique_flights = []
     for flight in flights:
-        flight_key = (flight["Vuelo"], flight["STD"])
+        flight_key = (flight["flight"], flight["scheduled"])
         if flight_key not in seen:
             seen.add(flight_key)
             unique_flights.append(flight)
     return unique_flights
 
-# Actualizar vuelos FlightRadar24
-async def update_fr24_flights():
-    """Actualiza el caché de FlightRadar24 y lo envía a los clientes."""
-    global fr24_cache
-    while True:
-        fr24_data = await get_flightradar24_data()
-        fr24_cache = fr24_data
-        if fr24_cache:
-            for user in users.values():
-                if user["logged_in"] and user["websocket"]:
-                    try:
-                        await user["websocket"].send_json({
-                            "type": "fr24_update",
-                            "flights": fr24_cache
-                        })
-                        logger.info(f"Actualización FlightRadar24 enviada a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar vuelos FR24: {e}")
-                        user["websocket"] = None
-                        user["logged_in"] = False
-        else:
-            logger.warning("No se encontraron vuelos FlightRadar24")
-        await asyncio.sleep(60)  # 1 minuto
-
 @app.get("/opensky")
-async def get_opensky_data():
-    """Obtiene datos combinados de Airplanes.Live y AviationStack."""
-    airplanes_data = await get_airplanes_live_data()
-    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
-    departures = await fetch_aviationstack_flights(flight_type="partidas")
-    tams_data = arrivals + departures
-
-    combined_data = []
-    for plane in airplanes_data:
-        flight = plane.get("flight", "").strip()
-        registration = plane.get("r", "").strip()
-        if flight and flight.startswith("ARG"):
-            plane_info = {
-                "flight": flight,
-                "registration": registration,
-                "lat": plane.get("lat"),
-                "lon": plane.get("lon"),
-                "alt_geom": plane.get("alt_geom"),
-                "gs": plane.get("gs"),
-                "vert_rate": plane.get("vert_rate"),
-                "origin_dest": f"{plane.get('orig', 'N/A')}-{plane.get('dest', 'N/A')}"
-            }
-            for tams_flight in tams_data:
-                if tams_flight["Vuelo"] == flight:
-                    plane_info.update({
-                        "scheduled": tams_flight["STD"],
-                        "position": tams_flight["Posicion"],
-                        "destination": tams_flight["Destino"],
-                        "status": tams_flight["Estado"]
-                    })
-                    break
-            combined_data.append(plane_info)
-
-    for tams_flight in tams_data:
-        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
-            combined_data.append({
-                "flight": tams_flight["Vuelo"],
-                "registration": tams_flight["Matricula"],
-                "scheduled": tams_flight["STD"],
-                "position": tams_flight["Posicion"],
-                "destination": tams_flight["Destino"],
-                "status": tams_flight["Estado"],
-                "lat": None,
-                "lon": None,
-                "alt_geom": None,
-                "gs": None,
-                "vert_rate": None,
-                "origin_dest": None
-            })
-
-    logger.info(f"Datos combinados: {len(combined_data)} vuelos")
-    return combined_data
-
-@app.get("/flightradar24")
-async def get_flightradar24_flights():
-    data = await get_flightradar24_data()
-    logger.info(f"Datos FlightRadar24: {len(data)} vuelos")
+async def get_opensky_data_endpoint():
+    """Endpoint para obtener datos combinados de OpenSky y AviationStack."""
+    data = await get_opensky_data()
+    logger.info(f"Datos combinados: {len(data)} vuelos")
     return data
 
 def init_db():
@@ -459,7 +426,6 @@ async def process_audio_queue():
     """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
-            # Obtener y validar elemento de la cola
             item = await audio_queue.get()
             if not isinstance(item, tuple) or len(item) != 3:
                 logger.error(f"Elemento mal formado en audio_queue: {item}")
@@ -474,7 +440,6 @@ async def process_audio_queue():
 
             logger.info(f"Procesando audio de {sender} ({function})")
 
-            # Verificar muteo global
             if global_mute_active:
                 logger.info("Muteo global activo, audio no transmitido")
                 await broadcast_message({
@@ -484,7 +449,6 @@ async def process_audio_queue():
                 audio_queue.task_done()
                 continue
 
-            # Transcribir audio si es necesario
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
                 logger.info("Transcribiendo audio...")
                 try:
@@ -527,7 +491,6 @@ async def process_audio_queue():
                     logger.error(f"Error al enviar a {user['name']} ({user_token}): {e}")
                     disconnected_users.append(user_token)
 
-            # Limpiar usuarios desconectados
             for user_token in disconnected_users:
                 if user_token in users:
                     users[user_token]["websocket"] = None
@@ -543,7 +506,7 @@ async def process_audio_queue():
             logger.error(f"Error procesando audio queue: {e}")
         finally:
             audio_queue.task_done()
-            
+
 async def clean_expired_sessions():
     """Elimina sesiones inactivas (más de 24 horas) de la base de datos."""
     while True:
@@ -559,7 +522,7 @@ async def clean_expired_sessions():
             conn.close()
         except Exception as e:
             logger.error(f"Error al limpiar sesiones: {e}")
-        await asyncio.sleep(3600)  # 1 hora
+        await asyncio.sleep(3600)
 
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
@@ -570,11 +533,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     global global_mute_active
 
     try:
-        # Validar y cargar sesión
         session = load_session(token)
         user_id = base64.b64decode(token).decode('utf-8', errors='ignore')
         if session:
-            # Restaurar sesión existente
             users[token] = {
                 "user_id": session["user_id"],
                 "name": session["name"],
@@ -591,7 +552,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 groups[session["group_id"]].append(token)
             logger.info(f"Sesión restaurada para {session['name']} ({token})")
         else:
-            # Nueva sesión
             users[token] = {
                 "user_id": user_id,
                 "name": "Anónimo",
@@ -606,10 +566,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             logger.info(f"Nueva sesión creada para {token}")
 
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
-        logger.info(f"Confirmación enviada a {token}")
-
         await websocket.send_json({"type": "flight_update", "flights": flights_cache})
-        await websocket.send_json({"type": "fr24_update", "flights": fr24_cache})
         await broadcast_users()
 
         while True:
@@ -623,8 +580,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
             if message["type"] == "ping":
                 await websocket.send_json({"type": "pong"})
-                logger.debug(f"Ping recibido de {token}, enviado pong")
-                # Actualizar last_active
                 save_session(
                     token,
                     users[token]["user_id"],
@@ -643,12 +598,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["logged_in"] = True
                 save_session(token, user_id, name, function, users[token]["group_id"], users[token]["muted_users"])
                 await websocket.send_json({"type": "register_success", "message": "Registro exitoso"})
-                logger.info(f"Usuario registrado: {name} ({function})")
                 await broadcast_users()
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
-                logger.info(f"Suscripción push para {token}")
 
             elif message["type"] == "audio":
                 audio_data = message.get("data")
@@ -656,7 +609,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     logger.error("Audio sin datos")
                     continue
                 await audio_queue.put((token, audio_data, message))
-                logger.info(f"Audio recibido de {token}")
 
             elif message["type"] == "logout":
                 group_id = users[token]["group_id"]
@@ -672,7 +624,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await websocket.send_json({"type": "logout_success", "message": "Sesión cerrada"})
                 await broadcast_users()
                 await websocket.close()
-                logger.info(f"Usuario {token} cerró sesión")
                 break
 
             elif message["type"] == "mute_user":
@@ -687,9 +638,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         users[token]["group_id"],
                         users[token]["muted_users"]
                     )
-                    logger.info(f"{users[token]['name']} muteó a {target_user_id}")
-                else:
-                    logger.error("mute_user sin target_user_id")
 
             elif message["type"] == "unmute_user":
                 target_user_id = message.get("target_user_id")
@@ -703,27 +651,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         users[token]["group_id"],
                         users[token]["muted_users"]
                     )
-                    logger.info(f"{users[token]['name']} desmuteó a {target_user_id}")
-                else:
-                    logger.error("unmute_user sin target_user_id")
 
             elif message["type"] == "mute_all":
                 global_mute_active = True
                 await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
-                logger.info(f"{users[token]['name']} activó muteo global")
 
             elif message["type"] == "unmute_all":
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
-                logger.info(f"{users[token]['name']} desactivó muteo global")
 
             elif message["type"] == "mute":
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
-                logger.info(f"{users[token]['name']} activó mute local")
 
             elif message["type"] == "unmute":
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
-                logger.info(f"{users[token]['name']} desactivó mute local")
 
             elif message["type"] == "create_group":
                 group_id = message["group_id"]
@@ -745,14 +686,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "group_id": group_id,
                         "is_private": is_private
                     })
-                    logger.info(f"{users[token]['name']} creó grupo {'privado' if is_private else 'público'} {group_id}")
                     await broadcast_users()
                 else:
                     await websocket.send_json({
                         "type": "create_group_error",
                         "message": "El grupo ya existe"
                     })
-                    logger.warning(f"Intento de crear grupo existente {group_id} por {users[token]['name']}")
 
             elif message["type"] == "join_group":
                 group_id = message["group_id"]
@@ -775,7 +714,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     "group_id": group_id,
                     "is_private": is_private
                 })
-                logger.info(f"{users[token]['name']} se unió al grupo {group_id}")
                 await broadcast_users()
 
             elif message["type"] == "leave_group":
@@ -798,7 +736,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "type": "leave_group_success",
                         "group_id": group_id
                     })
-                    logger.info(f"{users[token]['name']} salió del grupo {group_id}")
                     await broadcast_users()
 
             elif message["type"] == "check_group":
@@ -811,7 +748,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     "group_id": group_id,
                     "in_group": in_group
                 })
-                logger.info(f"Verificación grupo para {users[token]['name']}: {'está' if in_group else 'no está'} en {group_id}")
 
             elif message["type"] == "group_message":
                 group_id = users[token]["group_id"]
@@ -824,10 +760,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
 
                     if text == "Sin transcripción" or text == "Pendiente de transcripción":
-                        logger.info("Transcribiendo grupo audio...")
                         try:
                             text = await transcribe_audio(audio_data)
-                            logger.info(f"Transcripción grupo: {text}")
                         except Exception as e:
                             logger.error(f"Error al transcribir audio de grupo: {e}")
                             text = "Error en transcripción"
@@ -856,29 +790,25 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             muted_users = user.get("muted_users", set())
                             sender_id = f"{users[token]['name']}_{users[token]['function']}"
                             if sender_id in muted_users:
-                                logger.info(f"{sender_id} muteado por {user['name']} en grupo")
                                 continue
                             ws = user.get("websocket")
                             if ws and user["logged_in"]:
                                 try:
                                     await ws.send_json(broadcast_message)
-                                    logger.info(f"Mensaje grupo enviado a {user['name']} en {group_id}")
                                 except Exception as e:
                                     logger.error(f"Error al enviar grupo a {user['name']}: {e}")
                                     disconnected_users.append(user_token)
-                    # Limpiar usuarios desconectados
+
                     for user_token in disconnected_users:
                         if user_token in users:
                             users[user_token]["websocket"] = None
                             users[user_token]["logged_in"] = False
-                            logger.info(f"Usuario {user_token} marcado como desconectado en grupo")
                     if disconnected_users:
                         await broadcast_users()
 
             elif message["type"] == "search_query":
                 response = await process_search_query(message["query"], flights_cache)
                 await websocket.send_json({"type": "search_response", "message": response})
-                logger.info(f"Consulta procesada para {users[token]['name']}: {message['query']} -> {response}")
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
@@ -886,7 +816,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
-            # Mantener sesión en la base de datos para reconexión
             save_session(
                 token,
                 users[token]["user_id"],
@@ -901,7 +830,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
-            # Mantener sesión en la base de datos
             save_session(
                 token,
                 users[token]["user_id"],
@@ -911,7 +839,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["muted_users"]
             )
         await websocket.close()
-                    
 
 async def broadcast_global_mute_state(message_type, message_text):
     """Difunde el estado de muteo global a todos los usuarios conectados."""
@@ -920,7 +847,6 @@ async def broadcast_global_mute_state(message_type, message_text):
         if user["logged_in"] and user["websocket"]:
             try:
                 await user["websocket"].send_json({"type": message_type, "message": message_text})
-                logger.info(f"Estado mute global ({message_type}) a {user['name']}")
             except Exception as e:
                 logger.error(f"Error al enviar mute global a {user['name']}: {e}")
                 disconnected_users.append(user["name"])
@@ -951,7 +877,6 @@ async def broadcast_users():
                     "count": len(user_list),
                     "list": user_list
                 })
-                logger.info(f"Lista usuarios enviada a {user['name']}")
             except Exception as e:
                 logger.error(f"Error al enviar usuarios a {user['name']}: {e}")
                 disconnected_users.append(token)
@@ -962,14 +887,12 @@ async def broadcast_users():
             if token in users:
                 users[token]["websocket"] = None
                 users[token]["logged_in"] = False
-                logger.info(f"Usuario {token} marcado como desconectado en broadcast_users")
-        await broadcast_users()  # Reenviar tras limpiar
+        await broadcast_users()
 
 @app.get("/history")
 async def get_history_endpoint():
     """Obtiene el historial de mensajes."""
     history = get_history()
-    logger.info(f"Historial: {len(history)} mensajes")
     return history
 
 async def clear_messages():
@@ -988,7 +911,7 @@ async def startup_event():
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
     asyncio.create_task(update_flights())
-    asyncio.create_task(update_fr24_flights())
+    asyncio.create_task(update_flights_periodically())
     asyncio.create_task(clean_expired_sessions())
     logger.info("Aplicación iniciada")
 
