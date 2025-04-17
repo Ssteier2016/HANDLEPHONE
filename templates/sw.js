@@ -1,7 +1,8 @@
-const CACHE_NAME = 'handyhandle-cache-v3'; // Mantengo v3 para nuevos recursos
+const CACHE_NAME = 'handyhandle-cache-v3';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'handyhandle-sync';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+const FLIGHT_CACHE_TTL = 5 * 60 * 1000; // 5 minutos para caché de vuelos
 
 const urlsToCache = [
   '/',
@@ -61,11 +62,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
 
-  // No cachear WebSocket ni rutas dinámicas
-  if (requestUrl.protocol === 'wss:' ||
-      requestUrl.pathname === '/opensky' ||
-      requestUrl.pathname === '/aa2000_flights' ||
-      requestUrl.pathname === '/history') {
+  // No cachear WebSocket ni rutas dinámicas específicas
+  if (
+    requestUrl.protocol === 'wss:' ||
+    requestUrl.pathname === '/opensky' ||
+    requestUrl.pathname === '/aa2000_flights' ||
+    requestUrl.pathname === '/history'
+  ) {
     event.respondWith(
       fetch(event.request).catch(err => {
         console.error('Error en fetch de red:', err);
@@ -75,7 +78,41 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cachear tiles de Mapbox dinámicamente
+  // Cachear endpoint /aep_flights con TTL
+  if (requestUrl.pathname === '/aep_flights') {
+    event.respondWith(
+      caches.match(event.request)
+        .then(cachedResponse => {
+          if (cachedResponse) {
+            // Verificar si el caché es reciente
+            const cachedTime = new Date(cachedResponse.headers.get('date')).getTime();
+            if (Date.now() - cachedTime < FLIGHT_CACHE_TTL) {
+              console.log('Sirviendo /aep_flights desde cache:', event.request.url);
+              return cachedResponse;
+            }
+          }
+          return fetch(event.request)
+            .then(networkResponse => {
+              if (!networkResponse || networkResponse.status !== 200) {
+                return networkResponse;
+              }
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME)
+                .then(cache => {
+                  cache.put(event.request, responseToCache);
+                });
+              return networkResponse;
+            })
+            .catch(err => {
+              console.error('Error al obtener /aep_flights:', err);
+              return cachedResponse || new Response('Offline', { status: 503 });
+            });
+        })
+    );
+    return;
+  }
+
+  // Cachear tiles de Mapbox dinámicamente con limpieza periódica
   if (requestUrl.hostname.includes('api.mapbox.com')) {
     event.respondWith(
       caches.match(event.request)
@@ -93,6 +130,8 @@ self.addEventListener('fetch', event => {
               caches.open(CACHE_NAME)
                 .then(cache => {
                   cache.put(event.request, responseToCache);
+                  // Limpiar tiles antiguos (más de 1 hora)
+                  cleanOldMapboxTiles();
                 });
               return networkResponse;
             })
@@ -125,7 +164,6 @@ self.addEventListener('fetch', event => {
           })
           .catch(err => {
             console.error('Error al obtener recurso:', event.request.url, err);
-            // Fallback a index.html para rutas HTML, o error para otros recursos
             if (event.request.destination === 'document') {
               return caches.match('/templates/index.html');
             }
@@ -134,6 +172,23 @@ self.addEventListener('fetch', event => {
       })
   );
 });
+
+// Limpiar tiles de Mapbox antiguos
+async function cleanOldMapboxTiles() {
+  const cache = await caches.open(CACHE_NAME);
+  const requests = await cache.keys();
+  const now = Date.now();
+  for (const request of requests) {
+    if (request.url.includes('api.mapbox.com')) {
+      const response = await cache.match(request);
+      const cachedTime = new Date(response.headers.get('date')).getTime();
+      if (now - cachedTime > 60 * 60 * 1000) { // 1 hora
+        await cache.delete(request);
+        console.log('Eliminado tile antiguo de Mapbox:', request.url);
+      }
+    }
+  }
+}
 
 // Manejar mensajes desde script.js
 self.addEventListener('message', event => {
@@ -179,22 +234,21 @@ async function syncMessages() {
     }
 
     try {
-      // Enviar mensajes al servidor según su tipo
       if (message.type === 'logout') {
         console.log('Sincronizando logout:', message);
-        await sendToServer(message, '/logout'); // Ajustar según tu API
+        await sendToServer(message, '/logout');
         await store.delete(message.id);
       } else if (message.type === 'create_group') {
         console.log('Sincronizando create_group:', message);
-        await sendToServer(message, '/create_group'); // Ajustar según tu API
+        await sendToServer(message, '/create_group');
         await store.delete(message.id);
       } else if (message.type === 'message' || message.type === 'group_message') {
         console.log('Sincronizando mensaje de audio:', message);
-        await sendToServer(message, '/ws/' + message.session_token); // Enviar vía WebSocket
+        await sendToServer(message, '/ws/' + message.session_token);
         await store.delete(message.id);
       } else {
         console.log('Sincronizando mensaje genérico:', message);
-        await sendToServer(message, '/generic'); // Ajustar según tu API
+        await sendToServer(message, '/generic');
         await store.delete(message.id);
       }
       await notifyClient({ ...message, status: 'sent' });
@@ -205,7 +259,6 @@ async function syncMessages() {
   }
   await tx.done;
 
-  // Notificar a los clientes
   self.clients.matchAll().then(clients => {
     clients.forEach(client => {
       client.postMessage({ type: 'SYNC_COMPLETE' });
@@ -213,21 +266,38 @@ async function syncMessages() {
   });
 }
 
-// Enviar mensaje al servidor
+// Enviar mensaje al servidor con reintentos para WebSocket
 async function sendToServer(message, endpoint) {
   if (message.type === 'message' || message.type === 'group_message') {
-    // Enviar vía WebSocket (simulado, ajustar según tu implementación)
-    const ws = new WebSocket('wss://' + self.location.host + endpoint);
-    return new Promise((resolve, reject) => {
-      ws.onopen = () => {
-        ws.send(JSON.stringify(message));
-        ws.close();
-        resolve();
-      };
-      ws.onerror = err => reject(err);
-    });
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        const ws = new WebSocket('wss://' + self.location.host + endpoint);
+        return await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            ws.close();
+            reject(new Error('WebSocket timeout'));
+          }, 5000); // 5 segundos de espera
+          ws.onopen = () => {
+            ws.send(JSON.stringify(message));
+            clearTimeout(timeout);
+            ws.close();
+            resolve();
+          };
+          ws.onerror = err => {
+            clearTimeout(timeout);
+            reject(err);
+          };
+        });
+      } catch (err) {
+        attempts++;
+        console.error(`Intento ${attempts} fallido para WebSocket:`, err);
+        if (attempts === maxAttempts) throw err;
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Espera exponencial
+      }
+    }
   } else {
-    // Enviar vía HTTP
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -268,15 +338,15 @@ function openDB() {
   });
 }
 
-// Manejo de notificaciones push (descomentar cuando tengas VAPID)
-/*
+// Manejo de notificaciones push (activado con configuración VAPID)
 self.addEventListener('push', event => {
-  const data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje recibido' };
+  const data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje o vuelo recibido' };
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/templates/icon-192x192.png',
-      badge: '/templates/icon-192x192.png'
+      badge: '/templates/icon-192x192.png',
+      data: { url: '/' }
     })
   );
 });
@@ -284,7 +354,6 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow('/')
+    clients.openWindow(event.notification.data.url)
   );
 });
-*/
