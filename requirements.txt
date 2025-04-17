@@ -12,6 +12,14 @@ beautifulsoup4>=4.12.2,<5.0.0
 python-dotenv>=1.0.1,<2.0.0
 cachetools>=5.5.0,<6.0.0
 
-
 # Opcional para notificaciones push (descomentar si las implementás):
 # pywebpush>=1.14.1,<2.0.0
+# cryptography>=43.0.1,<44.0.0  # Nuevo: Para generar claves VAPID en notificaciones push
+
+# Opcional para validación avanzada de variables de entorno:
+# pydantic-settings>=2.5.2,<3.0.0  # Nuevo: Para validar configuraciones con Pydantic
+
+# Nota: Instalar ffmpeg en el sistema para soporte de audio en pydub y speechrecognition
+# En Ubuntu/Debian: sudo apt-get install ffmpeg
+# En macOS: brew install ffmpeg
+# En Windows: Descargar desde https://ffmpeg.org/download.html y agregar al PATH
