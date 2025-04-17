@@ -614,8 +614,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
-            logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
+            try:
+                message = json.loads(data)
+                logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
+            except json.JSONDecodeError as e:
+                logger.error(f"Error decodificando mensaje de {token}: {e}")
+                continue
 
             if message["type"] == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -774,7 +778,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 logger.info(f"{users[token]['name']} se unió al grupo {group_id}")
                 await broadcast_users()
 
-             elif message["type"] == "leave_group":
+            elif message["type"] == "leave_group":
                 group_id = users[token]["group_id"]
                 if group_id and group_id in groups:
                     if token in groups[group_id]:
@@ -821,8 +825,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
                     if text == "Sin transcripción" or text == "Pendiente de transcripción":
                         logger.info("Transcribiendo grupo audio...")
-                        text = await transcribe_audio(audio_data)
-                        logger.info(f"Transcripción grupo: {text}")
+                        try:
+                            text = await transcribe_audio(audio_data)
+                            logger.info(f"Transcripción grupo: {text}")
+                        except Exception as e:
+                            logger.error(f"Error al transcribir audio de grupo: {e}")
+                            text = "Error en transcripción"
 
                     user_id = f"{users[token]['name']}_{users[token]['function']}"
                     try:
@@ -903,6 +911,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 users[token]["muted_users"]
             )
         await websocket.close()
+                    
 
 async def broadcast_global_mute_state(message_type, message_text):
     """Difunde el estado de muteo global a todos los usuarios conectados."""
