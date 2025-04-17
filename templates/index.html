@@ -52,7 +52,8 @@
     </div>
 
     <div id="main" style="display: none;">
-        <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
+        <!-- Corrección: Añadido id="logout-button" para controlar visibilidad -->
+        <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
@@ -72,8 +73,15 @@
             <div id="chat-list"></div>
         </div>
         <div id="group-join">
+            <!-- Corrección: Añadido label y checkbox para grupo privado -->
+            <label for="group-id">Nombre del grupo</label>
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
+            <!-- Nuevo: Checkbox para indicar grupo privado -->
+            <label for="group-private">Grupo Privado</label>
+            <input type="checkbox" id="group-private">
             <button id="join-group-btn" onclick="joinGroup()">Unirme</button>
+            <!-- Nuevo: Botón para crear grupo -->
+            <button id="create-group-btn" onclick="createGroup()">Crear Grupo</button>
         </div>
         <button id="talk" onclick="toggleTalk()"></button>
         <button id="mute" class="active" onclick="toggleMute()"></button>
