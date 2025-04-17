@@ -300,6 +300,32 @@ button:hover {
     padding: 10px;
 }
 
+#flights-table {
+    font-size: 10px; /* Letra más chica para la tabla */
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#flights-table th,
+#flights-table td {
+    border: 1px solid #4682B4; /* Bordes más definidos */
+    padding: 4px;
+    text-align: left;
+}
+
+#flights-table th {
+    background-color: #2196f3;
+    color: white;
+}
+
+#flights-table tbody tr:nth-child(even) {
+    background-color: #f9f9f9; /* Fondo alternado para filas */
+}
+
+#flights-table tbody tr:hover {
+    background-color: #e0f7fa; /* Efecto hover */
+}
+
 #flights-window,
 #group-flights-window {
     background-color: #F5F5F5;
@@ -434,14 +460,20 @@ button:hover {
     background-color: #4682B4;
     border: 2px solid #4682B4;
     border-radius: 5px;
-    color: #FFFFFF;
     cursor: pointer;
-    display: block;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin: 10px auto;
-    padding: 8px;
+    padding: 10px;
     transition: background-color 0.3s;
+    width: 40px; /* Más grande */
+    height: 40px; /* Más grande */
+}
+
+#mute-non-group img {
+    width: 32px; /* Ícono más grande */
+    height: 32px;
 }
 
 #mute-non-group.muted {
@@ -798,6 +830,26 @@ h3 {
 
     #group-join label {
         font-size: 12px;
+    }
+
+    #flights-table {
+        font-size: 9px; /* Letra más chica en móviles */
+    }
+
+    #flights-table th,
+    #flights-table td {
+        padding: 2px; /* Menos padding en móviles */
+    }
+
+    #mute-non-group {
+        width: 32px; /* Ligeramente más pequeño en móviles */
+        height: 32px;
+        padding: 8px;
+    }
+
+    #mute-non-group img {
+        width: 24px; /* Ícono más pequeño en móviles */
+        height: 24px;
     }
 }
 
