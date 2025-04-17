@@ -11,6 +11,12 @@ FlightRadarAPI>=1.3.34,<2.0.0
 beautifulsoup4>=4.12.2,<5.0.0
 python-dotenv>=1.0.1,<2.0.0
 cachetools>=5.5.0,<6.0.0
+Flask==3.0.3
+Flask-Cors==4.0.1
+python-decouple==3.8  # Para manejar variables de entorno
+numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
+asyncio==3.4.3
+sounddevice==0.4.7  # Para manejar audio en el servidor (si aplica)
 
 # Opcional para notificaciones push (descomentar si las implementás):
 # pywebpush>=1.14.1,<2.0.0
