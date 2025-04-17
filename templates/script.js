@@ -1,6 +1,6 @@
 // Variables globales
 let ws = null;
-let pingInterval = null; // Añadir pingInterval globalmente
+let pingInterval = null;
 let userId;
 let audioChunks = [];
 let audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -21,6 +21,7 @@ let flightData = [];
 let reconnectInterval = null;
 const PING_INTERVAL = 30000; // Ping cada 30 segundos
 const RECONNECT_BASE_DELAY = 5000; // Reintento base cada 5 segundos
+const SYNC_TAG = 'sync-messages'; // Tag para sincronización
 
 // Mapeo de aerolíneas
 const AIRLINE_MAPPING = {
@@ -39,7 +40,7 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     supportsSpeechRecognition = true;
     console.log("SpeechRecognition soportado. Navegador:", navigator.userAgent);
 } else {
-    console.error("SpeechRecognition no soportado. Navegador:", navigator.userAgent);
+    console.warn("SpeechRecognition no soportado. Navegador:", navigator.userAgent);
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
 
@@ -55,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const userLegajo = localStorage.getItem('userLegajo');
 
     if (sessionToken && userName && userFunction && userLegajo) {
-        // Restaurar sesión
         userId = `${userLegajo}_${userName}_${userFunction}`;
         connectWebSocket(sessionToken);
         document.getElementById('register').style.display = 'none';
@@ -95,7 +95,6 @@ document.addEventListener('visibilitychange', () => {
         console.log('App en segundo plano');
     } else {
         console.log('App en primer plano');
-        // Verificar conexión
         if (ws && ws.readyState !== WebSocket.OPEN) {
             const sessionToken = localStorage.getItem('sessionToken');
             if (sessionToken) {
@@ -112,7 +111,6 @@ function queueMessageForSync(message) {
             message: message
         });
         console.log('Mensaje enviado al Service Worker para encolar');
-        // Registrar evento de sincronización
         navigator.serviceWorker.ready.then(registration => {
             registration.sync.register(SYNC_TAG).catch(err => {
                 console.error('Error al registrar sync:', err);
@@ -148,10 +146,13 @@ async function requestMicPermission() {
 }
 
 function playAudio(blob) {
+    if (!blob || blob.size === 0) {
+        console.error("Blob de audio inválido o vacío");
+        return;
+    }
     const audio = new Audio(URL.createObjectURL(blob));
     audioQueue.push(audio);
     playNextAudio();
-
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaSessionMetadata({
             title: 'Mensaje de voz',
@@ -193,6 +194,7 @@ function sendSearchQuery() {
     } else {
         alert('No conectado al servidor');
         console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+        localStorage.removeItem('lastSearchQuery');
     }
 }
 
@@ -206,11 +208,29 @@ function displaySearchResponse(message) {
     flightDetails.innerHTML = '';
     groupFlightDetails.innerHTML = '';
 
-    const flights = parseFlightMessage(message);
-    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
+    let flights = [];
+    if (typeof message === 'string') {
+        flights = parseFlightMessage(message);
+    } else if (Array.isArray(message)) {
+        flights = message.map(flight => ({
+            flightNumber: flight.Vuelo || 'N/A',
+            destination: flight.Destino || 'N/A',
+            status: flight.Estado || 'Desconocido'
+        }));
+    } else {
+        console.error("Formato de respuesta de búsqueda inválido:", message);
+        const div = document.createElement('div');
+        div.className = 'flight no-results';
+        div.textContent = 'Error al procesar la búsqueda.';
+        flightDetails.appendChild(div);
+        groupFlightDetails.appendChild(div.cloneNode(true));
+        return;
+    }
 
+    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
     const filteredFlights = flights.filter(flight =>
-        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase())
+        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        flight.destination.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     if (filteredFlights.length === 0) {
@@ -240,15 +260,21 @@ function displaySearchResponse(message) {
 
 function parseFlightMessage(message) {
     const flights = [];
-    const flightEntries = message.split(", ");
-    for (let i = 0; i < flightEntries.length; i += 3) {
-        if (flightEntries[i].startsWith("AR")) {
-            flights.push({
-                flightNumber: flightEntries[i],
-                destination: flightEntries[i + 1].split(" ")[2],
-                status: flightEntries[i + 2]
-            });
+    try {
+        if (typeof message === 'string') {
+            const flightEntries = message.split(", ");
+            for (let i = 0; i < flightEntries.length; i += 3) {
+                if (flightEntries[i].startsWith("AR")) {
+                    flights.push({
+                        flightNumber: flightEntries[i],
+                        destination: flightEntries[i + 1].split(" ")[2] || 'N/A',
+                        status: flightEntries[i + 2] || 'Desconocido'
+                    });
+                }
+            }
         }
+    } catch (err) {
+        console.error("Error al parsear mensaje de vuelos:", err);
     }
     return flights;
 }
@@ -287,34 +313,155 @@ function connectWebSocket(sessionToken, retryCount = 0) {
     }
 
     ws.onopen = function() {
-    console.log("WebSocket conectado exitosamente");
-    clearInterval(reconnectInterval);
-    ws.send(JSON.stringify({
-        type: "register",
-        legajo: localStorage.getItem("userLegajo"),
-        name: localStorage.getItem("userName"),
-        function: localStorage.getItem("userFunction")
-    }));
-    document.getElementById("register").style.display = "none";
-    const mainDiv = document.getElementById("main");
-    if (mainDiv) {
-        mainDiv.style.display = "block";
-    } else {
-        console.error("Elemento #main no encontrado en el DOM");
-    }
-    updateOpenSkyData();
-    startPing();
-    // Disparar sincronización
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.sync.register(SYNC_TAG).catch(err => {
-                console.error('Error al registrar sync al reconectar:', err);
+        console.log("WebSocket conectado exitosamente");
+        clearInterval(reconnectInterval);
+        ws.send(JSON.stringify({
+            type: "register",
+            legajo: localStorage.getItem("userLegajo"),
+            name: localStorage.getItem("userName"),
+            function: localStorage.getItem("userFunction")
+        }));
+        document.getElementById("register").style.display = "none";
+        const mainDiv = document.getElementById("main");
+        if (mainDiv) {
+            mainDiv.style.display = "block";
+        } else {
+            console.error("Elemento #main no encontrado en el DOM");
+        }
+        updateUsers(0, []); // Forzar actualización inicial de usuarios
+        updateOpenSkyData();
+        startPing();
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.sync.register(SYNC_TAG).catch(err => {
+                    console.error('Error al registrar sync al reconectar:', err);
+                });
             });
-        });
-    }
-};
+        }
+    };
 
-                    
+    ws.onmessage = function(event) {
+        console.log("Datos recibidos del servidor:", event.data);
+        try {
+            const message = JSON.parse(event.data);
+            console.log("Mensaje parseado:", message);
+
+            if (!message.type) {
+                console.error("Mensaje sin tipo:", message);
+                return;
+            }
+
+            if (message.type === "audio" || message.type === "group_message") {
+                if (!message.data) {
+                    console.error("Mensaje de audio sin datos de audio:", message);
+                    return;
+                }
+                const senderId = `${message.sender}_${message.function}`;
+                if (mutedUsers.has(senderId)) {
+                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                    return;
+                }
+                const audioBlob = base64ToBlob(message.data, 'audio/webm');
+                if (!audioBlob) {
+                    console.error("No se pudo crear el Blob para el mensaje de audio");
+                    return;
+                }
+                playAudio(audioBlob);
+                const chatListId = message.type === "group_message" ? "group-chat-list" : "chat-list";
+                const chatList = document.getElementById(chatListId);
+                if (!chatList) {
+                    console.error(`Elemento ${chatListId} no encontrado en el DOM`);
+                    return;
+                }
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "chat-message";
+                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = message.sender || "Anónimo";
+                const userFunction = message.function || "Desconocida";
+                const text = message.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+                msgDiv.onclick = () => playAudio(audioBlob);
+                chatList.appendChild(msgDiv);
+                chatList.scrollTop = chatList.scrollHeight;
+                console.log(`Mensaje de ${message.type} agregado al ${chatListId}`);
+            } else if (message.type === "users") {
+                updateUsers(message.count, message.list);
+            } else if (message.type === "mute_all_success") {
+                updateMuteButton(true);
+                console.log("Muteo global activado");
+            } else if (message.type === "unmute_all_success") {
+                updateMuteButton(false);
+                console.log("Muteo global desactivado");
+            } else if (message.type === "mute_non_group_success") {
+                message.user_ids.forEach(userId => mutedUsers.add(userId));
+                updateUsers(message.count, message.list);
+                document.getElementById("mute-non-group").classList.add("muted");
+                document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
+                console.log("Usuarios fuera del grupo muteados");
+            } else if (message.type === "unmute_non_group_success") {
+                message.user_ids.forEach(userId => mutedUsers.delete(userId));
+                updateUsers(message.count, message.list);
+                document.getElementById("mute-non-group").classList.remove("muted");
+                document.getElementById("mute-non-group").textContent = "Mutear no grupo";
+                console.log("Usuarios fuera del grupo desmuteados");
+            } else if (message.type === "group_joined") {
+                currentGroup = message.group_id;
+                localStorage.setItem('groupId', currentGroup);
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('group-screen').style.display = 'block';
+                if (message.is_private) {
+                    const logoutButton = document.getElementById('logout-button');
+                    if (logoutButton) logoutButton.style.display = 'none';
+                }
+                updateSwipeHint();
+                console.log(`Unido al grupo: ${message.group_id}, privado: ${message.is_private}`);
+            } else if (message.type === "create_group_success") {
+                currentGroup = message.group_id;
+                localStorage.setItem('groupId', currentGroup);
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('group-screen').style.display = 'block';
+                if (message.is_private) {
+                    const logoutButton = document.getElementById('logout-button');
+                    if (logoutButton) logoutButton.style.display = 'none';
+                }
+                updateSwipeHint();
+                alert(`Grupo ${message.group_id} creado exitosamente`);
+                console.log(`Grupo creado: ${message.group_id}, privado: ${message.is_private}`);
+            } else if (message.type === "create_group_error") {
+                alert(`Error al crear el grupo: ${message.message}`);
+                console.error(`Error al crear grupo: ${message.message}`);
+            } else if (message.type === "check_group") {
+                if (!message.in_group) {
+                    currentGroup = null;
+                    localStorage.removeItem('groupId');
+                    updateSwipeHint();
+                    console.log("No estás en el grupo, currentGroup restablecido a null");
+                }
+            } else if (message.type === "flight_update") {
+                updateFlightDetails(message.flights, "#flight-details");
+                updateFlightDetails(message.flights, "#group-flight-details");
+            } else if (message.type === "aa2000_flight_update") {
+                updateFlightDetailsAA2000(message.flights, "#flight-details");
+                updateFlightDetailsAA2000(message.flights, "#group-flight-details");
+            } else if (message.type === "fr24_update") {
+                updateFlightRadar24Markers(message.flights);
+                console.log("Actualización FlightRadar24 recibida:", message.flights);
+            } else if (message.type === "search_response") {
+                displaySearchResponse(message.message);
+            } else if (message.type === "register_success") {
+                console.log("Registro exitoso:", message.message);
+            } else if (message.type === "logout_success") {
+                console.log("Cierre de sesión exitoso");
+                logout(); // Completar el cierre de sesión
+            } else if (message.type === "pong") {
+                console.log("Pong recibido del servidor");
+            } else {
+                console.warn("Tipo de mensaje desconocido:", message.type);
+            }
+        } catch (err) {
+            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+        }
+    };
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
@@ -323,9 +470,9 @@ function connectWebSocket(sessionToken, retryCount = 0) {
     ws.onclose = function() {
         console.log("WebSocket cerrado");
         stopPing();
-        const sessionToken = localStorage.getItem("sessionToken");
+        const sessionToken = localStorage.getItem('sessionToken');
         if (sessionToken) {
-            const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000); // Backoff exponencial
+            const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000);
             reconnectInterval = setTimeout(() => {
                 connectWebSocket(sessionToken, retryCount + 1);
             }, delay);
@@ -336,130 +483,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         }
     };
 }
-ws.onmessage = function(event) {
-    console.log("Datos recibidos del servidor:", event.data);
-    try {
-        const message = JSON.parse(event.data);
-        console.log("Mensaje parseado:", message);
 
-        if (!message.type) {
-            console.error("Mensaje sin tipo:", message);
-            return;
-        }
-
-        if (message.type === "audio") {
-            if (!message.data) {
-                console.error("Mensaje de audio sin datos de audio:", message);
-                return;
-            }
-            const senderId = `${message.sender}_${message.function}`;
-            if (mutedUsers.has(senderId)) {
-                console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
-                return;
-            }
-            const audioBlob = base64ToBlob(message.data, 'audio/webm');
-            console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
-            playAudio(audioBlob);
-            const chatList = document.getElementById("chat-list");
-            if (!chatList) {
-                console.error("Elemento chat-list no encontrado en el DOM");
-                return;
-            }
-            const msgDiv = document.createElement("div");
-            msgDiv.className = "chat-message";
-            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            const sender = message.sender || "Anónimo";
-            const userFunction = message.function || "Desconocida";
-            const text = message.text || "Sin transcripción";
-            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-            msgDiv.onclick = () => playAudio(audioBlob);
-            chatList.appendChild(msgDiv);
-            chatList.scrollTop = chatList.scrollHeight;
-            console.log("Mensaje de audio agregado al chat-list");
-        } else if (message.type === "users") {
-            updateUsers(message.count, message.list);
-        } else if (message.type === "mute_all") {
-            updateMuteButton(true);
-            console.log("Muteo global activado");
-        } else if (message.type === "unmute_all") {
-            updateMuteButton(false);
-            console.log("Muteo global desactivado");
-        } else if (message.type === "mute_non_group_success") {
-            message.user_ids.forEach(userId => mutedUsers.add(userId));
-            updateUsers(message.count, message.list);
-            document.getElementById("mute-non-group").classList.add("muted");
-            document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
-            console.log("Usuarios fuera del grupo muteados");
-        } else if (message.type === "unmute_non_group_success") {
-            message.user_ids.forEach(userId => mutedUsers.delete(userId));
-            updateUsers(message.count, message.list);
-            document.getElementById("mute-non-group").classList.remove("muted");
-            document.getElementById("mute-non-group").textContent = "Mutear no grupo";
-            console.log("Usuarios fuera del grupo desmuteados");
-        } else if (message.type === "group_joined") {
-            currentGroup = message.group_id;
-            localStorage.setItem('groupId', currentGroup);
-            document.getElementById('main').style.display = 'none';
-            document.getElementById('group-screen').style.display = 'block';
-            updateSwipeHint();
-            console.log(`Unido al grupo: ${message.group_id}`);
-        } else if (message.type === "check_group") {
-            if (!message.in_group) {
-                currentGroup = null;
-                localStorage.removeItem('groupId');
-                updateSwipeHint();
-                console.log("No estás en el grupo, currentGroup restablecido a null");
-            }
-        } else if (message.type === "group_message" || message.type === "audio") {
-            const senderId = `${message.sender}_${message.function}`;
-            if (mutedUsers.has(senderId)) {
-                console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
-                return;
-            }
-            const audioBlob = base64ToBlob(message.data, 'audio/webm');
-            if (!audioBlob) {
-                console.error("No se pudo crear el Blob para el mensaje de grupo");
-                return;
-            }
-            playAudio(audioBlob);
-            const chatList = document.getElementById("group-chat-list");
-            if (!chatList) {
-                console.error("Elemento group-chat-list no encontrado en el DOM");
-                return;
-            }
-            const msgDiv = document.createElement("div");
-            msgDiv.className = "chat-message";
-            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            const sender = message.sender || "Anónimo";
-            const userFunction = message.function || "Desconocida";
-            const text = message.text || "Sin transcripción";
-            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-            msgDiv.onclick = () => playAudio(audioBlob);
-            chatList.appendChild(msgDiv);
-            chatList.scrollTop = chatList.scrollHeight;
-            console.log("Mensaje de grupo agregado al group-chat-list");
-        } else if (message.type === "flight_update") {
-            updateFlightDetails(message.flights, "#flight-details");
-            updateFlightDetails(message.flights, "#group-flight-details");
-        } else if (message.type === "aa2000_flight_update") {
-            updateFlightDetailsAA2000(message.flights, "#flight-details");
-            updateFlightDetailsAA2000(message.flights, "#group-flight-details");
-        } else if (message.type === "fr24_update") {
-            updateFlightRadar24Markers(message.flights);
-            console.log("Actualización FlightRadar24 recibida:", message.flights);
-        } else if (message.type === "search_response") {
-            displaySearchResponse(message.message);
-        } else if (message.type === "register_success") {
-            console.log("Registro exitoso:", message.message);
-        } else if (message.type === "pong") {
-            console.log("Pong recibido del servidor");
-        } else {
-            console.warn("Tipo de mensaje desconocido:", message.type);
-        }
-    } catch (err) {
-        console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
-    }
-};
 // Mantener conexión viva con ping
 function startPing() {
     stopPing();
@@ -521,11 +545,11 @@ function updateFlightDetailsAA2000(flights, containerId) {
     }
     container.innerHTML = "";
     flights.forEach(flight => {
-        const flightNumber = flight.flight_number;
-        const scheduled = flight.scheduled_time;
-        const destination = flight.origin_destination;
-        const status = flight.status;
-        const gate = flight.gate;
+        const flightNumber = flight.flight_number || "N/A";
+        const scheduled = flight.scheduled_time || "N/A";
+        const destination = flight.origin_destination || "N/A";
+        const status = flight.status || "Desconocido";
+        const gate = flight.gate || "N/A";
         const flightType = flight.flight_type === "partidas" ? "Salida" : "Llegada";
 
         const flightDiv = document.createElement("div");
@@ -667,11 +691,11 @@ async function updateOpenSkyData() {
             }
         } else {
             aa2000Data.forEach(flight => {
-                const flightNumber = flight.flight_number;
-                const scheduled = flight.scheduled_time;
-                const destination = flight.origin_destination;
-                const status = flight.status;
-                const gate = flight.gate;
+                const flightNumber = flight.flight_number || "N/A";
+                const scheduled = flight.scheduled_time || "N/A";
+                const destination = flight.origin_destination || "N/A";
+                const status = flight.status || "Desconocido";
+                const gate = flight.gate || "N/A";
                 const flightType = flight.flight_type === "partidas" ? "Salida" : "Llegada";
                 const flightDiv = document.createElement("div");
                 flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
@@ -713,7 +737,7 @@ function initMap() {
         return;
     }
     try {
-        map = L.map('map').setView([-34.5597, -58.4116], 10); // Aeroparque, Buenos Aires
+        map = L.map('map').setView([-34.5597, -58.4116], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'
@@ -727,7 +751,7 @@ function initMap() {
             .bindPopup("Aeroparque")
             .openPopup();
         console.log("Mapa inicializado correctamente");
-        map.invalidateSize(); // Asegurar renderizado
+        map.invalidateSize();
     } catch (error) {
         console.error("Error al inicializar Leaflet:", error);
         alert("Error al cargar el mapa. Verifica tu conexión o recarga la página.");
@@ -765,7 +789,8 @@ function getFlightStatus(altitude, speed, verticalRate) {
 }
 
 function filterFlights() {
-    const searchTerm = document.getElementById("search-bar").value.toUpperCase();
+    const searchTerm = document.getElementById("search-bar").value.toUpperCase().trim();
+    console.log("Filtrando vuelos con término:", searchTerm);
     markers.forEach(marker => {
         const flight = marker.flight || "";
         const registration = marker.registration || "";
@@ -775,7 +800,8 @@ function filterFlights() {
             registration.toUpperCase().includes(searchTerm) ||
             displayFlight.toUpperCase().includes(searchTerm) ||
             flightNumber === searchTerm ||
-            flight.toUpperCase().includes(searchTerm);
+            flight.toUpperCase().includes(searchTerm) ||
+            searchTerm === "";
         if (matchesSearch) {
             if (!map.hasLayer(marker)) {
                 marker.addTo(map);
@@ -786,14 +812,21 @@ function filterFlights() {
             }
         }
     });
-        }
+    if (map) map.invalidateSize();
+    console.log("Vuelos filtrados, marcadores actualizados:", markers.length);
+}
+
 // Funciones de grabación
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
+    if (!talkButton) {
+        console.error("Botón #talk no encontrado en el DOM");
+        return;
+    }
 
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
         console.log("Iniciando grabación...");
-        let stream = await requestMicPermission();
+        stream = await requestMicPermission();
         if (!stream) {
             console.error("No se pudo obtener el stream del micrófono");
             alert("No se pudo acceder al micrófono. Por favor, verifica los permisos.");
@@ -811,7 +844,7 @@ async function toggleTalk() {
         }
 
         let audioChunks = [];
-        let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
+        let transcript = supportsSpeechRecognition ? "" : "Procesando...";
 
         if (supportsSpeechRecognition && recognition) {
             recognition.onresult = (event) => {
@@ -936,7 +969,7 @@ async function toggleTalk() {
         mediaRecorder.stop();
         talkButton.classList.remove("recording");
     }
-}
+                            }
 
 // Funciones de muteo
 function toggleMute() {
@@ -1043,6 +1076,7 @@ function toggleMuteUser(userId, button) {
         console.log(`Usuario ${userId} muteado`);
     }
 }
+
 // Funciones de usuarios
 function updateUsers(count, list) {
     const usersDiv = document.getElementById('users');
@@ -1104,17 +1138,33 @@ function updateUsers(count, list) {
     groupUsersDiv.appendChild(groupUserList);
     console.log("Lista de usuarios actualizada:", list);
 }
-
 // Funciones de grupos
-function joinGroup() {
+function createGroup() {
     const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
     if (!groupId) {
         alert('Por favor, ingresa un nombre de grupo válido.');
         return;
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando solicitud para unirse al grupo:", groupId);
-        ws.send(JSON.stringify({ type: 'join_group', group_id: groupId }));
+        console.log("Enviando solicitud para crear grupo:", groupId, "Privado:", isPrivate);
+        ws.send(JSON.stringify({ type: 'create_group', group_id: groupId, is_private: isPrivate }));
+    } else {
+        alert('No estás conectado al servidor. Intenta de nuevo.');
+        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+    }
+}
+
+function joinGroup() {
+    const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
+    if (!groupId) {
+        alert('Por favor, ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log("Enviando solicitud para unirse al grupo:", groupId, "Privado:", isPrivate);
+        ws.send(JSON.stringify({ type: 'join_group', group_id: groupId, is_private: isPrivate }));
     } else {
         alert('No estás conectado al servidor. Intenta de nuevo.');
         console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
@@ -1130,7 +1180,10 @@ function leaveGroup() {
         document.getElementById('main').style.display = 'block';
         document.getElementById('group-chat-list').innerHTML = '';
         document.getElementById('group-flight-details').innerHTML = '';
+        const logoutButton = document.getElementById('logout-button');
+        if (logoutButton) logoutButton.style.display = 'block';
         updateSwipeHint();
+        console.log("Grupo abandonado");
     }
 }
 
@@ -1170,6 +1223,7 @@ function returnToGroup() {
             document.getElementById('main').style.display = 'none';
             document.getElementById('group-screen').style.display = 'block';
             document.getElementById('main').classList.remove('slide-left');
+            updateSwipeHint();
         }, 300);
     }
 }
@@ -1180,7 +1234,10 @@ function backToMainFromGroup() {
         document.getElementById('group-screen').style.display = 'none';
         document.getElementById('main').style.display = 'block';
         document.getElementById('group-screen').classList.remove('slide-right');
+        const logoutButton = document.getElementById('logout-button');
+        if (logoutButton) logoutButton.style.display = 'block';
         checkGroupStatus();
+        updateSwipeHint();
     }, 300);
 }
 
@@ -1189,24 +1246,37 @@ let groupMediaRecorder = null;
 
 function toggleGroupTalk() {
     const talkButton = document.getElementById('group-talk');
+    if (!talkButton) {
+        console.error("Botón #group-talk no encontrado en el DOM");
+        return;
+    }
     if (!groupRecording) {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                groupMediaRecorder = new MediaRecorder(stream);
+                groupMediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 const chunks = [];
-                groupMediaRecorder.ondataavailable = e => chunks.push(e.data);
+                groupMediaRecorder.ondataavailable = e => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
                 groupMediaRecorder.onstop = () => {
                     const blob = new Blob(chunks, { type: 'audio/webm' });
+                    if (blob.size === 0) {
+                        console.error("Blob de grupo vacío");
+                        alert("El audio grabado está vacío. Verifica tu micrófono.");
+                        return;
+                    }
                     const reader = new FileReader();
                     reader.onload = () => {
                         const audioData = reader.result.split(',')[1];
                         sendGroupMessage(audioData);
                     };
                     reader.readAsDataURL(blob);
+                    stream.getTracks().forEach(track => track.stop());
                 };
-                groupMediaRecorder.start();
+                groupMediaRecorder.start(100);
                 groupRecording = true;
                 talkButton.classList.add("recording");
+                console.log("Grabación de grupo iniciada");
             })
             .catch(err => {
                 console.error('Error al acceder al micrófono:', err);
@@ -1216,24 +1286,34 @@ function toggleGroupTalk() {
         groupMediaRecorder.stop();
         groupRecording = false;
         talkButton.classList.remove("recording");
+        console.log("Grabación de grupo detenida");
     }
 }
 
-// En sendGroupMessage(), reemplaza el bloque del WebSocket por:
 function sendGroupMessage(audioData) {
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const message = {
         type: 'group_message',
         data: audioData,
-        sender: localStorage.getItem('userName'),
-        function: localStorage.getItem('userFunction'),
+        sender: localStorage.getItem('userName') || "Anónimo",
+        function: localStorage.getItem('userFunction') || "Desconocida",
         timestamp: timestamp,
-        text: 'Pendiente de transcripción',
-        sessionToken: localStorage.getItem("sessionToken")
+        text: supportsSpeechRecognition ? "Procesando..." : "Procesando...",
+        sessionToken: localStorage.getItem("sessionToken"),
+        group_id: currentGroup
     };
 
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(message));
+        console.log("Mensaje de grupo enviado:", {
+            type: message.type,
+            data: message.data.slice(0, 20) + "...",
+            text: message.text,
+            timestamp: message.timestamp,
+            sender: message.sender,
+            function: message.function,
+            group_id: message.group_id
+        });
     } else {
         console.warn("WebSocket no está abierto, encolando mensaje de grupo");
         queueMessageForSync(message);
@@ -1245,6 +1325,8 @@ function showGroupRadar() {
     console.log("Mostrando radar desde grupo...");
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('radar-screen').style.display = 'block';
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'none';
     if (!map) {
         initMap();
         updateOpenSkyData();
@@ -1264,6 +1346,8 @@ function showRadar() {
     console.log("Mostrando radar...");
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "block";
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'none';
     if (!map) {
         initMap();
         updateOpenSkyData();
@@ -1276,15 +1360,27 @@ function showRadar() {
 function backToMainFromRadar() {
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'block';
     document.getElementById("search-bar").value = "";
     filterFlights();
+    updateSwipeHint();
 }
 
 function showHistory() {
     fetch('/history')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error al cargar historial: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             const historyList = document.getElementById("history-list");
+            if (!historyList) {
+                console.error("Elemento #history-list no encontrado en el DOM");
+                return;
+            }
             historyList.innerHTML = "";
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
@@ -1293,21 +1389,39 @@ function showHistory() {
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
-                const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
-                msgDiv.onclick = () => playAudio(new Blob([base64ToBlob(msg.audio, 'audio/webm')]));
+                const text = msg.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
+                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
+                if (audioBlob) {
+                    msgDiv.onclick = () => playAudio(audioBlob);
+                } else {
+                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
+                }
                 historyList.appendChild(msgDiv);
             });
             document.getElementById("main").style.display = "none";
             document.getElementById("radar-screen").style.display = "none";
             document.getElementById("history-screen").style.display = "block";
+            const logoutButton = document.getElementById('logout-button');
+            if (logoutButton) logoutButton.style.display = 'none';
+            console.log("Historial cargado con", data.length, "mensajes");
         })
-        .catch(err => console.error("Error al cargar historial:", err));
+        .catch(err => {
+            console.error("Error al cargar historial:", err);
+            const historyList = document.getElementById("history-list");
+            if (historyList) {
+                historyList.innerHTML = "<div>Error al cargar el historial</div>";
+            }
+        });
 }
 
 function backToMain() {
     document.getElementById("history-screen").style.display = "none";
     document.getElementById("main").style.display = "block";
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'block';
+    updateSwipeHint();
+    console.log("Volviendo a la pantalla principal desde historial");
 }
 
 // Funciones auxiliares
@@ -1326,18 +1440,30 @@ function base64ToBlob(base64, mime) {
     }
 }
 
-
 function logout() {
     console.log("Iniciando cierre de sesión...");
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
+        // No cerrar WebSocket inmediatamente, esperar logout_success
+    } else {
+        // Si no hay WebSocket, limpiar directamente
+        completeLogout();
+    }
+}
+
+function completeLogout() {
+    console.log("Completando cierre de sesión...");
+    if (ws) {
         ws.close();
+        ws = null;
     }
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
+        stream = null;
     }
     if (groupMediaRecorder) {
         groupMediaRecorder.stop();
+        groupMediaRecorder = null;
     }
     localStorage.removeItem("sessionToken");
     localStorage.removeItem("userName");
@@ -1349,13 +1475,12 @@ function logout() {
     mutedUsers.clear();
     clearInterval(reconnectInterval);
     stopPing();
-    // Cambiar pantallas
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
     document.getElementById("group-screen").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "none";
-    console.log("Sesión cerrada");
+    console.log("Sesión cerrada completamente");
 }
 
 // Funciones de notificaciones
@@ -1500,12 +1625,21 @@ function checkNotificationPermission() {
     }
 }
 
-// Función para cargar historial (no estaba en el código original, pero se llama en showGroupHistory)
+// Función para cargar historial
 function loadHistory() {
     fetch('/history')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error al cargar historial: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             const historyList = document.getElementById("history-list");
+            if (!historyList) {
+                console.error("Elemento #history-list no encontrado en el DOM");
+                return;
+            }
             historyList.innerHTML = "";
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
@@ -1514,11 +1648,24 @@ function loadHistory() {
                 const utcDate = new Date();
                 utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
                 const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
-                const audio = new Audio(`data:audio/webm;base64,${msg.audio}`);
-                msgDiv.onclick = () => playAudio(new Blob([base64ToBlob(msg.audio, 'audio/webm')]));
+                const text = msg.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
+                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
+                if (audioBlob) {
+                    msgDiv.onclick = () => playAudio(audioBlob);
+                } else {
+                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
+                }
                 historyList.appendChild(msgDiv);
             });
+            console.log("Historial cargado con", data.length, "mensajes");
         })
-        .catch(err => console.error("Error al cargar historial:", err));
+        .catch(err => {
+            console.error("Error al cargar historial:", err);
+            const historyList = document.getElementById("history-list");
+            if (historyList) {
+                historyList.innerHTML = "<div>Error al cargar el historial</div>";
+            }
+        });
 }
+
