@@ -1,499 +1,597 @@
-/* Estilos para el botón de cerrar sesión */
-.logout-btn {
-    background: url('/templates/logoutred.png') no-repeat center / cover !important;
-    background-color: transparent !important;
-    border: none !important;
-    outline: none !important;
-    cursor: pointer;
-    height: 32px;
-    width: 32px;
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    margin: 0;
-    padding: 0;
-    transition: opacity 0.3s ease;
-    z-index: 1001;
-}
+/* style.css */
 
-.logout-btn:hover {
-    opacity: 0.8;
-}
-
-.logout-btn:focus {
-    outline: none !important;
-}
-
-/* Asegurar que otros botones no se solapen */
-#mute,
-#group-mute {
-    right: 50px;
-}
-
-#back-to-main {
-    left: 50px;
-}
-
-.close-btn {
-    right: 10px;
+/* Reset básico */
+* {
+  box-sizing: border-box;
 }
 
 /* Estilos generales */
 body {
-    align-items: center;
-    background-color: #87CEEB;
-    background-image: url('/templates/borde.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-    box-sizing: border-box;
-    color: #333333;
-    display: flex;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    justify-content: center;
-    margin: 0;
-    min-height: 100vh;
-    overflow-x: hidden;
-    padding: 10px;
-    position: relative;
+  align-items: center;
+  background-color: #87CEEB;
+  background-image: url('/templates/borde.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: #333333;
+  display: flex;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  justify-content: center;
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 10px;
+  position: relative;
 }
 
 button,
 input,
 select {
-    background-color: #F5F5F5;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-sizing: border-box;
-    color: #333333;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    margin: 5px 0;
-    padding: 8px;
-    width: 100%;
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: #333333;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin: 5px 0;
+  padding: 8px;
+  width: 100%;
 }
 
 button {
-    background-color: #4682B4;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-    position: relative;
-    transition: background-color 0.3s;
+  background-color: #4682B4;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  position: relative;
+  transition: background-color 0.3s;
 }
 
 button:hover {
-    background-color: #FF4500;
-    color: #FFFFFF;
+  background-color: #FF4500;
+  color: #FFFFFF;
 }
 
-.back-icon {
-    height: 24px;
-    width: 24px;
+/* Estilos para el botón de cerrar sesión */
+.logout-btn {
+  background: url('/templates/logoutred.png') no-repeat center / cover !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  cursor: pointer;
+  height: 32px;
+  width: 32px;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  margin: 0;
+  padding: 0;
+  transition: opacity 0.3s ease;
+  z-index: 1001;
 }
 
-.chat-message {
-    background-color: #FFFFFF;
-    border: 1px solid #4682B4;
-    border-radius: 5px;
-    color: #333333;
-    cursor: pointer;
-    margin: 5px 0;
-    padding: 5px;
-    text-shadow: none;
+.logout-btn:hover {
+  opacity: 0.8;
+}
+
+.logout-btn:focus {
+  outline: none !important;
+}
+
+/* Estilos para el botón de detalles de vuelos */
+#flight-details-button {
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin: 10px auto;
+  padding: 8px;
+  transition: background-color 0.3s;
+  width: 200px;
+}
+
+#flight-details-button:hover {
+  background-color: #FF4500;
+}
+
+/* Estilos del modal */
+#flight-details-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  background-color: #F5F5F5;
+  margin: 5% auto;
+  padding: 15px;
+  border: 3px solid #4682B4;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+}
+
+.close {
+  color: #FF4500;
+  float: right;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+  color: #FF6347;
+  text-decoration: none;
+}
+
+.modal-content h2 {
+  color: #4682B4;
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+/* Tabla dentro del modal */
+#modal-flight-table {
+  font-size: 10px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#modal-flight-table th,
+#modal-flight-table td {
+  border: 1px solid #4682B4;
+  padding: 4px;
+  text-align: left;
+}
+
+#modal-flight-table th {
+  background-color: #2196f3;
+  color: white;
+}
+
+#modal-flight-table tbody tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+#modal-flight-table tbody tr:hover {
+  background-color: #e0f7fa;
+}
+
+/* Asegurar que otros botones no se solapen */
+#mute,
+#group-mute {
+  right: 50px;
+}
+
+#back-to-main {
+  left: 50px;
 }
 
 .close-btn {
-    background-color: transparent;
-    border: none;
-    color: #FF4500;
-    cursor: pointer;
-    font-size: 20px;
-    padding: 5px 10px;
-    transition: color 0.3s;
+  right: 10px;
+}
+
+.back-icon {
+  height: 24px;
+  width: 24px;
+}
+
+.chat-message {
+  background-color: #FFFFFF;
+  border: 1px solid #4682B4;
+  border-radius: 5px;
+  color: #333333;
+  cursor: pointer;
+  margin: 5px 0;
+  padding: 5px;
+  text-shadow: none;
+}
+
+.close-btn {
+  background-color: transparent;
+  border: none;
+  color: #FF4500;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 5px 10px;
+  transition: color 0.3s;
 }
 
 .close-btn:hover {
-    color: #FF6347;
+  color: #FF6347;
 }
 
 .flight {
-    background-color: #F5F5F5;
-    border: 1px solid #4682B4;
-    border-radius: 5px;
-    color: #333333;
-    font-size: 14px;
-    margin: 5px 0;
-    padding: 8px;
-    transition: background-color 0.3s;
+  background-color: #F5F5F5;
+  border: 1px solid #4682B4;
+  border-radius: 5px;
+  color: #333333;
+  font-size: 14px;
+  margin: 5px 0;
+  padding: 8px;
+  transition: background-color 0.3s;
 }
 
 .flight:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .flight-aterrizando,
 .flight-en-zona {
-    background-color: #FFB6C1;
-    color: #333333 !important;
-    text-shadow: none;
+  background-color: #FFB6C1;
+  color: #333333 !important;
+  text-shadow: none;
 }
 
 .flight-despegando,
 .flight-en-tierra,
 .flight-salida {
-    background-color: #FFFFE0;
-    color: #333333 !important;
-    text-shadow: none;
+  background-color: #FFFFE0;
+  color: #333333 !important;
+  text-shadow: none;
 }
 
 .flight-en-vuelo {
-    background-color: #90EE90;
-    color: #333333 !important;
-    text-shadow: none;
+  background-color: #90EE90;
+  color: #333333 !important;
+  text-shadow: none;
 }
 
 .flight-message {
-    background-color: #FFFFFF;
-    border: 1px solid #4682B4;
-    border-radius: 5px;
-    color: #333333;
-    margin: 5px 0;
-    padding: 5px;
-    text-shadow: none;
+  background-color: #FFFFFF;
+  border: 1px solid #4682B4;
+  border-radius: 5px;
+  color: #333333;
+  margin: 5px 0;
+  padding: 5px;
+  text-shadow: none;
 }
 
 .logo {
-    display: block;
-    height: 24px;
-    margin: 0 auto 8px;
-    width: 24px;
+  display: block;
+  height: 24px;
+  margin: 0 auto 8px;
+  width: 24px;
 }
 
 .mute-button {
-    background: transparent;
-    border: none;
-    color: #FF4500;
-    cursor: pointer;
-    font-size: 16px;
-    margin-right: 5px;
-    outline: none;
-    padding: 0;
-    transition: opacity 0.3s;
+  background: transparent;
+  border: none;
+  color: #FF4500;
+  cursor: pointer;
+  font-size: 16px;
+  margin-right: 5px;
+  outline: none;
+  padding: 0;
+  transition: opacity 0.3s;
 }
 
 .mute-button:hover {
-    opacity: 0.7;
+  opacity: 0.7;
 }
 
 .mute-button:focus {
-    outline: none;
+  outline: none;
 }
 
 .play-icon {
-    color: #FF4500;
-    font-size: 10px;
-    margin-right: 5px;
+  color: #FF4500;
+  font-size: 10px;
+  margin-right: 5px;
 }
 
 .radar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-    gap: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .select {
-    appearance: none;
-    background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
-    padding-right: 30px;
+  appearance: none;
+  background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+  padding-right: 30px;
 }
 
 .select:hover {
-    background-color: #FF4500;
-    color: #FFFFFF;
+  background-color: #FF4500;
+  color: #FFFFFF;
 }
 
 .user-item {
-    align-items: center;
-    background-color: #FFFFFF;
-    border: 1px solid #4682B4;
-    border-radius: 5px;
-    color: #333333;
-    cursor: default;
-    display: flex;
-    gap: 5px;
-    justify-content: space-between;
-    margin: 5px 0;
-    padding: 5px;
-    text-shadow: none;
+  align-items: center;
+  background-color: #FFFFFF;
+  border: 1px solid #4682B4;
+  border-radius: 5px;
+  color: #333333;
+  cursor: default;
+  display: flex;
+  gap: 5px;
+  justify-content: space-between;
+  margin: 5px 0;
+  padding: 5px;
+  text-shadow: none;
 }
 
 .user-item.in-group {
-    background-color: #90EE90;
+  background-color: #90EE90;
 }
 
 .user-item span {
-    flex-grow: 1;
+  flex-grow: 1;
 }
 
 #back-to-main {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    position: absolute;
-    top: 10px;
-    transition: background-color 0.3s;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  position: absolute;
+  top: 10px;
+  transition: background-color 0.3s;
 }
 
 #back-to-main:hover {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #chat-list,
 #group-chat-list,
 #history-list,
 #message-list {
-    background-color: #FFFFFF;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-    max-height: 150px;
-    overflow-y: auto;
-    padding: 8px;
-    text-align: left;
+  background-color: #FFFFFF;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px;
+  text-align: left;
 }
 
 #chat-window,
 #group-chat-window {
-    background-color: #F5F5F5;
-    border: 3px solid #4682B4;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    padding: 10px;
+  background-color: #F5F5F5;
+  border: 3px solid #4682B4;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 10px;
 }
 
 #chat-window h3,
 #group-chat-window h3 {
-    color: #4682B4;
-    font-size: 16px;
-    margin: 0 0 10px 0;
-    text-align: center;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+  color: #4682B4;
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #flight-details,
 #group-flight-details {
-    background-color: #FFFFFF;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
-    font-family: 'Orbitron', sans-serif;
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 10px;
+  background-color: #FFFFFF;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+  font-family: 'Orbitron', sans-serif;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 10px;
 }
 
 #flights-table {
-    font-size: 10px; /* Letra más chica para la tabla */
-    width: 100%;
-    border-collapse: collapse;
+  font-size: 10px;
+  width: 100%;
+  border-collapse: collapse;
 }
 
 #flights-table th,
 #flights-table td {
-    border: 1px solid #4682B4; /* Bordes más definidos */
-    padding: 4px;
-    text-align: left;
+  border: 1px solid #4682B4;
+  padding: 4px;
+  text-align: left;
 }
 
 #flights-table th {
-    background-color: #2196f3;
-    color: white;
+  background-color: #2196f3;
+  color: white;
 }
 
 #flights-table tbody tr:nth-child(even) {
-    background-color: #f9f9f9; /* Fondo alternado para filas */
+  background-color: #f9f9f9;
 }
 
 #flights-table tbody tr:hover {
-    background-color: #e0f7fa; /* Efecto hover */
+  background-color: #e0f7fa;
 }
 
 #flights-window,
 #group-flights-window {
-    background-color: #F5F5F5;
-    border: 3px solid #4682B4;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    margin-bottom: 15px;
-    padding: 10px;
+  background-color: #F5F5F5;
+  border: 3px solid #4682B4;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 15px;
+  padding: 10px;
 }
 
 #flights-window h3,
 #group-flights-window h3 {
-    color: #4682B4;
-    font-size: 16px;
-    margin: 0 0 10px 0;
-    text-align: center;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+  color: #4682B4;
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #group-id {
-    background-color: #F5F5F5;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-sizing: border-box;
-    color: #333333;
-    flex-grow: 1;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: #333333;
+  flex-grow: 1;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
 }
 
 #group-join {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 10px 0;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
 }
 
 #group-join label {
-    color: #4682B4;
-    font-size: 14px;
-    margin: 5px 0;
-    text-align: left;
-    width: 100%;
+  color: #4682B4;
+  font-size: 14px;
+  margin: 5px 0;
+  text-align: left;
+  width: 100%;
 }
 
 #group-private {
-    width: auto;
-    margin: 5px 10px 5px 0;
-    cursor: default;
+  width: auto;
+  margin: 5px 10px 5px 0;
+  cursor: default;
 }
 
 #group-private + label {
-    display: inline-block;
-    cursor: pointer;
-    vertical-align: middle;
+  display: inline-block;
+  cursor: pointer;
+  vertical-align: middle;
 }
 
 #join-group-btn {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    transition: background-color 0.3s;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  transition: background-color 0.3s;
 }
 
 #create-group-btn {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    transition: background-color 0.3s;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  transition: background-color 0.3s;
 }
 
 #join-group-btn:hover,
 #create-group-btn:hover {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #map {
-    height: calc(100% - 60px);
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    background-color: #87CEEB;
+  height: calc(100% - 60px);
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  background-color: #87CEEB;
 }
 
 #messages,
 #history-screen {
-    margin-top: 15px;
+  margin-top: 15px;
 }
 
 #mute,
 #group-mute {
-    background-color: #008000;
-    background-image: url('/templates/mic.png');
-    background-repeat: no-repeat;
-    background-size: cover;
-    border: none;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    cursor: pointer;
-    height: 24px;
-    padding: 0;
-    position: absolute;
-    right: 50px;
-    top: 10px;
-    transition: background-color 0.3s;
-    width: 24px;
+  background-color: #008000;
+  background-image: url('/templates/mic.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  height: 24px;
+  padding: 0;
+  position: absolute;
+  right: 50px;
+  top: 10px;
+  transition: background-color 0.3s;
+  width: 24px;
 }
 
 #mute.muted,
 #group-mute.muted {
-    background-color: #ff0000;
-    background-image: url('/templates/mute.png');
+  background-color: #ff0000;
+  background-image: url('/templates/mute.png');
 }
 
 #mute:hover,
 #group-mute:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 #mute-non-group {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 10px auto;
-    padding: 10px;
-    transition: background-color 0.3s;
-    width: 40px; /* Más grande */
-    height: 40px; /* Más grande */
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px auto;
+  padding: 10px;
+  transition: background-color 0.3s;
+  width: 40px;
+  height: 40px;
 }
 
 #mute-non-group img {
-    width: 32px; /* Ícono más grande */
-    height: 32px;
+  width: 32px;
+  height: 32px;
 }
 
 #mute-non-group.muted {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #mute-non-group:hover {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #radar-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 10px;
-    box-sizing: border-box;
-    z-index: 1000;
-    background-color: #f0f2f5;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  z-index: 1000;
+  background-color: #f0f2f5;
 }
 
 #register,
@@ -501,547 +599,607 @@ button:hover {
 #group-screen,
 #radar-screen,
 #history-screen {
-    background-color: rgba(255, 255, 255, 0.9);
-    border: 3px solid #4682B4;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
-    display: none;
-    margin: 0 auto;
-    max-width: 600px;
-    padding: 15px;
-    text-align: center;
-    width: 100%;
-    position: relative;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 3px solid #4682B4;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+  display: none;
+  margin: 0 auto;
+  max-width: 600px;
+  padding: 15px;
+  text-align: center;
+  width: 100%;
+  position: relative;
 }
 
 #register {
-    display: block;
+  display: block;
 }
 
 #return-to-group-btn {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    margin-bottom: 10px;
-    padding: 8px;
-    transition: background-color 0.3s;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin-bottom: 10px;
+  padding: 8px;
+  transition: background-color 0.3s;
 }
 
 #return-to-group-btn:hover {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #search-bar {
-    flex: 1;
-    padding: 8px;
-    border: 1px solid #4682B4;
-    border-radius: 4px;
-    font-size: 16px;
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #4682B4;
+  border-radius: 4px;
+  font-size: 16px;
 }
 
 #search-container {
-    align-items: center;
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 #search-input {
-    background-color: #F5F5F5;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-sizing: border-box;
-    color: #333333;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    transition: border-color 0.3s;
-    width: 70%;
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: #333333;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  transition: border-color 0.3s;
+  width: 70%;
 }
 
 #search-input:hover {
-    border-color: #FF4500;
+  border-color: #FF4500;
 }
 
 #search-button {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    transition: background-color 0.3s;
-    width: 30%;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  transition: background-color 0.3s;
+  width: 30%;
 }
 
 #search-button:hover {
-    background-color: #FF4500;
+  background-color: #FF4500;
 }
 
 #swipe-hint {
-    color: #4682B4;
-    font-size: 12px;
-    margin-bottom: 10px;
+  color: #4682B4;
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 
 #talk,
 #group-talk {
-    background-color: transparent;
-    background-image: url('/templates/mic-off.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-    border: none;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    cursor: pointer;
-    height: 48px;
-    margin: 5px auto;
-    max-width: 48px;
-    padding: 0;
-    transition: background-image 0.3s ease;
-    width: 48px;
+  background-color: transparent;
+  background-image: url('/templates/mic-off.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  height: 48px;
+  margin: 5px auto;
+  max-width: 48px;
+  padding: 0;
+  transition: background-image 0.3s ease;
+  width: 48px;
 }
 
 #talk.recording,
 #group-talk.recording {
-    background-image: url('/templates/mic-on.png');
+  background-image: url('/templates/mic-on.png');
 }
 
 #talk:hover,
 #group-talk:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 #users,
 #group-users {
-    background-color: #F5F5F5;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-    max-height: 150px;
-    margin-top: 10px;
-    overflow-y: auto;
-    padding: 8px;
-    text-align: left;
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  max-height: 150px;
+  margin-top: 10px;
+  overflow-y: auto;
+  padding: 8px;
+  text-align: left;
 }
 
 .slide-left {
-    transform: translateX(-100%);
+  transform: translateX(-100%);
 }
 
 .slide-right {
-    transform: translateX(100%);
+  transform: translateX(100%);
 }
 
 h2 {
-    color: #4682B4;
-    font-size: 16px;
-    margin: 8px 0;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+  color: #4682B4;
+  font-size: 16px;
+  margin: 8px 0;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 h3 {
-    color: #4682B4;
-    font-size: 14px;
-    margin: 8px 0;
-    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+  color: #4682B4;
+  font-size: 14px;
+  margin: 8px 0;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
+/* Media queries para responsividad */
 @media (max-width: 768px) {
-    body {
-        background-image: url('/templates/borde.png');
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: cover;
-        padding: 5px;
-    }
+  body {
+    background-image: url('/templates/borde.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    padding: 5px;
+  }
 
-    #chat-list,
-    #group-chat-list,
-    #history-list,
-    #message-list {
-        max-height: 120px;
-    }
+  #flight-details-modal {
+    width: 100%;
+  }
 
-    #flights-window,
-    #group-flights-window,
-    #chat-window,
-    #group-chat-window {
-        width: 100%;
-    }
+  .modal-content {
+    width: 95%;
+    margin: 10% auto;
+    padding: 10px;
+  }
 
-    #main,
-    #group-screen {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
+  #modal-flight-table {
+    font-size: 9px;
+  }
 
-    #mute,
-    #group-mute {
-        height: 20px;
-        right: 45px;
-        top: 5px;
-        width: 20px;
-    }
+  #modal-flight-table th,
+  #modal-flight-table td {
+    padding: 2px;
+  }
 
-    #radar-screen {
-        padding: 5px;
-        background-color: #f0f2f5;
-    }
+  .modal-content h2 {
+    font-size: 14px;
+  }
 
-    #register,
-    #main,
-    #group-screen,
-    #radar-screen,
-    #history-screen {
-        margin: 0;
-        max-width: 100%;
-        padding: 10px;
-    }
+  #chat-list,
+  #group-chat-list,
+  #history-list,
+  #message-list {
+    max-height: 120px;
+  }
 
-    #talk,
-    #group-talk {
-        height: 65px;
-        max-width: 65px;
-        width: 65px;
-    }
+  #flights-window,
+  #group-flights-window,
+  #chat-window,
+  #group-chat-window {
+    width: 100%;
+  }
 
-    #users,
-    #group-users {
-        font-size: 10px;
-        max-height: 120px;
-        padding: 6px;
-    }
+  #main,
+  #group-screen {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
-    .logo {
-        height: 20px;
-        width: 20px;
-    }
+  #mute,
+  #group-mute {
+    height: 20px;
+    right: 45px;
+    top: 5px;
+    width: 20px;
+  }
 
-    .mute-button {
-        font-size: 10px;
-        margin-right: 4px;
-        height: auto;
-        line-height: normal;
-        width: auto;
-    }
+  #radar-screen {
+    padding: 5px;
+    background-color: #f0f2f5;
+  }
 
-    .user-item {
-        margin: 4px 0;
-        padding: 4px;
-    }
+  #register,
+  #main,
+  #group-screen,
+  #radar-screen,
+  #history-screen {
+    margin: 0;
+    max-width: 100%;
+    padding: 10px;
+  }
 
-    .logout-btn {
-        height: 24px;
-        width: 24px;
-        top: 5px;
-        left: 5px;
-    }
+  #talk,
+  #group-talk {
+    height: 65px;
+    max-width: 65px;
+    width: 65px;
+  }
 
-    #back-to-main {
-        left: 35px;
-    }
+  #users,
+  #group-users {
+    font-size: 10px;
+    max-height: 120px;
+    padding: 6px;
+  }
 
-    button,
-    input,
-    select {
-        font-size: 12px;
-        padding: 6px;
-    }
+  .logo {
+    height: 20px;
+    width: 20px;
+  }
 
-    h2 {
-        font-size: 14px;
-    }
+  .mute-button {
+    font-size: 10px;
+    margin-right: 4px;
+    height: auto;
+    line-height: normal;
+    width: auto;
+  }
 
-    h3 {
-        font-size: 12px;
-    }
+  .user-item {
+    margin: 4px 0;
+    padding: 4px;
+  }
 
-    #map {
-        height: calc(100% - 50px);
-    }
+  .logout-btn {
+    height: 24px;
+    width: 24px;
+    top: 5px;
+    left: 5px;
+  }
 
-    #search-bar {
-        font-size: 12px;
-        padding: 6px;
-        width: 100%;
-    }
+  #back-to-main {
+    left: 35px;
+  }
 
-    .radar-header {
-        flex-direction: column;
-        gap: 5px;
-    }
+  button,
+  input,
+  select {
+    font-size: 12px;
+    padding: 6px;
+  }
 
-    .radar-header h2 {
-        font-size: 14px;
-        margin: 5px 0;
-    }
+  h2 {
+    font-size: 14px;
+  }
 
-    .close-btn {
-        font-size: 16px;
-        padding: 4px 8px;
-    }
+  h3 {
+    font-size: 12px;
+  }
 
-    #search-container {
-        flex-direction: column;
-        gap: 5px;
-    }
+  #map {
+    height: calc(100% - 50px);
+  }
 
-    #search-input {
-        font-size: 12px;
-        padding: 6px;
-        width: 100%;
-    }
+  #search-bar {
+    font-size: 12px;
+    padding: 6px;
+    width: 100%;
+  }
 
-    #search-button {
-        font-size: 12px;
-        padding: 6px;
-        width: 100%;
-    }
+  .radar-header {
+    flex-direction: column;
+    gap: 5px;
+  }
 
-    #group-join {
-        flex-direction: column;
-        align-items: stretch;
-    }
+  .radar-header h2 {
+    font-size: 14px;
+    margin: 5px 0;
+  }
 
-    #group-id,
-    #join-group-btn,
-    #create-group-btn {
-        width: 100%;
-    }
+  .close-btn {
+    font-size: 16px;
+    padding: 4px 8px;
+  }
 
-    #group-private {
-        width: auto;
-        margin: 5px 0;
-    }
+  #search-container {
+    flex-direction: column;
+    gap: 5px;
+  }
 
-    #group-private + label {
-        font-size: 12px;
-    }
+  #search-input {
+    font-size: 12px;
+    padding: 6px;
+    width: 100%;
+  }
 
-    #group-join label {
-        font-size: 12px;
-    }
+  #search-button {
+    font-size: 12px;
+    padding: 6px;
+    width: 100%;
+  }
 
-    #flights-table {
-        font-size: 9px; /* Letra más chica en móviles */
-    }
+  #group-join {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-    #flights-table th,
-    #flights-table td {
-        padding: 2px; /* Menos padding en móviles */
-    }
+  #group-id,
+  #join-group-btn,
+  #create-group-btn {
+    width: 100%;
+  }
 
-    #mute-non-group {
-        width: 32px; /* Ligeramente más pequeño en móviles */
-        height: 32px;
-        padding: 8px;
-    }
+  #group-private {
+    width: auto;
+    margin: 5px 0;
+  }
 
-    #mute-non-group img {
-        width: 24px; /* Ícono más pequeño en móviles */
-        height: 24px;
-    }
+  #group-private + label {
+    font-size: 12px;
+  }
+
+  #group-join label {
+    font-size: 12px;
+  }
+
+  #flights-table {
+    font-size: 9px;
+  }
+
+  #flights-table th,
+  #flights-table td {
+    padding: 2px;
+  }
+
+  #mute-non-group {
+    width: 32px;
+    height: 32px;
+    padding: 8px;
+  }
+
+  #mute-non-group img {
+    width: 24px;
+    height: 24px;
+  }
+
+  #flight-details-button {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px;
+  }
 }
 
 @media (min-width: 769px) {
-    body {
-        background-image: url('/templates/borde.png');
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: cover;
-        padding: 20px;
-    }
+  body {
+    background-image: url('/templates/borde.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    padding: 20px;
+  }
 
-    #chat-list,
-    #group-chat-list,
-    #history-list,
-    #message-list {
-        max-height: 200px;
-    }
+  #flight-details-modal {
+    width: 100%;
+  }
 
-    #flights-window,
-    #group-flights-window,
-    #chat-window,
-    #group-chat-window {
-        width: 100%;
-    }
+  .modal-content {
+    width: 90%;
+    max-width: 600px;
+    margin: 5% auto;
+    padding: 15px;
+  }
 
-    #main,
-    #group-screen {
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
+  #modal-flight-table {
+    font-size: 10px;
+  }
 
-    #mute,
-    #group-mute {
-        height: 24px;
-        right: 50px;
-        top: 10px;
-        width: 24px;
-    }
+  #modal-flight-table th,
+  #modal-flight-table td {
+    padding: 4px;
+  }
 
-    #radar-screen {
-        padding: 10px;
-        background-color: #f0f2f5;
-    }
+  .modal-content h2 {
+    font-size: 16px;
+  }
 
-    #register,
-    #main,
-    #group-screen,
-    #radar-screen,
-    #history-screen {
-        max-width: 600px;
-        padding: 20px;
-    }
+  #chat-list,
+  #group-chat-list,
+  #history-list,
+  #message-list {
+    max-height: 200px;
+  }
 
-    #talk,
-    #group-talk {
-        height: 65px;
-        max-width: 65px;
-        width: 65px;
-    }
+  #flights-window,
+  #group-flights-window,
+  #chat-window,
+  #group-chat-window {
+    width: 100%;
+  }
 
-    #users,
-    #group-users {
-        font-size: 14px;
-        max-height: 200px;
-        padding: 8px;
-    }
+  #main,
+  #group-screen {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
 
-    .logo {
-        height: 32px;
-        width: 32px;
-    }
+  #mute,
+  #group-mute {
+    height: 24px;
+    right: 50px;
+    top: 10px;
+    width: 24px;
+  }
 
-    .mute-button {
-        font-size: 12px;
-        margin-right: 5px;
-        height: auto;
-        line-height: normal;
-        width: auto;
-    }
+  #radar-screen {
+    padding: 10px;
+    background-color: #f0f2f5;
+  }
 
-    .user-item {
-        margin: 5px 0;
-        padding: 5px;
-    }
+  #register,
+  #main,
+  #group-screen,
+  #radar-screen,
+  #history-screen {
+    max-width: 600px;
+    padding: 20px;
+  }
 
-    .logout-btn {
-        height: 32px;
-        width: 32px;
-        top: 10px;
-        left: 10px;
-    }
+  #talk,
+  #group-talk {
+    height: 65px;
+    max-width: 65px;
+    width: 65px;
+  }
 
-    #back-to-main {
-        left: 50px;
-    }
+  #users,
+  #group-users {
+    font-size: 14px;
+    max-height: 200px;
+    padding: 8px;
+  }
 
-    button {
-        margin: 5px auto;
-        width: 200px;
-    }
+  .logo {
+    height: 32px;
+    width: 32px;
+  }
 
-    input,
-    select {
-        font-size: 16px;
-        max-width: 100%;
-        padding: 10px;
-        width: auto;
-    }
+  .mute-button {
+    font-size: 12px;
+    margin-right: 5px;
+    height: auto;
+    line-height: normal;
+    width: auto;
+  }
 
-    h2 {
-        font-size: 18px;
-    }
+  .user-item {
+    margin: 5px 0;
+    padding: 5px;
+  }
 
-    h3 {
-        font-size: 16px;
-    }
+  .logout-btn {
+    height: 32px;
+    width: 32px;
+    top: 10px;
+    left: 10px;
+  }
 
-    #map {
-        height: calc(100% - 60px);
-    }
+  #back-to-main {
+    left: 50px;
+  }
 
-    #search-bar {
-        font-size: 16px;
-        padding: 8px;
-        flex: 1;
-    }
+  button {
+    margin: 5px auto;
+    width: 200px;
+  }
 
-    .radar-header {
-        flex-direction: row;
-        gap: 10px;
-    }
+  input,
+  select {
+    font-size: 16px;
+    max-width: 100%;
+    padding: 10px;
+    width: auto;
+  }
 
-    .radar-header h2 {
-        font-size: 16px;
-        margin: 0;
-    }
+  h2 {
+    font-size: 18px;
+  }
 
-    .close-btn {
-        font-size: 20px;
-        padding: 5px 10px;
-    }
+  h3 {
+    font-size: 16px;
+  }
 
-    #search-container {
-        align-items: center;
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-        max-width: 400px;
-        margin-left: auto;
-        margin-right: auto;
-    }
+  #map {
+    height: calc(100% - 60px);
+  }
 
-    #search-input {
-        font-size: 14px;
-        padding: 8px;
-        width: 70%;
-    }
+  #search-bar {
+    font-size: 16px;
+    padding: 8px;
+    flex: 1;
+  }
 
-    #search-button {
-        font-size: 14px;
-        padding: 8px;
-        width: 30%;
-    }
+  .radar-header {
+    flex-direction: row;
+    gap: 10px;
+  }
 
-    #group-join {
-        flex-direction: row;
-        align-items: center;
-    }
+  .radar-header h2 {
+    font-size: 16px;
+    margin: 0;
+  }
 
-    #group-id {
-        width: 200px;
-    }
+  .close-btn {
+    font-size: 20px;
+    padding: 5px 10px;
+  }
 
-    #join-group-btn,
-    #create-group-btn {
-        width: 120px;
-    }
+  #search-container {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 
-    #group-private {
-        width: auto;
-        margin: 5px 10px 5px 0;
-    }
+  #search-input {
+    font-size: 14px;
+    padding: 8px;
+    width: 70%;
+  }
 
-    #group-private + label {
-        font-size: 14px;
-    }
+  #search-button {
+    font-size: 14px;
+    padding: 8px;
+    width: 30%;
+  }
 
-    #group-join label {
-        font-size: 14px;
-        width: auto;
-        margin-right: 10px;
-    }
+  #group-join {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  #group-id {
+    width: 200px;
+  }
+
+  #join-group-btn,
+  #create-group-btn {
+    width: 120px;
+  }
+
+  #group-private {
+    width: auto;
+    margin: 5px 10px 5px 0;
+  }
+
+  #group-private + label {
+    font-size: 14px;
+  }
+
+  #group-join label {
+    font-size: 14px;
+    width: auto;
+    margin-right: 10px;
+  }
+
+  #flight-details-button {
+    width: 200px;
+    font-size: 14px;
+    padding: 8px;
+  }
     }
