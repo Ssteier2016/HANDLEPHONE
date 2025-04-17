@@ -36,6 +36,40 @@
         }
     </script>
 </head>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#2196f3">
+    <title>HANDLEPHONE - Comunicación Aeronáutica</title>
+    <link rel="stylesheet" href="/templates/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/leaflet.movingmarker@0.2.1/MovingMarker.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
+    <link rel="manifest" href="/templates/manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
+                    .then(reg => {
+                        console.log('Service Worker registrado:', reg);
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    })
+                    .catch(err => console.error('Error al registrar Service Worker:', err));
+            });
+        }
+    </script>
+</head>
 <body>
     <div id="register" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
@@ -59,7 +93,6 @@
     </div>
 
     <div id="main" style="display: none;">
-        <!-- Corrección: Añadido id="logout-button" para controlar visibilidad -->
         <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
@@ -73,21 +106,32 @@
         </div>
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
-            <div id="flight-details"></div>
+            <div id="flight-details">
+                <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>Origen</th>
+                            <th>Salida</th>
+                            <th>Destino</th>
+                            <th>Llegada</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
             <div id="chat-list"></div>
         </div>
         <div id="group-join">
-            <!-- Corrección: Añadido label y checkbox para grupo privado -->
             <label for="group-id">Nombre del grupo</label>
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
-            <!-- Nuevo: Checkbox para indicar grupo privado -->
             <label for="group-private">Grupo Privado</label>
             <input type="checkbox" id="group-private">
             <button id="join-group-btn" onclick="joinGroup()">Unirme</button>
-            <!-- Nuevo: Botón para crear grupo -->
             <button id="create-group-btn" onclick="createGroup()">Crear Grupo</button>
         </div>
         <button id="talk" onclick="toggleTalk()"></button>
@@ -115,7 +159,10 @@
             <div id="group-chat-list"></div>
         </div>
         <button id="group-talk" onclick="toggleGroupTalk()"></button>
-        <button id="mute-non-group">Mutear grupo</button>
+        <!-- Modificado: Cambiado texto por ícono -->
+        <button id="mute-non-group" title="Silenciar no grupo">
+            <img src="/templates/mute.png" alt="Silenciar" style="width: 24px; height: 24px;">
+        </button>
         <button id="group-mute" class="active" onclick="toggleGroupMute()">Mutear Grupo</button>
         <button id="group-radar" onclick="showGroupRadar()">Radar</button>
         <button id="group-history" onclick="showGroupHistory()">Historial</button>
