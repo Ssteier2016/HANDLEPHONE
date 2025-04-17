@@ -17,6 +17,9 @@ from pydub import AudioSegment
 import math
 from dotenv import load_dotenv
 from cachetools import TTLCache
+from flask import Flask, jsonify
+from flask_cors import CORS
+import requests
 
 # Configurar logging
 logging.basicConfig(
@@ -41,6 +44,72 @@ if not AVIATIONSTACK_API_KEY:
 # Cargar index.html
 with open("templates/index.html", "r") as f:
     INDEX_HTML = f.read()
+
+
+app = Flask(__name__)
+CORS(app)
+
+GOFLIGHTLABS_API_KEY = os.getenv('GOFLIGHTLABS_API_KEY')
+API_URL = 'https://www.goflightlabs.com/flights'
+
+@app.route('/aep_flights', methods=['GET'])
+async def get_aep_flights():
+    try:
+        # Configurar parámetros de la API
+        params = {
+            'access_key': GOFLIGHTLABS_API_KEY,
+            'airline_iata': 'AR',  # Aerolíneas Argentinas
+            'dep_iata': 'AEP',     # Salidas desde Aeroparque
+            'arr_iata': 'AEP',     # Llegadas a Aeroparque
+            'flight_status': 'scheduled,active,landed'  # Estados relevantes
+        }
+
+        # Hacer solicitud a GoFlightLabs
+        response = requests.get(API_URL, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Verificar si la solicitud fue exitosa
+        if not data.get('success', False):
+            return jsonify({'error': 'Error en la API de GoFlightLabs', 'details': data.get('error', 'Unknown')}), 500
+
+        # Obtener el momento actual y el rango de 12 horas
+        now = datetime.utcnow()
+        time_min = now - timedelta(hours=12)
+        time_max = now + timedelta(hours=12)
+
+        # Filtrar vuelos por rango de tiempo
+        filtered_flights = []
+        for flight in data.get('data', []):
+            # Obtener la hora de salida o llegada
+            departure_time = flight.get('departure', {}).get('scheduled', '')
+            arrival_time = flight.get('arrival', {}).get('scheduled', '')
+
+            # Convertir a datetime (asumiendo formato ISO 8601)
+            try:
+                dep_dt = datetime.fromisoformat(departure_time.replace('Z', '+00:00')) if departure_time else None
+                arr_dt = datetime.fromisoformat(arrival_time.replace('Z', '+00:00')) if arrival_time else None
+            except ValueError:
+                continue  # Saltar si la fecha no es válida
+
+            # Verificar si el vuelo está en el rango de tiempo
+            if (dep_dt and time_min <= dep_dt <= time_max) or (arr_dt and time_min <= arr_dt <= time_max):
+                filtered_flights.append({
+                    'flight_number': flight.get('flight', {}).get('number', ''),
+                    'departure_airport': flight.get('departure', {}).get('airport', ''),
+                    'departure_time': departure_time,
+                    'arrival_airport': flight.get('arrival', {}).get('airport', ''),
+                    'arrival_time': arrival_time,
+                    'status': flight.get('flight_status', '')
+                })
+
+        return jsonify({'flights': filtered_flights})
+
+    except requests.RequestException as e:
+        return jsonify({'error': 'Error al consultar la API', 'details': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': 'Error interno', 'details': str(e)}), 500
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
