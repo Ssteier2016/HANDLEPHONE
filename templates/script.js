@@ -777,9 +777,10 @@ function filterFlights() {
 // Funciones de grabación
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
+
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
         console.log("Iniciando grabación...");
-        stream = await requestMicPermission();
+        let stream = await requestMicPermission();
         if (!stream) {
             console.error("No se pudo obtener el stream del micrófono");
             alert("No se pudo acceder al micrófono. Por favor, verifica los permisos.");
@@ -792,21 +793,18 @@ async function toggleTalk() {
         } catch (err) {
             console.error("Error al crear MediaRecorder:", err);
             alert("Error al iniciar la grabación: " + err.message);
+            stream.getTracks().forEach(track => track.stop());
             return;
         }
 
-        audioChunks = [];
+        let audioChunks = [];
         let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
 
         if (supportsSpeechRecognition && recognition) {
             recognition.onresult = (event) => {
                 transcript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                        transcript += event.results[i][0].transcript;
-                    } else {
-                        transcript += event.results[i][0].transcript;
-                    }
+                    transcript += event.results[i][0].transcript;
                 }
                 console.log("Transcripción parcial:", transcript);
             };
@@ -831,6 +829,7 @@ async function toggleTalk() {
                 console.warn("Fragmento de audio vacío recibido");
             }
         };
+
         mediaRecorder.onstop = function() {
             console.log("Grabación detenida");
             console.log("Tamaño de audioChunks:", audioChunks.length);
@@ -849,38 +848,35 @@ async function toggleTalk() {
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
-    const base64data = reader.result.split(',')[1];
-    console.log("Audio convertido a Base64, longitud:", base64data.length);
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    const sender = localStorage.getItem("userName") || "Anónimo";
-    const userFunction = localStorage.getItem("userFunction") || "Desconocida";
-    const message = {
-        type: "audio",
-        data: base64data,
-        text: transcript,
-        timestamp: timestamp,
-        sender: sender,
-        function: userFunction,
-        sessionToken: localStorage.getItem("sessionToken")
-    };
+                const base64data = reader.result.split(',')[1];
+                console.log("Audio convertido a Base64, longitud:", base64data.length);
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const sender = localStorage.getItem("userName") || "Anónimo";
+                const userFunction = localStorage.getItem("userFunction") || "Desconocida";
+                const message = {
+                    type: "audio",
+                    data: base64data,
+                    text: transcript,
+                    timestamp: timestamp,
+                    sender: sender,
+                    function: userFunction,
+                    sessionToken: localStorage.getItem("sessionToken")
+                };
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando mensaje al servidor:", {
-            type: message.type,
-            data: message.data.slice(0, 20) + "...",
-            text: message.text,
-            timestamp: message.timestamp,
-            sender: message.sender,
-            function: message.function
-        });
-        ws.send(JSON.stringify(message));
-    } else {
-        console.warn("WebSocket no está abierto, encolando mensaje");
-        queueMessageForSync(message);
-    }
-
-    // Resto del código (agregar al chat-list) sigue igual
-};
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    console.log("Enviando mensaje al servidor:", {
+                        type: message.type,
+                        data: message.data.slice(0, 20) + "...",
+                        text: message.text,
+                        timestamp: message.timestamp,
+                        sender: message.sender,
+                        function: message.function
+                    });
+                    ws.send(JSON.stringify(message));
+                } else {
+                    console.warn("WebSocket no está abierto, encolando mensaje");
+                    queueMessageForSync(message);
+                }
 
                 const chatList = document.getElementById("chat-list");
                 if (chatList) {
@@ -904,12 +900,16 @@ async function toggleTalk() {
             }
             audioChunks = [];
             mediaRecorder = null;
-            if (supportsSpeechRecognition && recognition) recognition.stop();
+            if (supportsSpeechRecognition && recognition) {
+                recognition.stop();
+            }
         };
+
         mediaRecorder.onerror = function(err) {
             console.error("Error en MediaRecorder:", err);
             alert("Error durante la grabación: " + err.message);
         };
+
         try {
             mediaRecorder.start(100);
             console.log("Grabación iniciada");
@@ -917,9 +917,9 @@ async function toggleTalk() {
         } catch (err) {
             console.error("Error al iniciar la grabación:", err);
             alert("Error al iniciar la grabación: " + err.message);
+            stream.getTracks().forEach(track => track.stop());
         }
-    } else {
-        if (mediaRecorder.state === "recording") {
+    } else if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
         talkButton.classList.remove("recording");
     }
