@@ -18,6 +18,28 @@ numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
 asyncio==3.4.3
 sounddevice==0.4.7  # Para manejar audio en el servidor (si aplica)
 
+# Dependencias para notificaciones push (descomentar si implementas)
+pywebpush>=1.14.1,<2.0.0  # Enviar notificaciones push desde el backend
+cryptography>=43.0.1,<44.0.0  # Generar claves VAPID para notificaciones
+http_ece>=1.1.0,<2.0.0  # Encriptación de contenido push
+
+# Dependencias para validación de configuraciones (opcional)
+pydantic-settings>=2.5.2,<3.0.0  # Validar variables de entorno con Pydantic
+
+# Dependencias para mejorar el rendimiento
+Flask-Compress>=1.14.0,<2.0.0  # Comprimir respuestas JSON de /aep_flights
+
+# Dependencias para logging (opcional)
+loguru>=0.7.2,<1.0.0  # Logging simplificado para errores en main.py
+
+# Dependencias para pruebas (opcional)
+pytest>=8.3.2,<9.0.0  # Framework de pruebas unitarias
+pytest-asyncio>=0.23.8,<1.0.0  # Soporte para pruebas asíncronas
+
+# Nota: Instalar ffmpeg en el sistema para soporte de audio en pydub y speechrecognition
+# En Ubuntu/Debian: sudo apt-get install ffmpeg
+# En macOS: brew install ffmpeg
+# En Windows: Descargar desde https://ffmpeg.org/download.html y agregar al PATH
 # Opcional para notificaciones push (descomentar si las implementás):
 # pywebpush>=1.14.1,<2.0.0
 # cryptography>=43.0.1,<44.0.0  # Nuevo: Para generar claves VAPID en notificaciones push
