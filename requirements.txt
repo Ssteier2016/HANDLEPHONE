@@ -1,10 +1,8 @@
-requests>=2.32.3,<3.0.0
-Flask==3.0.3
-Flask-Cors==4.0.1
+fastapi>=0.115.0,<0.116.0
+uvicorn>=0.30.6,<0.31.0
 python-decouple==3.8  # Para manejar variables de entorno
 numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
 asyncio==3.4.3
-gunicorn>=22.0.0,<23.0.0  # Nuevo: Servidor WSGI para despliegue
 
 # Dependencias requeridas para el backend y la API
 fastapi>=0.115.0,<0.116.0
@@ -32,11 +30,6 @@ FlightRadarAPI>=1.3.34,<2.0.0  # Opcional
 # Dependencias opcionales para scraping
 beautifulsoup4>=4.12.2,<5.0.0  # Opcional
 
-# Dependencias para notificaciones push (descomentar si implementas)
-# pywebpush>=1.14.1,<2.0.0
-# cryptography>=43.0.1,<44.0.0
-# http_ece>=1.1.0,<2.0.0
-
 # Dependencias para validación de configuraciones (opcional)
 pydantic-settings>=2.5.2,<3.0.0
 
@@ -51,9 +44,9 @@ pytest-asyncio>=0.23.8,<1.0.0
 # En Render, usa un script de instalación si es necesario
 
 # Dependencias para notificaciones push (descomentar si implementas)
-pywebpush>=1.14.1,<2.0.0  # Enviar notificaciones push desde el backend
-cryptography>=43.0.1,<44.0.0  # Generar claves VAPID para notificaciones
-http_ece>=1.1.0,<2.0.0  # Encriptación de contenido push
+#pywebpush>=1.14.1,<2.0.0  # Enviar notificaciones push desde el backend
+#cryptography>=43.0.1,<44.0.0  # Generar claves VAPID para notificaciones
+#http_ece>=1.1.0,<2.0.0  # Encriptación de contenido push
 
 # Dependencias para validación de configuraciones (opcional)
 pydantic-settings>=2.5.2,<3.0.0  # Validar variables de entorno con Pydantic
