@@ -314,129 +314,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
     }
 };
 
-    ws.onmessage = function(event) {
-        console.log("Datos recibidos del servidor:", event.data);
-        try {
-            const message = JSON.parse(event.data);
-            console.log("Mensaje parseado:", message);
-
-            if (!message.type) {
-                console.error("Mensaje sin tipo:", message);
-                return;
-            }
-
-            if (message.type === "audio") {
-                if (!message.data) {
-                    console.error("Mensaje de audio sin datos de audio:", message);
-                    return;
-                }
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
-                playAudio(audioBlob);
-                const chatList = document.getElementById("chat-list");
-                if (!chatList) {
-                    console.error("Elemento chat-list no encontrado en el DOM");
-                    return;
-                }
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log("Mensaje de audio agregado al chat-list");
-            } else if (message.type === "users") {
-                updateUsers(message.count, message.list);
-            } else if (message.type === "mute_all_success") {
-                updateMuteButton(true);
-                console.log("Muteo global activado");
-            } else if (message.type === "unmute_all_success") {
-                updateMuteButton(false);
-                console.log("Muteo global desactivado");
-            } else if (message.type === "mute_non_group_success") {
-                message.user_ids.forEach(userId => mutedUsers.add(userId));
-                updateUsers(message.count, message.list);
-                document.getElementById("mute-non-group").classList.add("muted");
-                document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
-                console.log("Usuarios fuera del grupo muteados");
-            } else if (message.type === "unmute_non_group_success") {
-                message.user_ids.forEach(userId => mutedUsers.delete(userId));
-                updateUsers(message.count, message.list);
-                document.getElementById("mute-non-group").classList.remove("muted");
-                document.getElementById("mute-non-group").textContent = "Mutear no grupo";
-                console.log("Usuarios fuera del grupo desmuteados");
-            } else if (message.type === "join_group") {
-                currentGroup = message.group_id;
-                localStorage.setItem('groupId', currentGroup);
-                updateSwipeHint();
-                console.log(`Unido al grupo: ${message.group_id}`);
-            } else if (message.type === "check_group") {
-                if (!message.in_group) {
-                    currentGroup = null;
-                    localStorage.removeItem('groupId');
-                    updateSwipeHint();
-                    console.log("No estás en el grupo, currentGroup restablecido a null");
-                }
-            } else if (message.type === "group_message") {
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                if (!audioBlob) {
-                    console.error("No se pudo crear el Blob para el mensaje de grupo");
-                    return;
-                }
-                playAudio(audioBlob);
-                const chatList = document.getElementById("group-chat-list");
-                if (!chatList) {
-                    console.error("Elemento group-chat-list no encontrado en el DOM");
-                    return;
-                }
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log("Mensaje de grupo agregado al group-chat-list");
-            } else if (message.type === "flight_update") {
-                updateFlightDetails(message.flights, "#flight-details");
-                updateFlightDetails(message.flights, "#group-flight-details");
-            } else if (message.type === "aa2000_flight_update") {
-                updateFlightDetailsAA2000(message.flights, "#flight-details");
-                updateFlightDetailsAA2000(message.flights, "#group-flight-details");
-            } else if (message.type === "fr24_update") {
-                updateFlightRadar24Markers(message.flights);
-                console.log("Actualización FlightRadar24 recibida:", message.flights);
-            } else if (message.type === "search_response") {
-                displaySearchResponse(message.message);
-            } else if (message.type === "register_success") {
-                console.log("Registro exitoso:", message.message);
-            } else if (message.type === "ping") {
-                // Respuesta opcional al ping del servidor
-                console.log("Ping recibido del servidor");
-            } else {
-                console.warn("Tipo de mensaje desconocido:", message.type);
-            }
-        } catch (err) {
-            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
-        }
-    };
+                    
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
@@ -458,7 +336,130 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         }
     };
 }
+ws.onmessage = function(event) {
+    console.log("Datos recibidos del servidor:", event.data);
+    try {
+        const message = JSON.parse(event.data);
+        console.log("Mensaje parseado:", message);
 
+        if (!message.type) {
+            console.error("Mensaje sin tipo:", message);
+            return;
+        }
+
+        if (message.type === "audio") {
+            if (!message.data) {
+                console.error("Mensaje de audio sin datos de audio:", message);
+                return;
+            }
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            console.log("Audio Blob creado para reproducción, tamaño:", audioBlob.size, "bytes");
+            playAudio(audioBlob);
+            const chatList = document.getElementById("chat-list");
+            if (!chatList) {
+                console.error("Elemento chat-list no encontrado en el DOM");
+                return;
+            }
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de audio agregado al chat-list");
+        } else if (message.type === "users") {
+            updateUsers(message.count, message.list);
+        } else if (message.type === "mute_all") {
+            updateMuteButton(true);
+            console.log("Muteo global activado");
+        } else if (message.type === "unmute_all") {
+            updateMuteButton(false);
+            console.log("Muteo global desactivado");
+        } else if (message.type === "mute_non_group_success") {
+            message.user_ids.forEach(userId => mutedUsers.add(userId));
+            updateUsers(message.count, message.list);
+            document.getElementById("mute-non-group").classList.add("muted");
+            document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
+            console.log("Usuarios fuera del grupo muteados");
+        } else if (message.type === "unmute_non_group_success") {
+            message.user_ids.forEach(userId => mutedUsers.delete(userId));
+            updateUsers(message.count, message.list);
+            document.getElementById("mute-non-group").classList.remove("muted");
+            document.getElementById("mute-non-group").textContent = "Mutear no grupo";
+            console.log("Usuarios fuera del grupo desmuteados");
+        } else if (message.type === "group_joined") {
+            currentGroup = message.group_id;
+            localStorage.setItem('groupId', currentGroup);
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('group-screen').style.display = 'block';
+            updateSwipeHint();
+            console.log(`Unido al grupo: ${message.group_id}`);
+        } else if (message.type === "check_group") {
+            if (!message.in_group) {
+                currentGroup = null;
+                localStorage.removeItem('groupId');
+                updateSwipeHint();
+                console.log("No estás en el grupo, currentGroup restablecido a null");
+            }
+        } else if (message.type === "group_message" || message.type === "audio") {
+            const senderId = `${message.sender}_${message.function}`;
+            if (mutedUsers.has(senderId)) {
+                console.log(`Mensaje de grupo de ${senderId} ignorado porque está muteado`);
+                return;
+            }
+            const audioBlob = base64ToBlob(message.data, 'audio/webm');
+            if (!audioBlob) {
+                console.error("No se pudo crear el Blob para el mensaje de grupo");
+                return;
+            }
+            playAudio(audioBlob);
+            const chatList = document.getElementById("group-chat-list");
+            if (!chatList) {
+                console.error("Elemento group-chat-list no encontrado en el DOM");
+                return;
+            }
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "chat-message";
+            const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const sender = message.sender || "Anónimo";
+            const userFunction = message.function || "Desconocida";
+            const text = message.text || "Sin transcripción";
+            msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
+            msgDiv.onclick = () => playAudio(audioBlob);
+            chatList.appendChild(msgDiv);
+            chatList.scrollTop = chatList.scrollHeight;
+            console.log("Mensaje de grupo agregado al group-chat-list");
+        } else if (message.type === "flight_update") {
+            updateFlightDetails(message.flights, "#flight-details");
+            updateFlightDetails(message.flights, "#group-flight-details");
+        } else if (message.type === "aa2000_flight_update") {
+            updateFlightDetailsAA2000(message.flights, "#flight-details");
+            updateFlightDetailsAA2000(message.flights, "#group-flight-details");
+        } else if (message.type === "fr24_update") {
+            updateFlightRadar24Markers(message.flights);
+            console.log("Actualización FlightRadar24 recibida:", message.flights);
+        } else if (message.type === "search_response") {
+            displaySearchResponse(message.message);
+        } else if (message.type === "register_success") {
+            console.log("Registro exitoso:", message.message);
+        } else if (message.type === "pong") {
+            console.log("Pong recibido del servidor");
+        } else {
+            console.warn("Tipo de mensaje desconocido:", message.type);
+        }
+    } catch (err) {
+        console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+    }
+};
 // Mantener conexión viva con ping
 function startPing() {
     stopPing();
@@ -1112,14 +1113,11 @@ function joinGroup() {
         return;
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log("Enviando solicitud para unirse al grupo:", groupId);
         ws.send(JSON.stringify({ type: 'join_group', group_id: groupId }));
-        currentGroup = groupId;
-        localStorage.setItem('groupId', groupId);
-        document.getElementById('main').style.display = 'none';
-        document.getElementById('group-screen').style.display = 'block';
-        updateSwipeHint();
     } else {
-        alert('Estamos en nuevas mejoras. Por favor, intenta más tarde.');
+        alert('No estás conectado al servidor. Intenta de nuevo.');
+        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
     }
 }
 
@@ -1327,22 +1325,7 @@ function base64ToBlob(base64, mime) {
         return null;
     }
 }
-function startPing() {
-    stopPing();
-    pingInterval = setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-            console.log("Ping enviado al servidor");
-        }
-    }, PING_INTERVAL);
-}
 
-function stopPing() {
-    if (pingInterval) {
-        clearInterval(pingInterval);
-        pingInterval = null;
-    }
-}
 
 function logout() {
     console.log("Iniciando cierre de sesión...");
