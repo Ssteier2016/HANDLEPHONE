@@ -1,5 +1,6 @@
 // Variables globales
-let ws;
+let ws = null;
+let pingInterval = null; // Añadir pingInterval globalmente
 let userId;
 let audioChunks = [];
 let audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -703,22 +704,33 @@ async function updateOpenSkyData() {
 
 // Funciones de mapa
 function initMap() {
-    map = L.map('map').setView([-34.5597, -58.4116], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    var airplaneIcon = L.icon({
-        iconUrl: '/templates/airport.png',
-        iconSize: [30, 30],
-    });
-
-    L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
-        .bindPopup("Aeroparque").openPopup();
-
-    const searchBar = document.getElementById("search-bar");
-    searchBar.addEventListener("input", filterFlights);
+    console.log("Inicializando mapa...");
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) {
+        console.error("Contenedor #map no encontrado en el DOM");
+        alert("Error: No se puede cargar el mapa. Contenedor no encontrado.");
+        return;
+    }
+    try {
+        map = L.map('map').setView([-34.5597, -58.4116], 10); // Aeroparque, Buenos Aires
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        const airplaneIcon = L.icon({
+            iconUrl: '/templates/airport.png',
+            iconSize: [30, 30],
+        });
+        L.marker([-34.5597, -58.4116], { icon: airplaneIcon })
+            .addTo(map)
+            .bindPopup("Aeroparque")
+            .openPopup();
+        console.log("Mapa inicializado correctamente");
+        map.invalidateSize(); // Asegurar renderizado
+    } catch (error) {
+        console.error("Error al inicializar Leaflet:", error);
+        alert("Error al cargar el mapa. Verifica tu conexión o recarga la página.");
+    }
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1232,6 +1244,7 @@ function sendGroupMessage(audioData) {
 
 // Funciones de navegación
 function showGroupRadar() {
+    console.log("Mostrando radar desde grupo...");
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('radar-screen').style.display = 'block';
     if (!map) {
@@ -1250,6 +1263,7 @@ function showGroupHistory() {
 }
 
 function showRadar() {
+    console.log("Mostrando radar...");
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "block";
     if (!map) {
@@ -1313,8 +1327,25 @@ function base64ToBlob(base64, mime) {
         return null;
     }
 }
+function startPing() {
+    stopPing();
+    pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+            console.log("Ping enviado al servidor");
+        }
+    }, PING_INTERVAL);
+}
+
+function stopPing() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
+}
 
 function logout() {
+    console.log("Iniciando cierre de sesión...");
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
         ws.close();
@@ -1335,6 +1366,7 @@ function logout() {
     mutedUsers.clear();
     clearInterval(reconnectInterval);
     stopPing();
+    // Cambiar pantallas
     document.getElementById("register").style.display = "block";
     document.getElementById("main").style.display = "none";
     document.getElementById("group-screen").style.display = "none";
@@ -1342,6 +1374,7 @@ function logout() {
     document.getElementById("history-screen").style.display = "none";
     console.log("Sesión cerrada");
 }
+
 // Funciones de notificaciones
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
