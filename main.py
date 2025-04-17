@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 import sqlite3
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import logging
 import aiohttp
 import speech_recognition as sr
@@ -17,9 +18,6 @@ from pydub import AudioSegment
 import math
 from dotenv import load_dotenv
 from cachetools import TTLCache
-from flask import Flask, jsonify
-from flask_cors import CORS
-import requests
 
 # Configurar logging
 logging.basicConfig(
@@ -33,77 +31,73 @@ load_dotenv()
 
 # Inicializar FastAPI
 app = FastAPI()
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Ajusta según tu frontend en producción
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
-# Validar clave de AviationStack
+# Validar claves de API
+GOFLIGHTLABS_API_KEY = os.getenv("GOFLIGHTLABS_API_KEY")
 AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
-if not AVIATIONSTACK_API_KEY:
-    logger.error("Falta AVIATIONSTACK_API_KEY en las variables de entorno")
-    raise ValueError("AVIATIONSTACK_API_KEY no está configurada")
+if not GOFLIGHTLABS_API_KEY or not AVIATIONSTACK_API_KEY:
+    logger.error("Faltan claves de API en las variables de entorno")
+    raise ValueError("GOFLIGHTLABS_API_KEY o AVIATIONSTACK_API_KEY no están configuradas")
 
 # Cargar index.html
 with open("templates/index.html", "r") as f:
     INDEX_HTML = f.read()
 
+# Crear caché para GoFlightLabs
+cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos
 
-app = Flask(__name__)
-CORS(app)
-
-GOFLIGHTLABS_API_KEY = os.getenv('GOFLIGHTLABS_API_KEY')
-API_URL = 'https://www.goflightlabs.com/flights'
-
-# Crear caché con TTL de 5 minutos (300 segundos) y máximo 100 entradas
-cache = TTLCache(maxsize=100, ttl=300)
-
-@app.route('/aep_flights', methods=['GET'])
+# Ruta para obtener vuelos de Aeroparque (migrada de Flask a FastAPI)
+@app.get("/aep_flights")
 async def get_aep_flights():
-    # Crear una clave única para el caché basada en los parámetros
     cache_key = 'aep_flights_ar'
-
-    # Verificar si la respuesta está en el caché
     if cache_key in cache:
-        print('Sirviendo desde caché:', cache_key)
-        return jsonify(cache[cache_key])
-        
+        logger.info(f'Sirviendo desde caché: {cache_key}')
+        return cache[cache_key]
+
     try:
-        # Configurar parámetros de la API
         params = {
             'access_key': GOFLIGHTLABS_API_KEY,
-            'airline_iata': 'AR',  # Aerolíneas Argentinas
-            'dep_iata': 'AEP',     # Salidas desde Aeroparque
-            'arr_iata': 'AEP',     # Llegadas a Aeroparque
-            'flight_status': 'scheduled,active,landed'  # Estados relevantes
+            'airline_iata': 'AR',
+            'dep_iata': 'AEP',
+            'arr_iata': 'AEP',
+            'flight_status': 'scheduled,active,landed'
         }
+        async with aiohttp.ClientSession() as session:
+            async with session.get('https://www.goflightlabs.com/flights', params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
 
-        # Hacer solicitud a GoFlightLabs
-        response = requests.get(API_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
-
-        # Verificar si la solicitud fue exitosa
         if not data.get('success', False):
-            return jsonify({'error': 'Error en la API de GoFlightLabs', 'details': data.get('error', 'Unknown')}), 500
+            return JSONResponse(
+                content={'error': 'Error en la API de GoFlightLabs', 'details': data.get('error', 'Unknown')},
+                status_code=500
+            )
 
-        # Obtener el momento actual y el rango de 12 horas
         now = datetime.utcnow()
         time_min = now - timedelta(hours=12)
         time_max = now + timedelta(hours=12)
 
-        # Filtrar vuelos por rango de tiempo
         filtered_flights = []
         for flight in data.get('data', []):
-            # Obtener la hora de salida o llegada
             departure_time = flight.get('departure', {}).get('scheduled', '')
             arrival_time = flight.get('arrival', {}).get('scheduled', '')
-
-            # Convertir a datetime (asumiendo formato ISO 8601)
             try:
                 dep_dt = datetime.fromisoformat(departure_time.replace('Z', '+00:00')) if departure_time else None
                 arr_dt = datetime.fromisoformat(arrival_time.replace('Z', '+00:00')) if arrival_time else None
             except ValueError:
-                continue  # Saltar si la fecha no es válida
-
-            # Verificar si el vuelo está en el rango de tiempo
+                continue
             if (dep_dt and time_min <= dep_dt <= time_max) or (arr_dt and time_min <= arr_dt <= time_max):
                 filtered_flights.append({
                     'flight_number': flight.get('flight', {}).get('number', ''),
@@ -114,15 +108,24 @@ async def get_aep_flights():
                     'status': flight.get('flight_status', '')
                 })
 
-        return jsonify({'flights': filtered_flights})
+        response_data = {'flights': filtered_flights}
+        cache[cache_key] = response_data
+        logger.info(f'Respuesta cacheada: {cache_key}')
+        return response_data
 
-    except requests.RequestException as e:
-        return jsonify({'error': 'Error al consultar la API', 'details': str(e)}), 500
+    except aiohttp.ClientError as e:
+        return JSONResponse(
+            content={'error': 'Error al consultar la API', 'details': str(e)},
+            status_code=500
+        )
     except Exception as e:
-        return jsonify({'error': 'Error interno', 'details': str(e)}), 500
+        return JSONResponse(
+            content={'error': 'Error interno', 'details': str(e)},
+            status_code=500
+        )
 
-
-@app.get("/", response_class=HTMLResponse)
+# Ruta raíz
+@app.get("/")
 async def read_root():
     response = HTMLResponse(content=INDEX_HTML)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -240,13 +243,12 @@ async def get_opensky_data():
         logger.info("Devolviendo datos en caché de OpenSky")
         return opensky_cache["data"]
     try:
-        # Definir área alrededor de Aeroparque (lat: -34.6084, lon: -58.3732)
         url = "https://opensky-network.org/api/states/all"
         params = {
-            "lamin": -35.6084,  # Latitud mínima
-            "lomin": -59.3732,  # Longitud mínima
-            "lamax": -33.6084,  # Latitud máxima
-            "lomax": -57.3732   # Longitud máxima
+            "lamin": -35.6084,
+            "lomin": -59.3732,
+            "lamax": -33.6084,
+            "lomax": -57.3732
         }
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, timeout=10) as response:
@@ -267,7 +269,7 @@ async def get_opensky_data():
                                 "lat": lat,
                                 "lon": lon,
                                 "alt_geom": geo_altitude,
-                                "gs": velocity * 1.94384 if velocity else None,  # Convertir m/s a nudos
+                                "gs": velocity * 1.94384 if velocity else None,
                                 "vert_rate": vertical_rate,
                                 "origin_dest": "N/A",
                                 "heading": true_track
@@ -282,7 +284,6 @@ async def get_opensky_data():
                                     })
                                     break
                             combined_data.append(flight_info)
-                    # Añadir vuelos de AviationStack sin datos de OpenSky
                     for tams_flight in tams_data:
                         if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
                             combined_data.append({
@@ -321,7 +322,7 @@ async def update_flights():
         flights_cache = remove_duplicates(flights)
         if not flights_cache:
             logger.warning("No se encontraron vuelos de AviationStack")
-        await asyncio.sleep(300)  # 5 minutos
+        await asyncio.sleep(300)
 
 # Actualizar vuelos OpenSky periódicamente
 async def update_flights_periodically():
@@ -355,7 +356,7 @@ async def update_flights_periodically():
                 await broadcast_users()
         except Exception as e:
             logger.error(f"Error actualizando vuelos: {e}")
-        await asyncio.sleep(10)  # 10 segundos
+        await asyncio.sleep(10)
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
