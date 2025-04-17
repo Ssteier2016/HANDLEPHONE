@@ -77,7 +77,7 @@ global_mute_active = False  # Estado de muteo general
 airplanes_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos
 
 # Función para filtrar vuelos cerca de Aeroparque
-def is_near_aeroparque(lat, lon, max_distance_km=1000):
+def is_near_aeroparque(lat, lon, max_distance_km=1500):
     """Verifica si un vuelo está a menos de max_distance_km de Aeroparque (AEP)."""
     aep_lat, aep_lon = -34.6084, -58.3732
     dlat = math.radians(lat - aep_lat)
@@ -99,11 +99,11 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
         "airline_iata": "AR",
         "limit": 100
     }
-    retries = 3
+    retries = 5  # Aumentado para mayor robustez
     for attempt in range(retries):
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(url, params=params, timeout=10) as response:
+                async with session.get(url, params=params, timeout=15) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {response.status} {error_text}")
@@ -178,6 +178,7 @@ async def update_flights():
                     except Exception as e:
                         logger.error(f"Error al enviar vuelos: {e}")
                         user["websocket"] = None
+                        user["logged_in"] = False
         else:
             logger.warning("No se encontraron vuelos")
         await asyncio.sleep(300)  # 5 minutos
@@ -203,13 +204,13 @@ async def transcribe_audio(audio_data):
             return text
     except sr.UnknownValueError:
         logger.warning("No se pudo transcribir el audio")
-        return "No se pudo transcribir"
+        return "Transcripción no disponible"
     except sr.RequestError as e:
         logger.error(f"Error en la transcripción: {e}")
-        return f"Error en la transcripción: {e}"
+        return "Transcripción no disponible"
     except Exception as e:
         logger.error(f"Error al procesar el audio: {e}")
-        return f"Error al procesar el audio: {e}"
+        return "Transcripción no disponible"
     finally:
         audio_file.close()
         wav_io.close()
@@ -217,18 +218,15 @@ async def transcribe_audio(audio_data):
 # Función para procesar consultas de búsqueda
 async def process_search_query(query, flights):
     """Busca vuelos según la consulta del usuario."""
-    query = query.lower()
+    query = query.lower().strip()
     results = []
-    if "demorado" in query or "demorados" in query:
-        results = [f for f in flights if f["Estado"].lower() == "demorado"]
-    elif "a " in query:
-        destination = query.split("a ")[-1].strip()
-        results = [f for f in flights if destination in f["Destino"].lower()]
-    elif "ar" in query:
-        flight_number = query.upper().split("AR")[-1].strip()
-        results = [f for f in flights if f["Vuelo"] == f"AR{flight_number}"]
-    else:
-        results = flights
+    # Búsqueda flexible
+    for flight in flights:
+        if (query in flight["Vuelo"].lower() or
+            query in flight["Destino"].lower() or
+            query in flight["Estado"].lower() or
+            "ar" + query in flight["Vuelo"].lower()):
+            results.append(flight)
     if not results:
         return "No se encontraron vuelos para tu consulta."
     return ", ".join([f"{f['Vuelo']} a {f['Destino']}, {f['Estado']}" for f in results])
@@ -242,7 +240,7 @@ async def get_airplanes_live_data():
     try:
         url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
+            async with session.get(url, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
                     airplanes_cache["data"] = data.get("ac", [])
@@ -264,6 +262,7 @@ async def get_flightradar24_data():
         local_flights = [
             flight for flight in flights
             if is_near_aeroparque(flight.latitude, flight.longitude)
+            and flight.latitude is not None and flight.longitude is not None
         ]
         return [
             {
@@ -275,7 +274,7 @@ async def get_flightradar24_data():
                 "status": "Activo",
                 "scheduled": "N/A"
             }
-            for flight in local_flights[:5]
+            for flight in local_flights[:10]  # Aumentado a 10 para más resultados
         ]
     except Exception as e:
         logger.error(f"Error al obtener FlightRadar24: {str(e)}")
@@ -312,6 +311,7 @@ async def update_fr24_flights():
                     except Exception as e:
                         logger.error(f"Error al enviar vuelos FR24: {e}")
                         user["websocket"] = None
+                        user["logged_in"] = False
         else:
             logger.warning("No se encontraron vuelos FlightRadar24")
         await asyncio.sleep(60)  # 1 minuto
@@ -467,7 +467,7 @@ async def process_audio_queue():
 
             logger.info(f"Procesando audio de {sender} ({function})")
 
-            if global_mute_active:
+                        if global_mute_active:
                 logger.info("Muteo global activo, audio no transmitido")
                 audio_queue.task_done()
                 continue
@@ -491,23 +491,34 @@ async def process_audio_queue():
                 "timestamp": timestamp,
                 "data": audio_data
             }
+            disconnected_users = []
             for user_token, user in list(users.items()):
                 if user_token == token:
                     continue
+                if not user["logged_in"] or not user["websocket"]:
+                    disconnected_users.append(user_token)
+                    continue
                 muted_users = user.get("muted_users", set())
                 sender_id = f"{sender}_{function}"
-                if sender_id in muted_users or user.get("group_id"):
+                if sender_id in muted_users:
+                    logger.info(f"{sender_id} muteado por {user['name']}")
                     continue
-                ws = user.get("websocket")
-                if ws:
-                    try:
-                        await ws.send_json(broadcast_message)
-                        logger.info(f"Mensaje enviado a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar a {user['name']}: {e}")
-                        user["websocket"] = None
-                        users[user_token]["logged_in"] = False
-                        await broadcast_users()
+                try:
+                    await user["websocket"].send_json(broadcast_message)
+                    logger.info(f"Mensaje audio enviado a {user['name']}")
+                except Exception as e:
+                    logger.error(f"Error al enviar a {user['name']}: {e}")
+                    disconnected_users.append(user_token)
+
+            # Limpiar usuarios desconectados
+            for user_token in disconnected_users:
+                if user_token in users:
+                    users[user_token]["websocket"] = None
+                    users[user_token]["logged_in"] = False
+                    logger.info(f"Usuario {user_token} marcado como desconectado")
+            if disconnected_users:
+                await broadcast_users()
+
         except Exception as e:
             logger.error(f"Error procesando audio queue: {e}")
         finally:
@@ -634,6 +645,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 delete_session(token)
                 if token in users:
                     del users[token]
+                await websocket.send_json({"type": "logout_success", "message": "Sesión cerrada"})
                 await broadcast_users()
                 await websocket.close()
                 logger.info(f"Usuario {token} cerró sesión")
@@ -689,8 +701,38 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await websocket.send_json({"type": "unmute_success", "message": "Mute desactivado"})
                 logger.info(f"{users[token]['name']} desactivó mute local")
 
+            elif message["type"] == "create_group":
+                group_id = message["group_id"]
+                is_private = message.get("is_private", False)
+                if group_id not in groups:
+                    groups[group_id] = []
+                    groups[group_id].append(token)
+                    users[token]["group_id"] = group_id
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        group_id,
+                        users[token]["muted_users"]
+                    )
+                    await websocket.send_json({
+                        "type": "create_group_success",
+                        "group_id": group_id,
+                        "is_private": is_private
+                    })
+                    logger.info(f"{users[token]['name']} creó grupo {'privado' if is_private else 'público'} {group_id}")
+                    await broadcast_users()
+                else:
+                    await websocket.send_json({
+                        "type": "create_group_error",
+                        "message": "El grupo ya existe"
+                    })
+                    logger.warning(f"Intento de crear grupo existente {group_id} por {users[token]['name']}")
+
             elif message["type"] == "join_group":
                 group_id = message["group_id"]
+                is_private = message.get("is_private", False)
                 if group_id not in groups:
                     groups[group_id] = []
                 if token not in groups[group_id]:
@@ -704,13 +746,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     group_id,
                     users[token]["muted_users"]
                 )
-                await websocket.send_json({"type": "join_group", "group_id": group_id})
+                await websocket.send_json({
+                    "type": "join_group",
+                    "group_id": group_id,
+                    "is_private": is_private
+                })
                 logger.info(f"{users[token]['name']} se unió al grupo {group_id}")
                 await broadcast_users()
 
-            elif message["type"] == "leave_group":
-                group_id = message["group_id"]
-                if token and group_id in groups:
+             elif message["type"] == "leave_group":
+                group_id = users[token]["group_id"]
+                if group_id and group_id in groups:
                     if token in groups[group_id]:
                         groups[group_id].remove(token)
                     if not groups[group_id]:
@@ -724,15 +770,23 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         None,
                         users[token]["muted_users"]
                     )
-                    await broadcast_users()
+                    await websocket.send_json({
+                        "type": "leave_group_success",
+                        "group_id": group_id
+                    })
                     logger.info(f"{users[token]['name']} salió del grupo {group_id}")
+                    await broadcast_users()
 
             elif message["type"] == "check_group":
                 group_id = message["group_id"]
                 in_group = False
-                if token and group_id in groups and token in groups[group_id]:
+                if group_id in groups and token in groups[group_id]:
                     in_group = True
-                await websocket.send_json({"type": "check_group", "group_id": group_id, "in_group": in_group})
+                await websocket.send_json({
+                    "type": "check_group",
+                    "group_id": group_id,
+                    "in_group": in_group
+                })
                 logger.info(f"Verificación grupo para {users[token]['name']}: {'está' if in_group else 'no está'} en {group_id}")
 
             elif message["type"] == "group_message":
@@ -765,6 +819,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "data": audio_data,
                         "group_id": group_id
                     }
+                    disconnected_users = []
                     for user_token in groups[group_id]:
                         if user_token == token:
                             continue
@@ -773,17 +828,24 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             muted_users = user.get("muted_users", set())
                             sender_id = f"{users[token]['name']}_{users[token]['function']}"
                             if sender_id in muted_users:
+                                logger.info(f"{sender_id} muteado por {user['name']} en grupo")
                                 continue
                             ws = user.get("websocket")
-                            if ws:
+                            if ws and user["logged_in"]:
                                 try:
                                     await ws.send_json(broadcast_message)
                                     logger.info(f"Mensaje grupo enviado a {user['name']} en {group_id}")
                                 except Exception as e:
                                     logger.error(f"Error al enviar grupo a {user['name']}: {e}")
-                                    user["websocket"] = None
-                                    users[user_token]["logged_in"] = False
-                                    await broadcast_users()
+                                    disconnected_users.append(user_token)
+                    # Limpiar usuarios desconectados
+                    for user_token in disconnected_users:
+                        if user_token in users:
+                            users[user_token]["websocket"] = None
+                            users[user_token]["logged_in"] = False
+                            logger.info(f"Usuario {user_token} marcado como desconectado en grupo")
+                    if disconnected_users:
+                        await broadcast_users()
 
             elif message["type"] == "search_query":
                 response = await process_search_query(message["query"], flights_cache)
@@ -824,6 +886,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
 async def broadcast_global_mute_state(message_type, message_text):
     """Difunde el estado de muteo global a todos los usuarios conectados."""
+    disconnected_users = []
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"]:
             try:
@@ -831,37 +894,48 @@ async def broadcast_global_mute_state(message_type, message_text):
                 logger.info(f"Estado mute global ({message_type}) a {user['name']}")
             except Exception as e:
                 logger.error(f"Error al enviar mute global a {user['name']}: {e}")
+                disconnected_users.append(user["name"])
                 user["websocket"] = None
                 user["logged_in"] = False
-                await broadcast_users()
+    if disconnected_users:
+        await broadcast_users()
 
 async def broadcast_users():
     """Difunde la lista de usuarios conectados."""
     user_list = []
     for token in users:
-        if users[token]["logged_in"]:
+        if users[token]["logged_in"] and users[token]["websocket"]:
             decoded_token = base64.b64decode(token).decode('utf-8', errors='ignore')
-            legajo, name, _ = decoded_token.split('_', 2)
+            legajo, name, _ = decoded_token.split('_', 2) if '_' in decoded_token else (token, "Anónimo", "Desconocida")
             user_id = f"{users[token]['name']}_{users[token]['function']}"
             user_list.append({
                 "display": f"{users[token]['name']} ({legajo})",
                 "user_id": user_id,
                 "group_id": users[token]["group_id"]
             })
-    for user in list(users.values()):
+    disconnected_users = []
+    for token, user in list(users.items()):
         if user["logged_in"] and user["websocket"]:
             try:
-                await user["websocket"].send_text(json.dumps({
+                await user["websocket"].send_json({
                     "type": "users",
                     "count": len(user_list),
                     "list": user_list
-                }))
+                })
                 logger.info(f"Lista usuarios enviada a {user['name']}")
             except Exception as e:
-                logger.error(f"Error al enviar usuarios: {e}")
+                logger.error(f"Error al enviar usuarios a {user['name']}: {e}")
+                disconnected_users.append(token)
                 user["websocket"] = None
                 user["logged_in"] = False
-                
+    if disconnected_users:
+        for token in disconnected_users:
+            if token in users:
+                users[token]["websocket"] = None
+                users[token]["logged_in"] = False
+                logger.info(f"Usuario {token} marcado como desconectado en broadcast_users")
+        await broadcast_users()  # Reenviar tras limpiar
+
 @app.get("/history")
 async def get_history_endpoint():
     """Obtiene el historial de mensajes."""
@@ -870,7 +944,7 @@ async def get_history_endpoint():
     return history
 
 async def clear_messages():
-    """Programa la limpieza de mensajes (no modificada)."""
+    """Programa la limpieza de mensajes."""
     while True:
         now = datetime.utcnow()
         start_time = datetime.utcnow().replace(hour=5, minute=30, second=0, microsecond=0)
