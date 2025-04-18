@@ -308,7 +308,7 @@ function openFlightDetailsModal() {
     const modal = document.getElementById('flight-details-modal');
     const modalTableBody = document.getElementById('modal-flight-table').querySelector('tbody');
     const mainTableBody = document.querySelector('#flights-table tbody');
-    
+
     if (!modal || !modalTableBody || !mainTableBody) {
         console.error('Elementos del modal o tabla no encontrados');
         return;
@@ -316,6 +316,21 @@ function openFlightDetailsModal() {
 
     modalTableBody.innerHTML = mainTableBody.innerHTML || '<tr><td colspan="6">No hay datos disponibles</td></tr>';
     modal.style.display = 'block';
+
+    // Agregar interactividad a las filas
+    modalTableBody.querySelectorAll('tr').forEach(row => {
+        row.addEventListener('click', async () => {
+            const flightNumber = row.cells[0].textContent;
+            try {
+                const response = await fetch(`/flight_details/${flightNumber}`);
+                const details = await response.json();
+                alert(`Detalles del vuelo ${flightNumber}: ${JSON.stringify(details)}`);
+            } catch (error) {
+                console.error('Error al obtener detalles:', error);
+                alert('Error al cargar detalles del vuelo');
+            }
+        });
+    });
 }
 
 // Cerrar modal de detalles de vuelos
