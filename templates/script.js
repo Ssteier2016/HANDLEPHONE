@@ -308,7 +308,7 @@ function openFlightDetailsModal() {
     const modal = document.getElementById('flight-details-modal');
     const modalTableBody = document.getElementById('modal-flight-table').querySelector('tbody');
     const mainTableBody = document.querySelector('#flights-table tbody');
-
+    
     if (!modal || !modalTableBody || !mainTableBody) {
         console.error('Elementos del modal o tabla no encontrados');
         return;
@@ -321,16 +321,44 @@ function openFlightDetailsModal() {
     modalTableBody.querySelectorAll('tr').forEach(row => {
         row.addEventListener('click', async () => {
             const flightNumber = row.cells[0].textContent;
-            try {
-                const response = await fetch(`/flight_details/${flightNumber}`);
-                const details = await response.json();
-                alert(`Detalles del vuelo ${flightNumber}: ${JSON.stringify(details)}`);
-            } catch (error) {
-                console.error('Error al obtener detalles:', error);
-                alert('Error al cargar detalles del vuelo');
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Usar WebSocket para obtener detalles
+                ws.send(JSON.stringify({
+                    type: 'flight_details_request',
+                    flight_number: flightNumber
+                }));
+            } else {
+                // Fallback a HTTP
+                try {
+                    const response = await fetch(`/flight_details/${flightNumber}`);
+                    if (!response.ok) throw new Error('Error al obtener detalles');
+                    const details = await response.json();
+                    displayFlightDetails(details);
+                } catch (error) {
+                    console.error('Error al obtener detalles:', error);
+                    alert('Error al cargar detalles del vuelo');
+                }
             }
         });
     });
+
+    // Manejar búsqueda en el modal
+    const modalSearch = document.getElementById('modal-search');
+    if (modalSearch) {
+        modalSearch.value = localStorage.getItem('modalSearchTerm') || '';
+        modalSearch.addEventListener('input', async (e) => {
+            const query = e.target.value.trim();
+            localStorage.setItem('modalSearchTerm', query);
+            try {
+                const response = await fetch(`/aep_flights?query=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('Error al filtrar vuelos');
+                const { flights } = await response.json();
+                updateModalFlightTable(flights);
+            } catch (error) {
+                console.error('Error al filtrar vuelos:', error);
+            }
+        });
+    }
 }
 
 // Cerrar modal de detalles de vuelos
