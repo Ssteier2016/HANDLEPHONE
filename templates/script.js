@@ -19,6 +19,7 @@ let startX = 0;
 let currentX = 0;
 let flightData = [];
 let reconnectInterval = null;
+let flightInterval = null;
 const PING_INTERVAL = 30000; // Ping cada 30 segundos
 const RECONNECT_BASE_DELAY = 5000; // Reintento base cada 5 segundos
 const SYNC_TAG = 'sync-messages'; // Tag para sincronización
@@ -63,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         checkGroupStatus();
     }
 
+    // Botón de registro
     const registerButton = document.getElementById('register-button');
     if (registerButton) {
         registerButton.addEventListener('click', register);
@@ -70,11 +72,55 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Botón de registro no encontrado en el DOM");
     }
 
+    // Botón de búsqueda
     const searchButton = document.getElementById('search-button');
     if (searchButton) {
         searchButton.addEventListener('click', sendSearchQuery);
     } else {
         console.error("Botón de búsqueda no encontrado en el DOM");
+    }
+
+    // Botones de detalles de vuelos
+    document.querySelectorAll('#flight-details-button').forEach(button => {
+        button.addEventListener('click', openFlightDetailsModal);
+    });
+
+    // Botón de cerrar modal
+    const closeModal = document.getElementById('close-modal');
+    if (closeModal) {
+        closeModal.addEventListener('click', closeFlightDetailsModal);
+    } else {
+        console.error("Botón #close-modal no encontrado en el DOM");
+    }
+
+    // Cerrar modal al hacer clic fuera
+    const flightDetailsModal = document.getElementById('flight-details-modal');
+    if (flightDetailsModal) {
+        flightDetailsModal.addEventListener('click', (e) => {
+            if (e.target === flightDetailsModal) {
+                closeFlightDetailsModal();
+            }
+        });
+    } else {
+        console.error("Elemento #flight-details-modal no encontrado en el DOM");
+    }
+
+    // Botón de logout
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await fetch('/logout', { method: 'POST' });
+                completeLogout();
+                showScreen('register');
+                stopFlightUpdates();
+            } catch (error) {
+                console.error('Error al cerrar sesión:', error);
+                alert('Error al cerrar sesión. Intenta de nuevo.');
+            }
+        });
+    } else {
+        console.error("Botón #logout-button no encontrado en el DOM");
     }
 
     checkNotificationPermission();
@@ -110,19 +156,19 @@ function showScreen(screenId) {
         .forEach(screen => screen.style.display = 'none');
     document.getElementById(screenId).style.display = 'block';
 
-    // Iniciar actualización de vuelos solo en la pantalla principal
-    if (screenId === 'main') {
-        fetchAEPFlights(); // Carga inicial
-        startFlightUpdates(); // Inicia el setInterval
+    // Iniciar actualización de vuelos solo en la pantalla principal o grupo
+    if (screenId === 'main' || screenId === 'group-screen') {
+        fetchAEPFlights();
+        startFlightUpdates();
     } else {
-        stopFlightUpdates(); // Detiene el setInterval en otras pantallas
+        stopFlightUpdates();
     }
 }
 
 // Iniciar actualizaciones de vuelos
 function startFlightUpdates() {
-    stopFlightUpdates(); // Limpia cualquier intervalo previo
-    flightInterval = setInterval(fetchAEPFlights, 5 * 60 * 1000); // Cada 5 minutos
+    stopFlightUpdates();
+    flightInterval = setInterval(fetchAEPFlights, 5 * 60 * 1000);
     console.log('Iniciando actualizaciones de vuelos cada 5 minutos');
 }
 
@@ -135,6 +181,7 @@ function stopFlightUpdates() {
     }
 }
 
+// Encolar mensajes para sincronización
 function queueMessageForSync(message) {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
@@ -163,111 +210,6 @@ function unlockAudio() {
         });
     }
 }
-async function fetchAEPFlights() {
-    try {
-        const response = await fetch('/aep_flights');
-        const data = await response.json();
-
-        if (data.error) {
-            console.error('Error al obtener vuelos:', data.details);
-            return;
-        }
-
-        // Limpiar marcadores existentes (si usas Mapbox)
-        if (window.flightMarkers) {
-            window.flightMarkers.forEach(marker => marker.remove());
-        }
-        window.flightMarkers = [];
-
-        // Mostrar vuelos en el radar o en una tabla
-        data.flights.forEach(flight => {
-            // Ejemplo: Añadir marcador en el radar (ajusta lat/lng según datos reales)
-            if (flight.status === 'active' && map) {  // Asumiendo que 'map' es tu instancia de Mapbox
-                const marker = new mapboxgl.Marker()
-                    .setLngLat([flight.longitude || -58.3897, flight.latitude || -34.6037])  // Ajusta con datos reales
-                    .setPopup(new mapboxgl.Popup().setHTML(`
-                        <h3>Vuelo ${flight.flight_number}</h3>
-                        <p>Origen: ${flight.departure_airport}</p>
-                        <p>Destino: ${flight.arrival_airport}</p>
-                        <p>Salida: ${new Date(flight.departure_time).toLocaleString()}</p>
-                        <p>Llegada: ${new Date(flight.arrival_time).toLocaleString()}</p>
-                        <p>Estado: ${flight.status}</p>
-                    `))
-                    .addTo(map);
-                window.flightMarkers.push(marker);
-            }
-
-            // Ejemplo: Añadir a una tabla
-            const tableBody = document.querySelector('#flights-table tbody');
-            if (tableBody) {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${flight.flight_number}</td>
-                    <td>${flight.departure_airport}</td>
-                    <td>${new Date(flight.departure_time).toLocaleString()}</td>
-                    <td>${flight.arrival_airport}</td>
-                    <td>${new Date(flight.arrival_time).toLocaleString()}</td>
-                    <td>${flight.status}</td>
-                `;
-                tableBody.appendChild(row);
-            }
-        });
-    } catch (error) {
-        console.error('Error al cargar vuelos:', error);
-    }
-}
-
-// Obtener vuelos de Aeroparque
-async function fetchAEPFlights() {
-    try {
-        const response = await fetch('/aep_flights');
-        if (!response.ok) {
-            throw new Error('Error al obtener vuelos');
-        }
-        const data = await response.json();
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        const tbody = document.querySelector('#flights-table tbody');
-        tbody.innerHTML = '';
-        data.flights.forEach(flight => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${flight.flight_number}</td>
-                <td>${flight.departure_airport}</td>
-                <td>${new Date(flight.departure_time).toLocaleString()}</td>
-                <td>${flight.arrival_airport}</td>
-                <td>${new Date(flight.arrival_time).toLocaleString()}</td>
-                <td>${flight.status}</td>
-            `;
-            tbody.appendChild(row);
-        });
-    } catch (error) {
-        console.error('Error en fetchAEPFlights:', error);
-        const tbody = document.querySelector('#flights-table tbody');
-        tbody.innerHTML = '<tr><td colspan="6">Error al cargar vuelos</td></tr>';
-    }
-}
-
-// Manejo del botón de logout
-document.getElementById('logout-btn').addEventListener('click', async () => {
-    try {
-        await fetch('/logout', { method: 'POST' });
-        showScreen('register');
-        stopFlightUpdates(); // Detener actualizaciones al cerrar sesión
-    } catch (error) {
-        console.error('Error al cerrar sesión:', error);
-    }
-});
-
-// Inicialización al cargar la página
-document.addEventListener('DOMContentLoaded', () => {
-    showScreen('register'); // Mostrar pantalla de login inicialmente
-});
-
-// Actualizar vuelos cada 5 minutos
-setInterval(fetchAEPFlights, 5 * 60 * 1000);
-fetchAEPFlights(); // Cargar al inicio
 
 async function requestMicPermission() {
     try {
@@ -313,6 +255,75 @@ function playNextAudio() {
         isPlaying = false;
         playNextAudio();
     });
+}
+
+// Obtener vuelos de Aeroparque
+async function fetchAEPFlights() {
+    try {
+        const response = await fetch('/aep_flights');
+        if (!response.ok) {
+            throw new Error(`Error al obtener vuelos: ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        localStorage.setItem('flightData', JSON.stringify(data.flights));
+        updateFlightTable(data.flights);
+    } catch (error) {
+        console.error('Error en fetchAEPFlights:', error);
+        const cachedFlights = JSON.parse(localStorage.getItem('flightData')) || [];
+        if (cachedFlights.length > 0) {
+            updateFlightTable(cachedFlights);
+        } else {
+            const tbody = document.querySelector('#flights-table tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="6">Error al cargar vuelos</td></tr>';
+            }
+        }
+    }
+}
+
+function updateFlightTable(flights) {
+    const tbodies = document.querySelectorAll('#flights-table tbody');
+    tbodies.forEach(tbody => {
+        tbody.innerHTML = '';
+        flights.forEach(flight => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${flight.flight_number || 'N/A'}</td>
+                <td>${flight.departure_airport || 'N/A'}</td>
+                <td>${flight.departure_time ? new Date(flight.departure_time).toLocaleString() : 'N/A'}</td>
+                <td>${flight.arrival_airport || 'N/A'}</td>
+                <td>${flight.arrival_time ? new Date(flight.arrival_time).toLocaleString() : 'N/A'}</td>
+                <td>${flight.status || 'Desconocido'}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    });
+}
+
+// Abrir modal de detalles de vuelos
+function openFlightDetailsModal() {
+    const modal = document.getElementById('flight-details-modal');
+    const modalTableBody = document.getElementById('modal-flight-table').querySelector('tbody');
+    const mainTableBody = document.querySelector('#flights-table tbody');
+    
+    if (!modal || !modalTableBody || !mainTableBody) {
+        console.error('Elementos del modal o tabla no encontrados');
+        return;
+    }
+
+    modalTableBody.innerHTML = mainTableBody.innerHTML || '<tr><td colspan="6">No hay datos disponibles</td></tr>';
+    modal.style.display = 'block';
+}
+
+// Cerrar modal de detalles de vuelos
+function closeFlightDetailsModal() {
+    const modal = document.getElementById('flight-details-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 // Funciones de búsqueda
@@ -438,6 +449,11 @@ function register() {
 }
 
 function connectWebSocket(sessionToken, retryCount = 0) {
+    if (retryCount >= 5) {
+        alert('No se pudo reconectar al servidor después de varios intentos.');
+        completeLogout();
+        return;
+    }
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1})`);
     try {
@@ -464,8 +480,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         } else {
             console.error("Elemento #main no encontrado en el DOM");
         }
-        updateUsers(0, []); // Forzar actualización inicial de usuarios
-        updateOpenSkyData();
+        updateUsers(0, []);
         startPing();
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.ready.then(registration => {
@@ -532,13 +547,13 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                 message.user_ids.forEach(userId => mutedUsers.add(userId));
                 updateUsers(message.count, message.list);
                 document.getElementById("mute-non-group").classList.add("muted");
-                document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
+                document.getElementById("mute-non-group").innerHTML = '<img src="/templates/mute.png" alt="Desmutear" style="width: 24px; height: 24px;">';
                 console.log("Usuarios fuera del grupo muteados");
             } else if (message.type === "unmute_non_group_success") {
                 message.user_ids.forEach(userId => mutedUsers.delete(userId));
                 updateUsers(message.count, message.list);
                 document.getElementById("mute-non-group").classList.remove("muted");
-                document.getElementById("mute-non-group").textContent = "Mutear no grupo";
+                document.getElementById("mute-non-group").innerHTML = '<img src="/templates/mute.png" alt="Silenciar" style="width: 24px; height: 24px;">';
                 console.log("Usuarios fuera del grupo desmuteados");
             } else if (message.type === "group_joined") {
                 currentGroup = message.group_id;
@@ -575,10 +590,9 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                 }
             } else if (message.type === "flight_update") {
                 updateFlightDetails(message.flights, "#flight-details");
-                updateFlightDetails(message.flights, "#group-flight-details");
+                updateFlightTable(message.flights);
             } else if (message.type === "aa2000_flight_update") {
                 updateFlightDetailsAA2000(message.flights, "#flight-details");
-                updateFlightDetailsAA2000(message.flights, "#group-flight-details");
             } else if (message.type === "fr24_update") {
                 updateFlightRadar24Markers(message.flights);
                 console.log("Actualización FlightRadar24 recibida:", message.flights);
@@ -588,7 +602,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                 console.log("Registro exitoso:", message.message);
             } else if (message.type === "logout_success") {
                 console.log("Cierre de sesión exitoso");
-                logout(); // Completar el cierre de sesión
+                completeLogout();
             } else if (message.type === "pong") {
                 console.log("Pong recibido del servidor");
             } else {
@@ -645,10 +659,15 @@ function updateFlightDetails(flights, containerId) {
         console.error(`Elemento ${containerId} no encontrado en el DOM`);
         return;
     }
-    container.innerHTML = "";
+    const tbody = container.querySelector('#flights-table tbody');
+    if (!tbody) {
+        console.error(`Tabla #flights-table no encontrada en ${containerId}`);
+        return;
+    }
+    tbody.innerHTML = "";
     flights.forEach(state => {
-        const flight = state.flight || "N/A"; // Actualizado: Usar 'flight' en lugar de 'Vuelo'
-        const scheduled = state.scheduled || "N/A"; // Actualizado: Usar 'scheduled'
+        const flight = state.flight || "N/A";
+        const scheduled = state.scheduled || "N/A";
         const position = state.position || "N/A";
         const destination = state.destination || "N/A";
         const registration = state.registration || "LV-XXX";
@@ -657,23 +676,21 @@ function updateFlightDetails(flights, containerId) {
         if (flight.startsWith("AR") || flight.startsWith("ARG")) {
             const flightNumber = flight.replace("ARG", "").replace("AR", "");
             const displayFlight = `AEP${flightNumber}`;
-            const flightDiv = document.createElement("div");
-            flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
-            flightDiv.innerHTML = `
-                <strong>Vuelo:</strong> ${displayFlight} |
-                <strong>STD:</strong> ${scheduled} |
-                <strong>Posición:</strong> ${position} |
-                <strong>Destino:</strong> ${destination} |
-                <strong>Matrícula:</strong> ${registration} |
-                <strong>Estado:</strong> ${status}
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${displayFlight}</td>
+                <td>${position}</td>
+                <td>${scheduled}</td>
+                <td>${destination}</td>
+                <td>${registration}</td>
+                <td>${status}</td>
             `;
-            container.appendChild(flightDiv);
+            tbody.appendChild(row);
         }
     });
-    container.scrollTop = container.scrollHeight;
 }
 
-// Comentado: Mantengo la función original para AA2000, pero no se usa con el nuevo main.py
+// Comentado: Mantengo para referencia futura
 /*
 function updateFlightDetailsAA2000(flights, containerId) {
     const container = document.getElementById(containerId.slice(1));
@@ -704,10 +721,7 @@ function updateFlightDetailsAA2000(flights, containerId) {
     });
     container.scrollTop = container.scrollHeight;
 }
-*/
 
-// Comentado: Mantengo la función original para FlightRadar24, pero no se usa con el nuevo main.py
-/*
 function updateFlightRadar24Markers(flights) {
     if (map) {
         markers = markers.filter(marker => !marker.isFlightRadar24);
@@ -732,11 +746,11 @@ function updateFlightRadar24Markers(flights) {
 
 // Nueva función: Actualizar datos de OpenSky en el mapa
 function updateOpenSkyData(flightsData) {
-    if (!map) return; // Mapa no inicializado
+    if (!map) return;
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
+    let flightPaths = {};
     Object.values(flightPaths).forEach(path => map.removeLayer(path));
-    flightPaths = {};
 
     const planeIcon = L.icon({
         iconUrl: '/templates/airplane.png',
@@ -766,7 +780,6 @@ function updateOpenSkyData(flightsData) {
     });
     console.log("Marcadores OpenSky actualizados:", markers.length);
 
-    // Mantener el marcador de Aeroparque
     const airplaneIcon = L.icon({
         iconUrl: '/templates/airport.png',
         iconSize: [30, 30],
@@ -778,7 +791,7 @@ function updateOpenSkyData(flightsData) {
     markers.push(aeroparqueMarker);
 }
 
-// Nueva función: Actualizar posiciones animadas de los vuelos
+// Nueva funcion: Actualizar posiciones animadas de los vuelos
 function updateFlightPositions(flightsData) {
     flightsData.forEach(flight => {
         if (flight.lat && flight.lon) {
@@ -796,148 +809,6 @@ function updateFlightPositions(flightsData) {
     console.log("Posiciones de vuelos actualizadas");
 }
 
-// Comentado: Mantengo la función original, pero ahora usamos updateOpenSkyData
-/*
-async function updateOpenSkyData() {
-    try {
-        let openskyData = [];
-        let aa2000Data = [];
-
-        try {
-            const openskyResponse = await fetch('/opensky');
-            if (openskyResponse.ok) {
-                openskyData = await openskyResponse.json();
-                console.log("Datos recibidos de /opensky:", openskyData);
-            } else {
-                console.warn("Error al cargar /opensky:", openskyResponse.status);
-            }
-        } catch (error) {
-            console.error("Error en la solicitud a /opensky:", error);
-        }
-
-        try {
-            const aa2000Response = await fetch('/aa2000_flights');
-            if (aa2000Response.ok) {
-                aa2000Data = await aa2000Response.json();
-                console.log("Datos recibidos de /aa2000_flights:", aa2000Data);
-            } else {
-                console.warn("Error al cargar /aa2000_flights:", aa2000Response.status);
-                aa2000Data = [];
-            }
-        } catch (error) {
-            console.error("Error en la solicitud a /aa2000_flights:", error);
-            aa2000Data = [];
-        }
-
-        const flightDetails = document.getElementById("flight-details");
-        const groupFlightDetails = document.getElementById("group-flight-details");
-        if (!flightDetails || !groupFlightDetails) {
-            console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
-            return;
-        }
-        flightDetails.innerHTML = "";
-        groupFlightDetails.innerHTML = "";
-        flightData = openskyData;
-
-        if (map) {
-            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
-        }
-
-        if (openskyData.error) {
-            console.warn("Error en Airplanes.Live:", openskyData.error);
-            flightDetails.textContent = "Esperando datos de Airplanes.Live...";
-            groupFlightDetails.textContent = "Esperando datos de Airplanes.Live...";
-        } else {
-            openskyData.forEach(state => {
-                const lat = state.lat;
-                const lon = state.lon;
-                const flight = state.flight ? state.flight.trim() : 'N/A';
-                const registration = state.registration || "LV-XXX";
-                const speed = state.gs;
-                const altitude = state.alt_geom || 0;
-                const verticalRate = state.vert_rate || 0;
-                const originDest = state.origin_dest || "N/A";
-                const scheduled = state.scheduled || "N/A";
-                const position = state.position || "N/A";
-                const destination = state.destination || "N/A";
-                const status = state.status || getFlightStatus(altitude, speed, verticalRate);
-
-                if (flight.startsWith("AR") || flight.startsWith("ARG")) {
-                    const flightNumber = flight.replace("ARG", "").replace("AR", "");
-                    const displayFlight = `AEP${flightNumber}`;
-                    const flightDiv = document.createElement("div");
-                    flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
-                    flightDiv.innerHTML = `
-                        <strong>Vuelo:</strong> ${displayFlight} |
-                        <strong>STD:</strong> ${scheduled} |
-                        <strong>Posición:</strong> ${position} |
-                        <strong>Destino:</strong> ${destination} |
-                        <strong>Matrícula:</strong> ${registration} |
-                        <strong>Estado:</strong> ${status}
-                    `;
-                    flightDetails.appendChild(flightDiv);
-                    groupFlightDetails.appendChild(flightDiv.cloneNode(true));
-
-                    if (lat && lon && map) {
-                        const marker = L.marker([lat, lon], {
-                            icon: L.icon({
-                                iconUrl: '/templates/aero.png',
-                                iconSize: [30, 30]
-                            })
-                        }).addTo(map)
-                          .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
-                        marker.flight = flight;
-                        marker.registration = registration;
-                        markers.push(marker);
-                    }
-                }
-            });
-        }
-if (!Array.isArray(aa2000Data)) {
-            console.warn("Datos de AA2000 no son un array:", aa2000Data);
-            if (!flightDetails.textContent) {
-                flightDetails.textContent = "Esperando datos de AA2000...";
-                groupFlightDetails.textContent = "Esperando datos de AA2000...";
-            }
-        } else {
-            aa2000Data.forEach(flight => {
-                const flightNumber = flight.flight_number || "N/A";
-                const scheduled = flight.scheduled_time || "N/A";
-                const destination = flight.origin_destination || "N/A";
-                const status = flight.status || "Desconocido";
-                const gate = flight.gate || "N/A";
-                const flightType = flight.flight_type === "partidas" ? "Salida" : "Llegada";
-                const flightDiv = document.createElement("div");
-                flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
-                flightDiv.innerHTML = `
-                    <strong>Vuelo:</strong> ${flightNumber} |
-                    <strong>STD:</strong> ${scheduled} |
-                    <strong>Destino:</strong> ${destination} |
-                    <strong>Puerta:</strong> ${gate} |
-                    <strong>Tipo:</strong> ${flightType} |
-                    <strong>Estado:</strong> ${status}
-                `;
-                flightDetails.appendChild(flightDiv);
-                groupFlightDetails.appendChild(flightDiv.cloneNode(true));
-            });
-        }
-
-        flightDetails.scrollTop = flightDetails.scrollHeight;
-        groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
-    } catch (err) {
-        console.error("Error al cargar datos de vuelos:", err);
-        const flightDetails = document.getElementById("flight-details");
-        const groupFlightDetails = document.getElementById("group-flight-details");
-        if (flightDetails) flightDetails.textContent = "Error al conectar con los servidores de vuelos";
-        if (groupFlightDetails) groupFlightDetails.textContent = "Error al conectar con los servidores de vuelos";
-        if (map) {
-            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
-        }
-    }
-    setTimeout(updateOpenSkyData, 15000);
-}
-*/
-
 // Funciones de mapa
 function initMap() {
     console.log("Inicializando mapa...");
@@ -949,21 +820,21 @@ function initMap() {
     }
     try {
         map = L.map('map').setView([-34.5597, -58.4116], 10);
-        // Nuevo: Usar Mapbox como capa base (requiere clave)
+        // Usar Mapbox (reemplaza TU_CLAVE_DE_MAPBOX con tu clave real)
         L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token=TU_CLAVE_DE_MAPBOX', {
             maxZoom: 18,
             tileSize: 512,
             zoomOffset: -1,
             attribution: '© Mapbox © OpenStreetMap'
         }).addTo(map);
-        // Alternativa: OpenAeroMap (descomentar si no usas Mapbox)
+        // Alternativa: OpenStreetMap (descomentar si no usas Mapbox)
         /*
-        L.tileLayer('https://tiles.openaeromap.org/{z}/{x}/{y}.png', {
-            maxZoom: 17,
-            attribution: '© OpenAeroMap'
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '© OpenStreetMap'
         }).addTo(map);
         */
-        console.log("Mapa inicializado con Mapbox/OpenAeroMap");
+        console.log("Mapa inicializado con Mapbox/OpenStreetMap");
         map.invalidateSize();
     } catch (error) {
         console.error("Error al inicializar Leaflet:", error);
@@ -972,7 +843,7 @@ function initMap() {
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Radio de la Tierra en metros
+    const R = 6371e3;
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -981,7 +852,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
               Math.cos(φ1) * Math.cos(φ2) *
               Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c / 1000; // Distancia en km
+    return R * c / 1000;
 }
 
 function estimateArrivalTime(lat, lon, speed) {
@@ -989,7 +860,7 @@ function estimateArrivalTime(lat, lon, speed) {
     const aeroparqueLon = -58.4116;
     const distance = calculateDistance(lat, lon, aeroparqueLat, aeroparqueLon);
     if (!speed || speed <= 0) return "N/A";
-    const timeHours = distance / (speed * 1.852); // Convertir kts a km/h
+    const timeHours = distance / (speed * 1.852);
     const minutes = Math.round(timeHours * 60);
     return minutes <= 0 ? "Inmediato" : `${minutes} min`;
 }
@@ -1086,7 +957,7 @@ async function toggleTalk() {
             }
         };
 
-  mediaRecorder.onstop = function() {
+        mediaRecorder.onstop = function() {
             console.log("Grabación detenida");
             console.log("Tamaño de audioChunks:", audioChunks.length);
             if (audioChunks.length === 0) {
@@ -1232,8 +1103,9 @@ function toggleGroupMute() {
             muteButton.classList.add("unmuted");
         }
     }
-            }
-  function updateMuteButton(isMuted) {
+}
+
+function updateMuteButton(isMuted) {
     const muteButton = document.getElementById("mute");
     const groupMuteButton = document.getElementById("group-mute");
     if (isMuted) {
@@ -1261,10 +1133,10 @@ function toggleMuteNonGroup() {
     }
     if (isMuting) {
         nonGroupMuteButton.classList.add("muted");
-        nonGroupMuteButton.textContent = "Desmutear no grupo";
+        nonGroupMuteButton.innerHTML = '<img src="/templates/mute.png" alt="Desmutear" style="width: 24px; height: 24px;">';
     } else {
         nonGroupMuteButton.classList.remove("muted");
-        nonGroupMuteButton.textContent = "Mutear no grupo";
+        nonGroupMuteButton.innerHTML = '<img src="/templates/mute.png" alt="Silenciar" style="width: 24px; height: 24px;">';
     }
 }
 
@@ -1347,6 +1219,7 @@ function updateUsers(count, list) {
     groupUsersDiv.appendChild(groupUserList);
     console.log("Lista de usuarios actualizada:", list);
 }
+
 // Funciones de grupos
 function createGroup() {
     const groupId = document.getElementById('group-id').value.trim();
@@ -1528,6 +1401,7 @@ function sendGroupMessage(audioData) {
         queueMessageForSync(message);
     }
 }
+
 // Funciones de navegación
 function showGroupRadar() {
     console.log("Mostrando radar desde grupo...");
@@ -1537,7 +1411,6 @@ function showGroupRadar() {
     if (logoutButton) logoutButton.style.display = 'none';
     if (!map) {
         initMap();
-        // updateOpenSkyData(); // Comentado: Ahora se actualiza vía WebSocket
     } else {
         map.invalidateSize();
         filterFlights();
@@ -1558,7 +1431,6 @@ function showRadar() {
     if (logoutButton) logoutButton.style.display = 'none';
     if (!map) {
         initMap();
-        // updateOpenSkyData(); // Comentado: Ahora se actualiza vía WebSocket
     } else {
         map.invalidateSize();
         filterFlights();
@@ -1652,9 +1524,7 @@ function logout() {
     console.log("Iniciando cierre de sesión...");
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "logout" }));
-        // No cerrar WebSocket inmediatamente, esperar logout_success
     } else {
-        // Si no hay WebSocket, limpiar directamente
         completeLogout();
     }
 }
@@ -1679,6 +1549,7 @@ function completeLogout() {
     localStorage.removeItem("userLegajo");
     localStorage.removeItem("groupId");
     localStorage.removeItem("lastSearchQuery");
+    localStorage.removeItem("flightData");
     currentGroup = null;
     mutedUsers.clear();
     clearInterval(reconnectInterval);
@@ -1741,7 +1612,8 @@ function subscribeToPush() {
         console.warn('Notificaciones push no soportadas.');
     }
     */
-              }
+}
+
 function urlBase64ToUint8Array(base64String) {
     try {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1875,3 +1747,4 @@ function loadHistory() {
             }
         });
 }
+
