@@ -5,7 +5,7 @@ import os
 import time
 from datetime import datetime, timedelta
 import sqlite3
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,9 +33,10 @@ load_dotenv()
 app = FastAPI()
 
 # Configurar CORS
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://tu-dominio.com").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Ajusta según tu frontend en producción
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,74 +56,10 @@ if not GOFLIGHTLABS_API_KEY or not AVIATIONSTACK_API_KEY:
 with open("templates/index.html", "r") as f:
     INDEX_HTML = f.read()
 
-# Crear caché para GoFlightLabs
-cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos
-
-# Ruta para obtener vuelos de Aeroparque (migrada de Flask a FastAPI)
-@app.get("/aep_flights")
-async def get_aep_flights():
-    cache_key = 'aep_flights_ar'
-    if cache_key in cache:
-        logger.info(f'Sirviendo desde caché: {cache_key}')
-        return cache[cache_key]
-
-    try:
-        params = {
-            'access_key': GOFLIGHTLABS_API_KEY,
-            'airline_iata': 'AR',
-            'dep_iata': 'AEP',
-            'arr_iata': 'AEP',
-            'flight_status': 'scheduled,active,landed'
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get('https://www.goflightlabs.com/flights', params=params) as response:
-                response.raise_for_status()
-                data = await response.json()
-
-        if not data.get('success', False):
-            return JSONResponse(
-                content={'error': 'Error en la API de GoFlightLabs', 'details': data.get('error', 'Unknown')},
-                status_code=500
-            )
-
-        now = datetime.utcnow()
-        time_min = now - timedelta(hours=12)
-        time_max = now + timedelta(hours=12)
-
-        filtered_flights = []
-        for flight in data.get('data', []):
-            departure_time = flight.get('departure', {}).get('scheduled', '')
-            arrival_time = flight.get('arrival', {}).get('scheduled', '')
-            try:
-                dep_dt = datetime.fromisoformat(departure_time.replace('Z', '+00:00')) if departure_time else None
-                arr_dt = datetime.fromisoformat(arrival_time.replace('Z', '+00:00')) if arrival_time else None
-            except ValueError:
-                continue
-            if (dep_dt and time_min <= dep_dt <= time_max) or (arr_dt and time_min <= arr_dt <= time_max):
-                filtered_flights.append({
-                    'flight_number': flight.get('flight', {}).get('number', ''),
-                    'departure_airport': flight.get('departure', {}).get('airport', ''),
-                    'departure_time': departure_time,
-                    'arrival_airport': flight.get('arrival', {}).get('airport', ''),
-                    'arrival_time': arrival_time,
-                    'status': flight.get('flight_status', '')
-                })
-
-        response_data = {'flights': filtered_flights}
-        cache[cache_key] = response_data
-        logger.info(f'Respuesta cacheada: {cache_key}')
-        return response_data
-
-    except aiohttp.ClientError as e:
-        return JSONResponse(
-            content={'error': 'Error al consultar la API', 'details': str(e)},
-            status_code=500
-        )
-    except Exception as e:
-        return JSONResponse(
-            content={'error': 'Error interno', 'details': str(e)},
-            status_code=500
-        )
+# Crear cachés
+flight_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /aep_flights
+flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
+opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos para OpenSky
 
 # Ruta raíz
 @app.get("/")
@@ -148,18 +85,144 @@ def to_icao(text):
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Estructuras de datos
-users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios en memoria
-audio_queue = asyncio.Queue()  # Cola para procesar audio asincrónicamente
+users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios
+audio_queue = asyncio.Queue()  # Cola para procesar audio
 groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
-flights_cache = []  # Cache global para vuelos combinados (OpenSky + AviationStack)
+flights_cache = []  # Cache global para vuelos
 global_mute_active = False  # Estado de muteo general
 
-# Cache para datos de OpenSky
-opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos
+# Ruta para obtener vuelos de Aeroparque
+@app.get("/aep_flights")
+async def get_aep_flights(query: str = None):
+    cache_key = f'aep_flights_ar_{query or "all"}'
+    if cache_key in flight_cache:
+        logger.info(f'Sirviendo desde caché: {cache_key}')
+        return flight_cache[cache_key]
+
+    try:
+        params = {
+            'access_key': GOFLIGHTLABS_API_KEY,
+            'airline_iata': 'AR',
+            'dep_iata': 'AEP',
+            'arr_iata': 'AEP',
+            'flight_status': 'scheduled,active,landed'
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get('https://www.goflightlabs.com/flights', params=params, timeout=15) as response:
+                if response.status != 200:
+                    logger.error(f"Error GoFlightLabs: {response.status}")
+                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
+                data = await response.json()
+
+        if not data.get('success', False):
+            logger.error(f"Error GoFlightLabs: {data.get('error', 'Unknown')}")
+            raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
+
+        now = datetime.utcnow()
+        time_min = now - timedelta(hours=12)
+        time_max = now + timedelta(hours=12)
+
+        filtered_flights = []
+        for flight in data.get('data', []):
+            departure_time = flight.get('departure', {}).get('scheduled', '')
+            arrival_time = flight.get('arrival', {}).get('scheduled', '')
+            try:
+                dep_dt = datetime.fromisoformat(departure_time.replace('Z', '+00:00')) if departure_time else None
+                arr_dt = datetime.fromisoformat(arrival_time.replace('Z', '+00:00')) if arrival_time else None
+            except ValueError:
+                logger.warning(f"Formato de fecha inválido: {departure_time}, {arrival_time}")
+                continue
+            if (dep_dt and time_min <= dep_dt <= time_max) or (arr_dt and time_min <= arr_dt <= time_max):
+                flight_data = {
+                    'flight_number': flight.get('flight', {}).get('number', ''),
+                    'departure_airport': flight.get('departure', {}).get('airport', ''),
+                    'departure_time': departure_time,
+                    'arrival_airport': flight.get('arrival', {}).get('airport', ''),
+                    'arrival_time': arrival_time,
+                    'status': flight.get('flight_status', ''),
+                    'gate': flight.get('departure', {}).get('gate', 'N/A'),
+                    'delay': flight.get('departure', {}).get('delay', 0),
+                    'registration': flight.get('aircraft', {}).get('registration', 'N/A')
+                }
+                filtered_flights.append(flight_data)
+
+        if query:
+            query = query.lower()
+            filtered_flights = [
+                f for f in filtered_flights
+                if query in f['flight_number'].lower() or
+                   query in f['departure_airport'].lower() or
+                   query in f['arrival_airport'].lower() or
+                   query in f['status'].lower()
+            ]
+
+        response_data = {'flights': filtered_flights}
+        flight_cache[cache_key] = response_data
+        logger.info(f'Respuesta cacheada: {cache_key}, {len(filtered_flights)} vuelos')
+        return response_data
+
+    except aiohttp.ClientError as e:
+        logger.error(f"Error al consultar GoFlightLabs: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error interno en /aep_flights: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+# Endpoint para detalles de un vuelo
+@app.get("/flight_details/{flight_number}")
+async def get_flight_details(flight_number: str):
+    cache_key = f'flight_details_{flight_number}'
+    if cache_key in flight_details_cache:
+        logger.info(f'Sirviendo desde caché: {cache_key}')
+        return flight_details_cache[cache_key]
+
+    try:
+        params = {
+            'access_key': AVIATIONSTACK_API_KEY,
+            'flight_iata': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
+            'dep_iata': 'AEP',
+            'arr_iata': 'AEP'
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://api.aviationstack.com/v1/flights', params=params, timeout=15) as response:
+                if response.status != 200:
+                    logger.error(f"Error AviationStack: {response.status}")
+                    raise HTTPException(status_code=500, detail="Error en la API de AviationStack")
+                data = await response.json()
+
+        flights = data.get('data', [])
+        if not flights:
+            logger.warning(f"No se encontró el vuelo: {flight_number}")
+            raise HTTPException(status_code=404, detail="Vuelo no encontrado")
+
+        flight = flights[0]
+        flight_data = {
+            'flight_number': flight.get('flight', {}).get('iata', ''),
+            'departure_airport': flight.get('departure', {}).get('iata', ''),
+            'departure_time': flight.get('departure', {}).get('scheduled', ''),
+            'arrival_airport': flight.get('arrival', {}).get('iata', ''),
+            'arrival_time': flight.get('arrival', {}).get('scheduled', ''),
+            'status': flight.get('flight_status', ''),
+            'gate': flight.get('departure', {}).get('gate', 'N/A'),
+            'delay': flight.get('departure', {}).get('delay', 0),
+            'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
+            'destination': flight.get('arrival', {}).get('airport', ''),
+            'origin': flight.get('departure', {}).get('airport', '')
+        }
+
+        flight_details_cache[cache_key] = flight_data
+        logger.info(f'Detalles cacheados: {cache_key}')
+        return flight_data
+
+    except aiohttp.ClientError as e:
+        logger.error(f"Error al consultar AviationStack: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error interno en /flight_details: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 # Función para filtrar vuelos cerca de Aeroparque
 def is_near_aeroparque(lat, lon, max_distance_km=1500):
-    """Verifica si un vuelo está a menos de max_distance_km de Aeroparque (AEP)."""
     aep_lat, aep_lon = -34.6084, -58.3732
     dlat = math.radians(lat - aep_lat)
     dlon = math.radians(lon - aep_lon)
@@ -170,7 +233,6 @@ def is_near_aeroparque(lat, lon, max_distance_km=1500):
 
 # Función unificada para obtener vuelos de AviationStack
 async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparque, AEP"):
-    """Obtiene vuelos de AviationStack para partidas o llegadas."""
     flight_type_param = "dep_iata" if flight_type.lower() == "partidas" else "arr_iata"
     airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
     url = "http://api.aviationstack.com/v1/flights"
@@ -238,7 +300,6 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
 
 # Función para obtener datos de OpenSky Network
 async def get_opensky_data():
-    """Obtiene datos de vuelos cerca de Aeroparque desde OpenSky Network."""
     if "data" in opensky_cache:
         logger.info("Devolviendo datos en caché de OpenSky")
         return opensky_cache["data"]
@@ -313,7 +374,6 @@ async def get_opensky_data():
 
 # Actualizar vuelos AviationStack
 async def update_flights():
-    """Actualiza el caché de vuelos de AviationStack."""
     global flights_cache
     while True:
         flights = []
@@ -326,7 +386,6 @@ async def update_flights():
 
 # Actualizar vuelos OpenSky periódicamente
 async def update_flights_periodically():
-    """Actualiza el caché de vuelos de OpenSky y los envía a los clientes cada 10 segundos."""
     global flights_cache
     while True:
         try:
@@ -360,7 +419,6 @@ async def update_flights_periodically():
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
-    """Transcribe audio WebM a texto usando Google Speech Recognition."""
     try:
         audio_bytes = base64.b64decode(audio_data)
         audio_file = io.BytesIO(audio_bytes)
@@ -392,7 +450,6 @@ async def transcribe_audio(audio_data):
 
 # Función para procesar consultas de búsqueda
 async def process_search_query(query, flights):
-    """Busca vuelos según la consulta del usuario."""
     query = query.lower().strip()
     results = []
     for flight in flights:
@@ -407,11 +464,10 @@ async def process_search_query(query, flights):
 
 # Función para eliminar duplicados
 def remove_duplicates(flights):
-    """Elimina vuelos duplicados basándose en flight y STD."""
     seen = set()
     unique_flights = []
     for flight in flights:
-        flight_key = (flight["flight"], flight["scheduled"])
+        flight_key = (flight["Vuelo"], flight["STD"])
         if flight_key not in seen:
             seen.add(flight_key)
             unique_flights.append(flight)
@@ -419,13 +475,11 @@ def remove_duplicates(flights):
 
 @app.get("/opensky")
 async def get_opensky_data_endpoint():
-    """Endpoint para obtener datos combinados de OpenSky y AviationStack."""
     data = await get_opensky_data()
     logger.info(f"Datos combinados: {len(data)} vuelos")
     return data
 
 def init_db():
-    """Inicializa la base de datos para mensajes y sesiones."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS messages 
@@ -437,7 +491,6 @@ def init_db():
     conn.close()
 
 def save_session(token, user_id, name, function, group_id=None, muted_users=None):
-    """Guarda o actualiza una sesión en la base de datos."""
     muted_users_str = json.dumps(list(muted_users or set()))
     last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect("chat_history.db")
@@ -451,7 +504,6 @@ def save_session(token, user_id, name, function, group_id=None, muted_users=None
     logger.info(f"Sesión guardada para token={token}")
 
 def load_session(token):
-    """Carga una sesión desde la base de datos."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
@@ -475,7 +527,6 @@ def load_session(token):
     return None
 
 def delete_session(token):
-    """Elimina una sesión de la base de datos."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("DELETE FROM sessions WHERE token = ?", (token,))
@@ -484,7 +535,6 @@ def delete_session(token):
     logger.info(f"Sesión eliminada para token={token}")
 
 def save_message(user_id, audio_data, text, timestamp):
-    """Guarda un mensaje en la base de datos."""
     date = datetime.utcnow().strftime("%Y-%m-%d")
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
@@ -495,7 +545,6 @@ def save_message(user_id, audio_data, text, timestamp):
     logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
 
 def get_history():
-    """Obtiene el historial de mensajes."""
     conn = sqlite3.connect("chat_history.db")
     c = conn.cursor()
     c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
@@ -504,7 +553,6 @@ def get_history():
     return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
 async def process_audio_queue():
-    """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
             item = await audio_queue.get()
@@ -589,7 +637,6 @@ async def process_audio_queue():
             audio_queue.task_done()
 
 async def clean_expired_sessions():
-    """Elimina sesiones inactivas (más de 24 horas) de la base de datos."""
     while True:
         try:
             conn = sqlite3.connect("chat_history.db")
@@ -605,17 +652,47 @@ async def clean_expired_sessions():
             logger.error(f"Error al limpiar sesiones: {e}")
         await asyncio.sleep(3600)
 
+async def clear_messages():
+    while True:
+        try:
+            now = datetime.utcnow()
+            start_time = now.replace(hour=5, minute=30, second=0, microsecond=0)
+            if now >= start_time:
+                start_time += timedelta(days=1)
+            await asyncio.sleep((start_time - now).total_seconds())
+            
+            conn = sqlite3.connect("chat_history.db")
+            c = conn.cursor()
+            expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("DELETE FROM messages WHERE date < ?", (expiration_time,))
+            conn.commit()
+            deleted = c.rowcount
+            if deleted > 0:
+                logger.info(f"Eliminados {deleted} mensajes antiguos")
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error al limpiar mensajes: {e}")
+
+            
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
-    """Maneja conexiones WebSocket para comunicación en tiempo real."""
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
-    global global_mute_active
-
     try:
+        # Validar formato del token
+        try:
+            decoded_token = base64.b64decode(token).decode('utf-8')
+            if '_' not in decoded_token or len(decoded_token.split('_')) != 3:
+                raise ValueError("Formato de token inválido")
+        except (base64.binascii.Error, ValueError) as e:
+            logger.error(f"Token inválido: {token}, {str(e)}")
+            await websocket.send_json({"type": "error", "message": "Token inválido"})
+            await websocket.close()
+            return
+
         session = load_session(token)
-        user_id = base64.b64decode(token).decode('utf-8', errors='ignore')
+        user_id = decoded_token
         if session:
             users[token] = {
                 "user_id": session["user_id"],
@@ -740,6 +817,63 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             elif message["type"] == "unmute_all":
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
+
+            elif message["type"] == "mute_non_group":
+                group_id = users[token]["group_id"]
+                if group_id:
+                    muted_users = []
+                    for user_token, user in users.items():
+                        if user_token != token and user["group_id"] != group_id:
+                            user_id = f"{user['name']}_{user['function']}"
+                            users[token]["muted_users"].add(user_id)
+                            muted_users.append(user_id)
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        users[token]["group_id"],
+                        users[token]["muted_users"]
+                    )
+                    await websocket.send_json({
+                        "type": "mute_non_group_success",
+                        "message": "Usuarios fuera del grupo muteados",
+                        "muted_users": muted_users
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "mute_non_group_error",
+                        "message": "No estás en ningún grupo"
+                    })
+
+            elif message["type"] == "unmute_non_group":
+                group_id = users[token]["group_id"]
+                if group_id:
+                    unmuted_users = []
+                    for user_token, user in users.items():
+                        if user_token != token and user["group_id"] != group_id:
+                            user_id = f"{user['name']}_{user['function']}"
+                            if user_id in users[token]["muted_users"]:
+                                users[token]["muted_users"].discard(user_id)
+                                unmuted_users.append(user_id)
+                    save_session(
+                        token,
+                        users[token]["user_id"],
+                        users[token]["name"],
+                        users[token]["function"],
+                        users[token]["group_id"],
+                        users[token]["muted_users"]
+                    )
+                    await websocket.send_json({
+                        "type": "unmute_non_group_success",
+                        "message": "Usuarios fuera del grupo desmuteados",
+                        "unmuted_users": unmuted_users
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "unmute_non_group_error",
+                        "message": "No estás en ningún grupo"
+                    })
 
             elif message["type"] == "mute":
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
@@ -891,6 +1025,26 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 response = await process_search_query(message["query"], flights_cache)
                 await websocket.send_json({"type": "search_response", "message": response})
 
+            elif message["type"] == "flight_details_request":
+                flight_number = message.get("flight_number")
+                if not flight_number:
+                    await websocket.send_json({
+                        "type": "flight_details_error",
+                        "message": "Número de vuelo no proporcionado"
+                    })
+                    continue
+                try:
+                    flight_data = await get_flight_details(flight_number)
+                    await websocket.send_json({
+                        "type": "flight_details_response",
+                        "flight": flight_data
+                    })
+                except HTTPException as e:
+                    await websocket.send_json({
+                        "type": "flight_details_error",
+                        "message": e.detail
+                    })
+
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
@@ -921,23 +1075,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             )
         await websocket.close()
 
-async def broadcast_global_mute_state(message_type, message_text):
-    """Difunde el estado de muteo global a todos los usuarios conectados."""
-    disconnected_users = []
-    for user in list(users.values()):
-        if user["logged_in"] and user["websocket"]:
-            try:
-                await user["websocket"].send_json({"type": message_type, "message": message_text})
-            except Exception as e:
-                logger.error(f"Error al enviar mute global a {user['name']}: {e}")
-                disconnected_users.append(user["name"])
-                user["websocket"] = None
-                user["logged_in"] = False
-    if disconnected_users:
-        await broadcast_users()
-
 async def broadcast_users():
-    """Difunde la lista de usuarios conectados."""
     user_list = []
     for token in users:
         if users[token]["logged_in"] and users[token]["websocket"]:
@@ -972,22 +1110,11 @@ async def broadcast_users():
 
 @app.get("/history")
 async def get_history_endpoint():
-    """Obtiene el historial de mensajes."""
     history = get_history()
     return history
 
-async def clear_messages():
-    """Programa la limpieza de mensajes."""
-    while True:
-        now = datetime.utcnow()
-        start_time = datetime.utcnow().replace(hour=5, minute=30, second=0, microsecond=0)
-        if now.hour >= 14 or (now.hour == 5 and now.minute >= 30):
-            start_time += timedelta(days=1)
-        await asyncio.sleep((start_time - now).total_seconds())
-
 @app.on_event("startup")
 async def startup_event():
-    """Tareas de inicio de la aplicación."""
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
