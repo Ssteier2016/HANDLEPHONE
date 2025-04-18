@@ -304,6 +304,33 @@ function updateFlightTable(flights) {
 }
 
 // Abrir modal de detalles de vuelos
+function updateModalFlightTable(flights) {
+    const modalTableBody = document.getElementById('modal-flight-table').querySelector('tbody');
+    modalTableBody.innerHTML = '';
+    flights.forEach(flight => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${flight.flight_number || 'N/A'}</td>
+            <td>${flight.departure_airport || 'N/A'}</td>
+            <td>${flight.departure_time ? new Date(flight.departure_time).toLocaleString('es-AR') : 'N/A'}</td>
+            <td>${flight.arrival_airport || 'N/A'}</td>
+            <td>${flight.arrival_time ? new Date(flight.arrival_time).toLocaleString('es-AR') : 'N/A'}</td>
+            <td>${flight.status || 'Desconocido'}</td>
+        `;
+        modalTableBody.appendChild(row);
+    });
+}
+
+function displayFlightDetails(details) {
+    alert(`Detalles del vuelo ${details.flight_number}:
+- Origen: ${details.origin}
+- Destino: ${details.destination}
+- Puerta: ${details.gate}
+- Retraso: ${details.delay} minutos
+- Matrícula: ${details.registration}
+- Estado: ${details.status}`);
+}
+
 function openFlightDetailsModal() {
     const modal = document.getElementById('flight-details-modal');
     const modalTableBody = document.getElementById('modal-flight-table').querySelector('tbody');
