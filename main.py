@@ -827,6 +827,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await websocket.close()
             return
 
+          # Verificar que el token corresponde a un usuario registrado
+        conn = sqlite3.connect("chat_history.db")
+        c = conn.cursor()
+        c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
+                  (surname, employee_id, sector))
+        user = c.fetchone()
+        conn.close()
+
+        if not user:
+            logger.error(f"Token no corresponde a un usuario registrado: {token}")
+            await websocket.send_json({"type": "error", "message": "Usuario no registrado"})
+            await websocket.close()
+            return
+
         session = load_session(token)
         user_id = decoded_token
         if session:
@@ -885,14 +899,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 continue
 
             elif message["type"] == "register":
-                name = message.get("name", "Anónimo")
-                function = message.get("function", "Desconocida")
-                users[token]["name"] = name
-                users[token]["function"] = function
-                users[token]["logged_in"] = True
-                save_session(token, user_id, name, function, users[token]["group_id"], users[token]["muted_users"])
-                await websocket.send_json({"type": "register_success", "message": "Registro exitoso"})
-                await broadcast_users()
+                 # Registro ahora se maneja vía /register, no WebSocket
+                await websocket.send_json({"type": "error", "message": "Use el endpoint /register para registrarse"})
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
@@ -963,6 +971,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             user_id = f"{user['name']}_{user['function']}"
                             users[token]["muted_users"].add(user_id)
                             muted_users.append(user_id)
+            elif message["type"] == "unmute_non_group":
+                group_id = users[token]["group_id"]
+                if group_id:
+                    unmuted_users = []
+                    for user_token, user in users.items():
+                        if user_token != token and user["group_id"] != group_id:
+                            user_id = f"{user['name']}_{user['function']}"
+                            if user_id in users[token]["muted_users"]:
+                                users[token]["muted_users"].discard(user_id)
+                                muted_users.append(user_id)
                     save_session(
                         token,
                         users[token]["user_id"],
@@ -976,35 +994,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "message": "Usuarios fuera del grupo muteados",
                         "muted_users": muted_users
                     })
-                else:
-                    await websocket.send_json({
-                        "type": "mute_non_group_error",
-                        "message": "No estás en ningún grupo"
-                    })
-
-            elif message["type"] == "unmute_non_group":
-                group_id = users[token]["group_id"]
-                if group_id:
-                    unmuted_users = []
-                    for user_token, user in users.items():
-                        if user_token != token and user["group_id"] != group_id:
-                            user_id = f"{user['name']}_{user['function']}"
-                            if user_id in users[token]["muted_users"]:
-                                users[token]["muted_users"].discard(user_id)
-                                unmuted_users.append(user_id)
-                    save_session(
-                        token,
-                        users[token]["user_id"],
-                        users[token]["name"],
-                        users[token]["function"],
-                        users[token]["group_id"],
-                        users[token]["muted_users"]
-                    )
-                    await websocket.send_json({
-                        "type": "unmute_non_group_success",
-                        "message": "Usuarios fuera del grupo desmuteados",
-                        "unmuted_users": unmuted_users
-                    })
+                    
                 else:
                     await websocket.send_json({
                         "type": "unmute_non_group_error",
@@ -1211,6 +1201,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             )
         await websocket.close()
 
+async def broadcast_global_mute_state(message_type, message_text):
+    disconnected_users = []
+    for user in list(users.values()):
+        if user["logged_in"] and user["websocket"]:
+            try:
+                await user["websocket"].send_json({"type": message_type, "message": message_text})
+            except Exception as e:
+                logger.error(f"Error al enviar mute global a {user['name']}: {e}")
+                disconnected_users.append(user["name"])
+                user["websocket"] = None
+                user["logged_in"] = False
+    if disconnected_users:
+        await broadcast_users()
+        
 async def broadcast_users():
     user_list = []
     for token in users:
