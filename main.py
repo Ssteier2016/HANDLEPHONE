@@ -77,7 +77,8 @@ ALLOWED_USERS = {
     "Fossati": "35152",
     "Test": "12345",
     "Bot": "00000",
-    "Test2": "12345"
+    "Test2": "12345",
+    "Binda": "38530"
     
 }
 
