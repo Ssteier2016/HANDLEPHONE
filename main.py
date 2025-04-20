@@ -2,12 +2,12 @@ import asyncio
 import base64
 import json
 import os
-import time
 from datetime import datetime, timedelta
 import sqlite3
+from typing import Dict, List, Optional, Set
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import aiohttp
@@ -15,10 +15,9 @@ import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
-import math
 from dotenv import load_dotenv
 from cachetools import TTLCache
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 # Configurar logging
 logging.basicConfig(
@@ -39,8 +38,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Montar archivos estáticos
@@ -48,10 +47,9 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
 # Validar claves de API
 GOFLIGHTLABS_API_KEY = os.getenv("GOFLIGHTLABS_API_KEY")
-#AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
-if not GOFLIGHTLABS_API_KEY: # or not AVIATIONSTACK_API_KEY:
-    logger.error("Faltan claves de API de GoFlightLabs en las variables de entorno")
-    raise ValueError("GOFLIGHTLABS_API_KEY no están configuradas")
+if not GOFLIGHTLABS_API_KEY:
+    logger.error("Falta la clave de API de GoFlightLabs en las variables de entorno")
+    raise ValueError("GOFLIGHTLABS_API_KEY no está configurada")
 
 # Cargar index.html
 with open("templates/index.html", "r") as f:
@@ -60,12 +58,11 @@ with open("templates/index.html", "r") as f:
 # Crear cachés
 flight_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /aep_flights
 flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
-#opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos para OpenSky
 
 # Lista de usuarios permitidos (apellido: legajo o None si no se especifica)
 ALLOWED_USERS = {
     "Souto": "35127",
-    "Vázquez": "35806",  
+    "Vázquez": "35806",
     "Giménez": "35145",
     "Gómez": "35128",
     "Benítez": "33366",
@@ -79,11 +76,13 @@ ALLOWED_USERS = {
     "Bot": "00000",
     "Test2": "12345",
     "Binda": "38530"
-    
 }
 
 # Sectores disponibles
-ALLOWED_SECTORS = ["Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor", "Jefatura", "Movilero", "Señalero", "Pañolero"]
+ALLOWED_SECTORS = [
+    "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
+    "Jefatura", "Movilero", "Señalero", "Pañolero"
+]
 
 # Modelos Pydantic para validación
 class RegisterRequest(BaseModel):
@@ -91,11 +90,47 @@ class RegisterRequest(BaseModel):
     employee_id: str
     sector: str
 
+    @validator('surname')
+    def validate_surname(cls, v):
+        if not v.strip().replace(' ', '').isalpha():
+            raise ValueError('El apellido debe contener solo letras')
+        return v.strip().capitalize()
+
+    @validator('employee_id')
+    def validate_employee_id(cls, v):
+        if not v.strip().isdigit() or len(v.strip()) != 5:
+            raise ValueError('El legajo debe ser un número de 5 dígitos')
+        return v.strip()
+
+    @validator('sector')
+    def validate_sector(cls, v):
+        if v not in ALLOWED_SECTORS:
+            raise ValueError('Sector no válido')
+        return v.strip()
+
 class LoginRequest(BaseModel):
     surname: str
     employee_id: str
     sector: str
-    
+
+    @validator('surname')
+    def validate_surname(cls, v):
+        if not v.strip().replace(' ', '').isalpha():
+            raise ValueError('El apellido debe contener solo letras')
+        return v.strip().capitalize()
+
+    @validator('employee_id')
+    def validate_employee_id(cls, v):
+        if not v.strip().isdigit() or len(v.strip()) != 5:
+            raise ValueError('El legajo debe ser un número de 5 dígitos')
+        return v.strip()
+
+    @validator('sector')
+    def validate_sector(cls, v):
+        if v not in ALLOWED_SECTORS:
+            raise ValueError('Sector no válido')
+        return v.strip()
+
 # Ruta raíz
 @app.get("/")
 async def read_root():
@@ -115,117 +150,105 @@ ICAO_ALPHABET = {
     'Zulu': 'Z'
 }
 
-def to_icao(text):
+def to_icao(text: str) -> str:
     """Convierte texto a pronunciación ICAO (ej. 'Foxtrot Uniform Alfa' -> 'FUA')."""
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Inicializar base de datos
 def init_db():
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
-                  muted_users TEXT, last_active TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT)''')
-    conn.commit()
-    conn.close()
-    
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS messages 
+                     (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                     (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                      muted_users TEXT, last_active TIMESTAMP)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS users 
+                     (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT)''')
+        conn.commit()
+
 # Estructuras de datos
-users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios
-audio_queue = asyncio.Queue()  # Cola para procesar audio
-groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
-flights_cache = []  # Cache global para vuelos
-global_mute_active = False  # Estado de muteo general
+users: Dict[str, Dict[str, any]] = {}  # Almacena info de usuarios
+audio_queue: asyncio.Queue = asyncio.Queue()  # Cola para procesar audio
+groups: Dict[str, List[str]] = {}  # Grupos de usuarios
+global_mute_active: bool = False  # Estado de muteo general
 
 # Endpoint de registro
 @app.post("/register")
 async def register_user(request: RegisterRequest):
-    surname = request.surname.strip().capitalize()
-    employee_id = request.employee_id.strip()
-    sector = request.sector.strip()
+    """Registra un nuevo usuario en el sistema."""
+    surname = request.surname
+    employee_id = request.employee_id
+    sector = request.sector
 
     # Validar usuario permitido
     if surname not in ALLOWED_USERS:
         logger.error(f"Intento de registro con apellido no permitido: {surname}")
         raise HTTPException(status_code=403, detail="Usuario no permitido")
     
-    # Validar legajo (si aplica)
+    # Validar legajo
     expected_employee_id = ALLOWED_USERS[surname]
     if expected_employee_id and expected_employee_id != employee_id:
         logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
         raise HTTPException(status_code=403, detail="Legajo incorrecto")
 
-    # Validar sector
-    if sector not in ALLOWED_SECTORS:
-        logger.error(f"Sector inválido: {sector}")
-        raise HTTPException(status_code=400, detail="Sector no válido")
-
     # Verificar si ya está registrado
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT surname FROM users WHERE surname = ?", (surname,))
-    if c.fetchone():
-        conn.close()
-        logger.error(f"Usuario ya registrado: {surname}")
-        raise HTTPException(status_code=400, detail="Usuario ya registrado")
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT surname FROM users WHERE surname = ?", (surname,))
+        if c.fetchone():
+            logger.error(f"Usuario ya registrado: {surname}")
+            raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
-    # Registrar usuario
-    try:
+        # Registrar usuario
         c.execute("INSERT INTO users (surname, employee_id, sector) VALUES (?, ?, ?)",
                   (surname, employee_id, sector))
         conn.commit()
-        logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
-        return {"message": "Registro exitoso"}
-    except Exception as e:
-        conn.close()
-        logger.error(f"Error al registrar usuario {surname}: {e}")
-        raise HTTPException(status_code=500, detail="Error interno al registrar")
-    finally:
-        conn.close()
+    
+    logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
+    return {"message": "Registro exitoso"}
 
 # Endpoint de inicio de sesión
 @app.post("/login")
 async def login_user(request: LoginRequest):
-    surname = request.surname.strip().capitalize()
-    employee_id = request.employee_id.strip()
-    sector = request.sector.strip()
+    """Inicia sesión de un usuario registrado."""
+    surname = request.surname
+    employee_id = request.employee_id
+    sector = request.sector
 
     # Validar usuario permitido
     if surname not in ALLOWED_USERS:
         logger.error(f"Intento de login con apellido no permitido: {surname}")
         raise HTTPException(status_code=403, detail="Usuario no permitido")
 
-    # Validar legajo (si aplica)
+    # Validar legajo
     expected_employee_id = ALLOWED_USERS[surname]
     if expected_employee_id and expected_employee_id != employee_id:
         logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
         raise HTTPException(status_code=403, detail="Legajo incorrecto")
 
-    # Verificar credenciales en la base de datos
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
-              (surname, employee_id, sector))
-    user = c.fetchone()
-    conn.close()
+    # Verificar credenciales
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
+                  (surname, employee_id, sector))
+        user = c.fetchone()
 
     if not user:
         logger.error(f"Credenciales inválidas para {surname}: {employee_id}, {sector}")
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    # Generar token (legajo_name_function)
+    # Generar token
     token_data = f"{employee_id}_{surname}_{sector}"
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
     logger.info(f"Login exitoso: {surname} ({employee_id}, {sector}), token: {token}")
 
-    return {"token": token, "message": "Inicio de sesión exitoso"}
-    
-# Ruta para obtener vuelos de Aeroparque
+    return {"token": token, "message": "Inicio Jahr de sesión exitoso"}
+
+# Endpoint para obtener vuelos de Aeroparque
 @app.get("/aep_flights")
-async def get_aep_flights(query: str = None):
+async def get_aep_flights(query: Optional[str] = None):
+    """Obtiene vuelos de Aeroparque filtrados por consulta opcional."""
     cache_key = f'aep_flights_ar_{query or "all"}'
     if cache_key in flight_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
@@ -240,7 +263,7 @@ async def get_aep_flights(query: str = None):
             'flight_status': 'scheduled,active,landed'
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://www.goflightlabs.com/flights', params=params, timeout=15) as response:
+            async with session.get('https://api.goflightlabs.com/v1/flights', params=params, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error GoFlightLabs: {response.status}")
                     raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
@@ -274,7 +297,7 @@ async def get_aep_flights(query: str = None):
                     'status': flight.get('flight_status', ''),
                     'gate': flight.get('departure', {}).get('gate', 'N/A'),
                     'delay': flight.get('departure', {}).get('delay', 0),
-                    'registration': flight.get('aircraft', {}).get('registration', 'N/A')
+                    'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
                     'destination': flight.get('arrival', {}).get('airport', ''),
                     'origin': flight.get('departure', {}).get('airport', '')
                 }
@@ -302,9 +325,16 @@ async def get_aep_flights(query: str = None):
         logger.error(f"Error interno en /aep_flights: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
+# Endpoint para compatibilidad con frontend
+@app.get("/api/flights")
+async def get_flights(query: Optional[str] = None):
+    """Alias para /aep_flights para compatibilidad con el frontend."""
+    return await get_aep_flights(query)
+
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
 async def get_flight_details(flight_number: str):
+    """Obtiene detalles de un vuelo específico."""
     cache_key = f'flight_details_{flight_number}'
     if cache_key in flight_details_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
@@ -318,10 +348,10 @@ async def get_flight_details(flight_number: str):
             'arr_iata': 'AEP'
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://www.goflightlabs.com/flights', params=params, timeout=15) as response:
+            async with session.get('https://api.goflightlabs.com/v1/flights', params=params, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error GoFlightLabs: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs)
+                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
                 data = await response.json()
 
         flights = data.get('data', [])
@@ -355,172 +385,13 @@ async def get_flight_details(flight_number: str):
         logger.error(f"Error interno en /flight_details: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-# Función para filtrar vuelos cerca de Aeroparque
-def is_near_aeroparque(lat, lon, max_distance_km=1500):
-    aep_lat, aep_lon = -34.6084, -58.3732
-    dlat = math.radians(lat - aep_lat)
-    dlon = math.radians(lon - aep_lon)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(aep_lat)) * math.cos(math.radians(lat)) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    distance_km = 6371 * c
-    return distance_km <= max_distance_km
-
-#Función unificada para obtener vuelos de AviationStack
-"""
-async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparque, AEP"):
-    flight_type_param = "dep_iata" if flight_type.lower() == "partidas" else "arr_iata"
-    airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
-    url = "https://www.goflightlabs.com/flights"
-    params = {
-        "access_key": GOFLIGHTLABS_API_KEY,
-        flight_type_param: airport_code,
-        "airline_iata": "AR",
-        "limit": 100
-    }
-    retries = 5
-    for attempt in range(retries):
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, params=params, timeout=15) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {response.status} {error_text}")
-                        if response.status == 429:
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        return []
-                    data = await response.json()
-                    flights = []
-                    for flight in data.get("data", []):
-                        airline = flight.get("airline")
-                        if not airline or airline.get("iata") != "AR":
-                            logger.debug(f"Vuelo descartado (sin airline o no AR): {flight.get('flight', {}).get('iata', 'N/A')}")
-                            continue
-                        status = flight.get("flight_status")
-                        if status is None:
-                            logger.warning(f"Vuelo sin flight_status: {flight.get('flight', {}).get('iata', 'N/A')}")
-                            continue
-                        if status.lower() == "cancelled":
-                            continue
-                        status_map = {
-                            "scheduled": "Estimado",
-                            "active": "En vuelo",
-                            "landed": "Aterrizado",
-                            "delayed": "Demorado",
-                            "departed": "Despegado"
-                        }
-                        status_text = status_map.get(status.lower(), status.capitalize())
-                        flight_number = flight.get("flight", {}).get("iata", "")
-                        scheduled_time = flight.get(f"{flight_type_param.replace('_iata', '')}_scheduled_time", "")
-                        origin = flight.get("arrival", {}).get("iata", "N/A") if flight_type_param == "arr_iata" else "N/A"
-                        destination = flight.get("departure", {}).get("iata", "N/A") if flight_type_param == "dep_iata" else "N/A"
-                        gate = flight.get(f"{flight_type_param.replace('_iata', '')}", {}).get("gate", "N/A")
-                        flights.append({
-                            "Vuelo": flight_number,
-                            "STD": scheduled_time,
-                            "Destino": destination if flight_type_param == "dep_iata" else origin,
-                            "Estado": status_text,
-                            "Posicion": gate,
-                            "Matricula": "N/A"
-                        })
-                    logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
-                    return flights
-            except Exception as e:
-                logger.error(f"Error GoFlightLabs ({flight_type}, intento {attempt+1}): {e}")
-                if attempt < retries - 1:
-                    await asyncio.sleep(2 ** attempt)
-                else:
-                    return []
-    return []
-    """
-
-# Función para obtener datos de OpenSky Network
-"""
-async def get_opensky_data():
-    if "data" in opensky_cache:
-        logger.info("Devolviendo datos en caché de OpenSky")
-        return opensky_cache["data"]
-    try:
-        url = "https://opensky-network.org/api/states/all"
-        params = {
-            "lamin": -35.6084,
-            "lomin": -59.3732,
-            "lamax": -33.6084,
-            "lomax": -57.3732
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    states = data.get("states", [])
-                    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
-                    departures = await fetch_aviationstack_flights(flight_type="partidas")
-                    tams_data = arrivals + departures
-                    combined_data = []
-                    for state in states:
-                        icao24, callsign, origin_country, time_position, last_contact, lon, lat, baro_altitude, on_ground, velocity, true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source = state[:17]
-                        callsign = callsign.strip() if callsign else ""
-                        if callsign and callsign.startswith("ARG"):
-                            flight_info = {
-                                "flight": callsign,
-                                "registration": icao24,
-                                "lat": lat,
-                                "lon": lon,
-                                "alt_geom": geo_altitude,
-                                "gs": velocity * 1.94384 if velocity else None,
-                                "vert_rate": vertical_rate,
-                                "origin_dest": "N/A",
-                                "heading": true_track
-                            }
-                            for tams_flight in tams_data:
-                                if tams_flight["Vuelo"] == callsign:
-                                    flight_info.update({
-                                        "scheduled": tams_flight["STD"],
-                                        "position": tams_flight["Posicion"],
-                                        "destination": tams_flight["Destino"],
-                                        "status": tams_flight["Estado"]
-                                    })
-                                    break
-                            combined_data.append(flight_info)
-                    for tams_flight in tams_data:
-                        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
-                            combined_data.append({
-                                "flight": tams_flight["Vuelo"],
-                                "registration": tams_flight["Matricula"],
-                                "scheduled": tams_flight["STD"],
-                                "position": tams_flight["Posicion"],
-                                "destination": tams_flight["Destino"],
-                                "status": tams_flight["Estado"],
-                                "lat": None,
-                                "lon": None,
-                                "alt_geom": None,
-                                "gs": None,
-                                "vert_rate": None,
-                                "origin_dest": None,
-                                "heading": None
-                            })
-                    opensky_cache["data"] = combined_data
-                    logger.info(f"Datos de OpenSky: {len(combined_data)} vuelos")
-                    return combined_data
-                else:
-                    logger.error(f"Error OpenSky: {response.status}")
-                    return []
-    except Exception as e:
-        logger.error(f"Error al obtener OpenSky: {str(e)}")
-        return []
-"""
-# Actualizar vuelos AviationStack
+# Actualizar vuelos periódicamente
 async def update_flights():
-    global flights_cache
+    """Actualiza el caché de vuelos y lo difunde a los clientes conectados."""
     while True:
         try:
             response = await get_aep_flights()
-            flights_cache = response['flights']
-            if not flights_cache:
-                logger.warning("No se encontraron vuelos de GoFlightLabs")
-            else:
-                logger.info(f"Cache de vuelos actualizado: {len(flights_cache)} vuelos")
-            # Difundir actualización a clientes conectados
+            logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
             disconnected_users = []
             for token, user in users.items():
                 if not user["logged_in"] or not user["websocket"]:
@@ -529,7 +400,7 @@ async def update_flights():
                 try:
                     await user["websocket"].send_json({
                         "type": "flight_update",
-                        "flights": flights_cache
+                        "flights": response['flights']
                     })
                     logger.info(f"Actualización de vuelos enviada a {user['name']}")
                 except Exception as e:
@@ -540,63 +411,30 @@ async def update_flights():
                     users[token]["websocket"] = None
                     users[token]["logged_in"] = False
                     logger.info(f"Usuario {token} marcado como desconectado")
-            if disconnected_users:
-                await broadcast_users()
+                if disconnected_users:
+                    await broadcast_users()
         except Exception as e:
             logger.error(f"Error actualizando vuelos: {e}")
         await asyncio.sleep(300)
 
-# Actualizar vuelos OpenSky periódicamente
-async def update_flights_periodically():
-    global flights_cache
-    while True:
-        try:
-            flights = await get_opensky_data()
-            flights_cache.clear()
-            flights_cache.extend(flights)
-            disconnected_users = []
-            for token, user in users.items():
-                if not user["logged_in"] or not user["websocket"]:
-                    disconnected_users.append(token)
-                    continue
-                try:
-                    await user["websocket"].send_json({
-                        "type": "flight_update",
-                        "flights": flights
-                    })
-                    logger.info(f"Actualización de vuelos enviada a {user['name']}")
-                except Exception as e:
-                    logger.error(f"Error enviando vuelos a {user['name']}: {e}")
-                    disconnected_users.append(token)
-            for token in disconnected_users:
-                if token in users:
-                    users[token]["websocket"] = None
-                    users[token]["logged_in"] = False
-                    logger.info(f"Usuario {token} marcado como desconectado")
-            if disconnected_users:
-                await broadcast_users()
-        except Exception as e:
-            logger.error(f"Error actualizando vuelos: {e}")
-        await asyncio.sleep(10)
-        
 # Función para transcribir audio
-async def transcribe_audio(audio_data):
+async def transcribe_audio(audio_data: str) -> str:
+    """Transcribe audio en formato WebM a texto usando Google Speech Recognition."""
     try:
         audio_bytes = base64.b64decode(audio_data)
-        audio_file = io.BytesIO(audio_bytes)
-        audio_segment = AudioSegment.from_file(audio_file, format="webm")
-        audio_segment = audio_segment.set_channels(1)
-        audio_segment = audio_segment.set_frame_rate(16000)
-        wav_io = io.BytesIO()
-        audio_segment.export(wav_io, format="wav")
-        wav_io.seek(0)
-        data, samplerate = sf.read(wav_io)
-        recognizer = sr.Recognizer()
-        with sr.AudioFile(wav_io) as source:
-            audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data, language="es-ES", timeout=10)
-            logger.info("Audio transcrito exitosamente")
-            return text
+        with io.BytesIO(audio_bytes) as audio_file:
+            audio_segment = AudioSegment.from_file(audio_file, format="webm")
+            audio_segment = audio_segment.set_channels(1).set_frame_rate(16000)
+            with io.BytesIO() as wav_io:
+                audio_segment.export(wav_io, format="wav")
+                wav_io.seek(0)
+                data, samplerate = sf.read(wav_io)
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(wav_io) as source:
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data, language="es-ES", timeout=10)
+                    logger.info("Audio transcrito exitosamente")
+                    return text
     except sr.UnknownValueError:
         logger.warning("No se pudo transcribir el audio")
         return "Transcripción no disponible"
@@ -606,74 +444,43 @@ async def transcribe_audio(audio_data):
     except Exception as e:
         logger.error(f"Error al procesar el audio: {e}")
         return "Transcripción no disponible"
-    finally:
-        audio_file.close()
-        wav_io.close()
 
 # Función para procesar consultas de búsqueda
-async def process_search_query(query, flights):
+async def process_search_query(query: str, flights: List[Dict]) -> str:
+    """Busca vuelos que coincidan con la consulta."""
     query = query.lower().strip()
     results = []
     for flight in flights:
         if (query in flight["flight_number"].lower() or
-            query in flight["destination"].lower() or
-            query in flight["status"].lower() or
-            "ar" + query in flight["flight_number"].lower()):
+                query in flight["destination"].lower() or
+                query in flight["status"].lower() or
+                "ar" + query in flight["flight_number"].lower()):
             results.append(flight)
     if not results:
         return "No se encontraron vuelos para tu consulta."
-    return ", ".join([f"{f['flight']} a {f['destination']}, {f['status']}" for f in results])
+    return ", ".join([f"{f['flight_number']} a {f['destination']}, {f['status']}" for f in results])
 
-# Función para eliminar duplicados
-def remove_duplicates(flights):
-    seen = set()
-    unique_flights = []
-    for flight in flights:
-        flight_key = (flight["flight_number"], flight["departure_time"])
-        if flight_key not in seen:
-            seen.add(flight_key)
-            unique_flights.append(flight)
-    return unique_flights
-
-"""
-@app.get("/opensky")
-async def get_opensky_data_endpoint():
-    data = await get_opensky_data()
-    logger.info(f"Datos combinados: {len(data)} vuelos")
-    return data
-    """
-
-def init_db():
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
-                  muted_users TEXT, last_active TIMESTAMP)''')
-    conn.commit()
-    conn.close()
-
-def save_session(token, user_id, name, function, group_id=None, muted_users=None):
+# Funciones de base de datos
+def save_session(token: str, user_id: str, name: str, function: str, group_id: Optional[str] = None, muted_users: Optional[Set[str]] = None):
+    """Guarda una sesión de usuario en la base de datos."""
     muted_users_str = json.dumps(list(muted_users or set()))
     last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''INSERT OR REPLACE INTO sessions 
-                 (token, user_id, name, function, group_id, muted_users, last_active) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
-              (token, user_id, name, function, group_id, muted_users_str, last_active))
-    conn.commit()
-    conn.close()
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO sessions 
+                     (token, user_id, name, function, group_id, muted_users, last_active) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                  (token, user_id, name, function, group_id, muted_users_str, last_active))
+        conn.commit()
     logger.info(f"Sesión guardada para token={token}")
 
-def load_session(token):
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
-              (token,))
-    row = c.fetchone()
-    conn.close()
+def load_session(token: str) -> Optional[Dict]:
+    """Carga una sesión de usuario desde la base de datos."""
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
+                  (token,))
+        row = c.fetchone()
     if row:
         user_id, name, function, group_id, muted_users_str, last_active = row
         try:
@@ -690,33 +497,35 @@ def load_session(token):
         }
     return None
 
-def delete_session(token):
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    conn.commit()
-    conn.close()
+def delete_session(token: str):
+    """Elimina una sesión de usuario de la base de datos."""
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
     logger.info(f"Sesión eliminada para token={token}")
 
-def save_message(user_id, audio_data, text, timestamp):
+def save_message(user_id: str, audio_data: str, text: str, timestamp: str):
+    """Guarda un mensaje en la base de datos."""
     date = datetime.utcnow().strftime("%Y-%m-%d")
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
-              (user_id, audio_data, text, timestamp, date))
-    conn.commit()
-    conn.close()
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
+                  (user_id, audio_data, text, timestamp, date))
+        conn.commit()
     logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
 
-def get_history():
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
-    rows = c.fetchall()
-    conn.close()
+def get_history() -> List[Dict]:
+    """Obtiene el historial de mensajes."""
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
+        rows = c.fetchall()
     return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
+# Procesar cola de audio
 async def process_audio_queue():
+    """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
             item = await audio_queue.get()
@@ -744,18 +553,10 @@ async def process_audio_queue():
 
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
                 logger.info("Transcribiendo audio...")
-                try:
-                    text = await transcribe_audio(audio_data)
-                    logger.info(f"Transcripción: {text}")
-                except Exception as e:
-                    logger.error(f"Error al transcribir audio: {e}")
-                    text = "Error en transcripción"
+                text = await transcribe_audio(audio_data)
 
             user_id = f"{sender}_{function}"
-            try:
-                save_message(user_id, audio_data, text, timestamp)
-            except Exception as e:
-                logger.error(f"Error al guardar mensaje: {e}")
+            save_message(user_id, audio_data, text, timestamp)
 
             broadcast_message = {
                 "type": "audio",
@@ -800,23 +601,26 @@ async def process_audio_queue():
         finally:
             audio_queue.task_done()
 
+# Limpiar sesiones expiradas
 async def clean_expired_sessions():
+    """Elimina sesiones con más de 24 horas de inactividad."""
     while True:
         try:
-            conn = sqlite3.connect("chat_history.db")
-            c = conn.cursor()
-            expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-            c.execute("DELETE FROM sessions WHERE last_active < ?", (expiration_time,))
-            conn.commit()
-            deleted = c.rowcount
-            if deleted > 0:
-                logger.info(f"Eliminadas {deleted} sesiones expiradas")
-            conn.close()
+            with sqlite3.connect("chat_history.db") as conn:
+                c = conn.cursor()
+                expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                c.execute("DELETE FROM sessions WHERE last_active < ?", (expiration_time,))
+                conn.commit()
+                deleted = c.rowcount
+                if deleted > 0:
+                    logger.info(f"Eliminadas {deleted} sesiones expiradas")
         except Exception as e:
             logger.error(f"Error al limpiar sesiones: {e}")
         await asyncio.sleep(3600)
 
+# Limpiar mensajes antiguos
 async def clear_messages():
+    """Elimina mensajes con más de 24 horas diariamente a las 5:30 AM."""
     while True:
         try:
             now = datetime.utcnow()
@@ -825,21 +629,21 @@ async def clear_messages():
                 start_time += timedelta(days=1)
             await asyncio.sleep((start_time - now).total_seconds())
             
-            conn = sqlite3.connect("chat_history.db")
-            c = conn.cursor()
-            expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-            c.execute("DELETE FROM messages WHERE date < ?", (expiration_time,))
-            conn.commit()
-            deleted = c.rowcount
-            if deleted > 0:
-                logger.info(f"Eliminados {deleted} mensajes antiguos")
-            conn.close()
+            with sqlite3.connect("chat_history.db") as conn:
+                c = conn.cursor()
+                expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                c.execute("DELETE FROM messages WHERE date < ?", (expiration_time,))
+                conn.commit()
+                deleted = c.rowcount
+                if deleted > 0:
+                    logger.info(f"Eliminados {deleted} mensajes antiguos")
         except Exception as e:
             logger.error(f"Error al limpiar mensajes: {e}")
 
-            
+# Endpoint WebSocket
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
+    """Maneja conexiones WebSocket para comunicación en tiempo real."""
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
@@ -847,21 +651,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         # Validar formato del token
         try:
             decoded_token = base64.b64decode(token).decode('utf-8')
-            if '_' not in decoded_token or len(decoded_token.split('_')) != 3:
-                raise ValueError("Formato de token inválido")
+            employee_id, surname, sector = decoded_token.split('_')
         except (base64.binascii.Error, ValueError) as e:
             logger.error(f"Token inválido: {token}, {str(e)}")
             await websocket.send_json({"type": "error", "message": "Token inválido"})
             await websocket.close()
             return
 
-          # Verificar que el token corresponde a un usuario registrado
-        conn = sqlite3.connect("chat_history.db")
-        c = conn.cursor()
-        c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
-                  (surname, employee_id, sector))
-        user = c.fetchone()
-        conn.close()
+        # Verificar que el token corresponde a un usuario registrado
+        with sqlite3.connect("chat_history.db") as conn:
+            c = conn.cursor()
+            c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
+                      (surname, employee_id, sector))
+            user = c.fetchone()
 
         if not user:
             logger.error(f"Token no corresponde a un usuario registrado: {token}")
@@ -890,28 +692,30 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         else:
             users[token] = {
                 "user_id": user_id,
-                "name": "Anónimo",
-                "function": "Desconocida",
+                "name": surname,
+                "function": sector,
                 "logged_in": True,
                 "websocket": websocket,
                 "muted_users": set(),
                 "subscription": None,
                 "group_id": None
             }
-            save_session(token, user_id, "Anónimo", "Desconocida")
+            save_session(token, user_id, surname, sector)
             logger.info(f"Nueva sesión creada para {token}")
 
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
-        await websocket.send_json({"type": "flight_update", "flights": flights_cache})
+        await websocket.send_json({"type": "mute_state", "global_mute_active": global_mute_active})
+        await websocket.send_json({"type": "flight_update", "flights": (await get_aep_flights())['flights']})
         await broadcast_users()
 
         while True:
             data = await websocket.receive_text()
             try:
                 message = json.loads(data)
-                logger.info(f"Mensaje recibido de {token}: {data[:50]}...")
+                logger.debug(f"Mensaje recibido de {token}: {data[:50]}...")
             except json.JSONDecodeError as e:
                 logger.error(f"Error decodificando mensaje de {token}: {e}")
+                await websocket.send_json({"type": "error", "message": "Mensaje JSON inválido"})
                 continue
 
             if message["type"] == "ping":
@@ -925,10 +729,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     users[token]["muted_users"]
                 )
                 continue
-
-            elif message["type"] == "register":
-                 # Registro ahora se maneja vía /register, no WebSocket
-                await websocket.send_json({"type": "error", "message": "Use el endpoint /register para registrarse"})
 
             elif message["type"] == "subscribe":
                 users[token]["subscription"] = message["subscription"]
@@ -983,10 +783,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     )
 
             elif message["type"] == "mute_all":
+                global global_mute_active
                 global_mute_active = True
                 await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
 
             elif message["type"] == "unmute_all":
+                global global_mute_active
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
 
@@ -1017,7 +819,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "type": "mute_non_group_error",
                         "message": "No estás en ningún grupo"
                     })
-                    
+
             elif message["type"] == "mute":
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
 
@@ -1106,7 +908,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     "group_id": group_id,
                     "in_group": in_group
                 })
-
             elif message["type"] == "group_message":
                 group_id = users[token]["group_id"]
                 if group_id and group_id in groups:
@@ -1118,17 +919,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     timestamp = message.get("timestamp", datetime.utcnow().strftime("%H:%M"))
 
                     if text == "Sin transcripción" or text == "Pendiente de transcripción":
-                        try:
-                            text = await transcribe_audio(audio_data)
-                        except Exception as e:
-                            logger.error(f"Error al transcribir audio de grupo: {e}")
-                            text = "Error en transcripción"
+                        text = await transcribe_audio(audio_data)
 
                     user_id = f"{users[token]['name']}_{users[token]['function']}"
-                    try:
-                        save_message(user_id, audio_data, f"[Grupo {group_id}] {text}", timestamp)
-                    except Exception as e:
-                        logger.error(f"Error al guardar mensaje grupo: {e}")
+                    save_message(user_id, audio_data, f"[Grupo {group_id}] {text}", timestamp)
 
                     broadcast_message = {
                         "type": "group_message",
@@ -1165,7 +959,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         await broadcast_users()
 
             elif message["type"] == "search_query":
-                response = await process_search_query(message["query"], flights_cache)
+                response = await process_search_query(message["query"], (await get_aep_flights())['flights'])
                 await websocket.send_json({"type": "search_response", "message": response})
 
             elif message["type"] == "flight_details_request":
@@ -1191,6 +985,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado: {token}")
         if token in users:
+            group_id = users[token]["group_id"]
+            if group_id and group_id in groups and token in groups[group_id]:
+                groups[group_id].remove(token)
+                if not groups[group_id]:
+                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
@@ -1205,6 +1004,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     except Exception as e:
         logger.error(f"Error WebSocket {token}: {str(e)}")
         if token in users:
+            group_id = users[token]["group_id"]
+            if group_id and group_id in groups and token in groups[group_id]:
+                groups[group_id].remove(token)
+                if not groups[group_id]:
+                    del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
@@ -1218,7 +1022,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             )
         await websocket.close()
 
-async def broadcast_global_mute_state(message_type, message_text):
+async def broadcast_global_mute_state(message_type: str, message_text: str):
+    """Difunde el estado de muteo global a todos los clientes."""
     disconnected_users = []
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"]:
@@ -1231,8 +1036,9 @@ async def broadcast_global_mute_state(message_type, message_text):
                 user["logged_in"] = False
     if disconnected_users:
         await broadcast_users()
-        
+
 async def broadcast_users():
+    """Difunde la lista de usuarios conectados."""
     user_list = []
     for token in users:
         if users[token]["logged_in"] and users[token]["websocket"]:
@@ -1265,18 +1071,43 @@ async def broadcast_users():
                 users[token]["logged_in"] = False
         await broadcast_users()
 
+async def broadcast_message(message: Dict):
+    """Difunde un mensaje a todos los usuarios conectados."""
+    disconnected_users = []
+    for token, user in list(users.items()):
+        if not user["logged_in"] or not user["websocket"]:
+            disconnected_users.append(token)
+            continue
+        try:
+            await user["websocket"].send_json(message)
+        except Exception as e:
+            logger.error(f"Error al enviar mensaje a {user['name']}: {e}")
+            disconnected_users.append(token)
+    for token in disconnected_users:
+        if token in users:
+            users[token]["websocket"] = None
+            users[token]["logged_in"] = False
+            logger.info(f"Usuario {token} marcado como desconectado")
+    if disconnected_users:
+        await broadcast_users()
+
 @app.get("/history")
 async def get_history_endpoint():
-    history = get_history()
-    return history
+    """Obtiene el historial de mensajes."""
+    return get_history()
+
+@app.get("/api/history")
+async def get_api_history_endpoint():
+    """Alias para /history para compatibilidad con el frontend."""
+    return get_history()
 
 @app.on_event("startup")
 async def startup_event():
+    """Inicializa la aplicación y tareas en segundo plano."""
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
     asyncio.create_task(update_flights())
-    asyncio.create_task(update_flights_periodically())
     asyncio.create_task(clean_expired_sessions())
     logger.info("Aplicación iniciada")
 
