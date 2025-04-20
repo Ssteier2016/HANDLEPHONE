@@ -47,8 +47,8 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
 # Validar claves de API
 GOFLIGHTLABS_API_KEY = os.getenv("GOFLIGHTLABS_API_KEY")
-AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
-if not GOFLIGHTLABS_API_KEY or not AVIATIONSTACK_API_KEY:
+#AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
+if not GOFLIGHTLABS_API_KEY: # or not AVIATIONSTACK_API_KEY:
     logger.error("Faltan claves de API en las variables de entorno")
     raise ValueError("GOFLIGHTLABS_API_KEY o AVIATIONSTACK_API_KEY no están configuradas")
 
@@ -180,7 +180,7 @@ async def get_flight_details(flight_number: str):
 
     try:
         params = {
-            'access_key': AVIATIONSTACK_API_KEY,
+            'access_key': GOFLIGHTLABS_API_KEY,
             'flight_iata': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             'dep_iata': 'AEP',
             'arr_iata': 'AEP'
