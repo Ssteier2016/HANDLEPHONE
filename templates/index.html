@@ -33,27 +33,55 @@
     </script>
 </head>
 <body>
-    <div id="register" style="display: block;">
+    <!-- Formulario de Inicio de Sesión -->
+    <div id="login-form" class="auth-form">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
-        <input id="name" placeholder="Apellido">
-        <input id="legajo" placeholder="Legajo" type="number" maxlength="5">
-        <select id="function">
-            <option value="" disabled selected>Selecciona una función</option>
-            <option value="Maletero">Maletero</option>
-            <option value="Cintero">Cintero</option>
-            <option value="Tractorista">Tractorista</option>
-            <option value="Equipo">Equipo</option>
-            <option value="Micro">Micro</option>
-            <option value="Mobilero">Movilero</option>
-            <option value="Jefatura">Jefatura</option>
-            <option value="Supervisor">Supervisor</option>
-            <option value="Señalero">Señalero</option>
-            <option value="Pañolero">Pañolero</option>
-            <option value="Combustible">Combustible</option>
-        </select>
-        <button id="register-button">Registrarse</button>
+        <h2>Iniciar Sesión</h2>
+        <form id="login">
+            <label for="login-surname">Apellido:</label>
+            <input type="text" id="login-surname" placeholder="Ej. Souto" required>
+            <label for="login-employee-id">Legajo:</label>
+            <input type="text" id="login-employee-id" placeholder="Ej. 35127" required>
+            <label for="login-sector">Sector:</label>
+            <select id="login-sector" required>
+                <option value="" disabled selected>Seleccionar sector</option>
+                <option value="Operaciones">Operaciones</option>
+                <option value="Control">Control</option>
+                <option value="Administración">Administración</option>
+                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Seguridad">Seguridad</option>
+            </select>
+            <button type="submit">Iniciar Sesión</button>
+            <p><a href="#" id="show-register">¿No estás registrado? Regístrate aquí</a></p>
+        </form>
+        <p id="login-error" class="error"></p>
     </div>
 
+    <!-- Formulario de Registro -->
+    <div id="register-form" class="auth-form" style="display: none;">
+        <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
+        <h2>Registrarse</h2>
+        <form id="register">
+            <label for="register-surname">Apellido:</label>
+            <input type="text" id="register-surname" placeholder="Ej. Souto" required>
+            <label for="register-employee-id">Legajo:</label>
+            <input type="text" id="register-employee-id" placeholder="Ej. 35127" required>
+            <label for="register-sector">Sector:</label>
+            <select id="register-sector" required>
+                <option value="" disabled selected>Seleccionar sector</option>
+                <option value="Operaciones">Operaciones</option>
+                <option value="Control">Control</option>
+                <option value="Administración">Administración</option>
+                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Seguridad">Seguridad</option>
+            </select>
+            <button type="submit">Registrarse</button>
+            <p><a href="#" id="show-login">¿Ya estás registrado? Inicia sesión aquí</a></p>
+        </form>
+        <p id="register-error" class="error"></p>
+    </div>
+
+    <!-- Interfaz Principal -->
     <div id="main" style="display: none;">
         <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
@@ -104,6 +132,7 @@
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
+    <!-- Pantalla de Grupo -->
     <div id="group-screen" style="display: none;">
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
@@ -147,6 +176,7 @@
         <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
+    <!-- Pantalla de Radar -->
     <div id="radar-screen" style="display: none;">
         <div class="radar-header">
             <h2>Radar</h2>
@@ -156,6 +186,7 @@
         <div id="map"></div>
     </div>
 
+    <!-- Pantalla de Historial -->
     <div id="history-screen" style="display: none;">
         <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button onclick="backToMain()">Volver</button>
@@ -163,6 +194,7 @@
         <div id="history-list"></div>
     </div>
 
+    <!-- Modal de Detalles de Vuelos -->
     <div id="flight-details-modal" class="modal">
         <div class="modal-content">
             <span id="close-modal" class="close">×</span>
