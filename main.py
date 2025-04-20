@@ -217,7 +217,7 @@ async def get_flight_details(flight_number: str):
         return flight_data
 
     except aiohttp.ClientError as e:
-        logger.error(f"Error al consultar AviationStack: {e}")
+        logger.error(f"Error al consultar GoFlightLabs: {e}")
         raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
     except Exception as e:
         logger.error(f"Error interno en /flight_details: {e}")
@@ -237,9 +237,9 @@ def is_near_aeroparque(lat, lon, max_distance_km=1500):
 async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparque, AEP"):
     flight_type_param = "dep_iata" if flight_type.lower() == "partidas" else "arr_iata"
     airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
-    url = "http://api.aviationstack.com/v1/flights"
+    url = "https://www.goflightlabs.com/flights"
     params = {
-        "access_key": AVIATIONSTACK_API_KEY,
+        "access_key": GOFLIGHTLABS_API_KEY,
         flight_type_param: airport_code,
         "airline_iata": "AR",
         "limit": 100
@@ -293,7 +293,7 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                     logger.info(f"Obtenidos {len(flights)} vuelos de {flight_type}")
                     return flights
             except Exception as e:
-                logger.error(f"Error AviationStack ({flight_type}, intento {attempt+1}): {e}")
+                logger.error(f"Error GoFlightLabs ({flight_type}, intento {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(2 ** attempt)
                 else:
