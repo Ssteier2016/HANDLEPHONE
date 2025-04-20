@@ -34,7 +34,7 @@ load_dotenv()
 app = FastAPI()
 
 # Configurar CORS
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://tu-dominio.com").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://handyhandle.onrender.com").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -84,6 +84,17 @@ ALLOWED_USERS = {
 # Sectores disponibles
 ALLOWED_SECTORS = ["Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor", "Jefatura", "Movilero", "Señalero", "Pañolero"]
 
+# Modelos Pydantic para validación
+class RegisterRequest(BaseModel):
+    surname: str
+    employee_id: str
+    sector: str
+
+class LoginRequest(BaseModel):
+    surname: str
+    employee_id: str
+    sector: str
+    
 # Ruta raíz
 @app.get("/")
 async def read_root():
@@ -107,6 +118,20 @@ def to_icao(text):
     """Convierte texto a pronunciación ICAO (ej. 'Foxtrot Uniform Alfa' -> 'FUA')."""
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
+# Inicializar base de datos
+def init_db():
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS messages 
+                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                  muted_users TEXT, last_active TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT)''')
+    conn.commit()
+    conn.close()
+    
 # Estructuras de datos
 users = {}  # Dict[token, Dict[str, Any]]: Almacena info de usuarios
 audio_queue = asyncio.Queue()  # Cola para procesar audio
@@ -114,6 +139,89 @@ groups = {}  # Dict[group_id, List[token]]: Grupos de usuarios
 flights_cache = []  # Cache global para vuelos
 global_mute_active = False  # Estado de muteo general
 
+# Endpoint de registro
+@app.post("/register")
+async def register_user(request: RegisterRequest):
+    surname = request.surname.strip().capitalize()
+    employee_id = request.employee_id.strip()
+    sector = request.sector.strip()
+
+    # Validar usuario permitido
+    if surname not in ALLOWED_USERS:
+        logger.error(f"Intento de registro con apellido no permitido: {surname}")
+        raise HTTPException(status_code=403, detail="Usuario no permitido")
+    
+    # Validar legajo (si aplica)
+    expected_employee_id = ALLOWED_USERS[surname]
+    if expected_employee_id and expected_employee_id != employee_id:
+        logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
+        raise HTTPException(status_code=403, detail="Legajo incorrecto")
+
+    # Validar sector
+    if sector not in ALLOWED_SECTORS:
+        logger.error(f"Sector inválido: {sector}")
+        raise HTTPException(status_code=400, detail="Sector no válido")
+
+    # Verificar si ya está registrado
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("SELECT surname FROM users WHERE surname = ?", (surname,))
+    if c.fetchone():
+        conn.close()
+        logger.error(f"Usuario ya registrado: {surname}")
+        raise HTTPException(status_code=400, detail="Usuario ya registrado")
+
+    # Registrar usuario
+    try:
+        c.execute("INSERT INTO users (surname, employee_id, sector) VALUES (?, ?, ?)",
+                  (surname, employee_id, sector))
+        conn.commit()
+        logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
+        return {"message": "Registro exitoso"}
+    except Exception as e:
+        conn.close()
+        logger.error(f"Error al registrar usuario {surname}: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al registrar")
+    finally:
+        conn.close()
+
+# Endpoint de inicio de sesión
+@app.post("/login")
+async def login_user(request: LoginRequest):
+    surname = request.surname.strip().capitalize()
+    employee_id = request.employee_id.strip()
+    sector = request.sector.strip()
+
+    # Validar usuario permitido
+    if surname not in ALLOWED_USERS:
+        logger.error(f"Intento de login con apellido no permitido: {surname}")
+        raise HTTPException(status_code=403, detail="Usuario no permitido")
+
+    # Validar legajo (si aplica)
+    expected_employee_id = ALLOWED_USERS[surname]
+    if expected_employee_id and expected_employee_id != employee_id:
+        logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
+        raise HTTPException(status_code=403, detail="Legajo incorrecto")
+
+    # Verificar credenciales en la base de datos
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
+              (surname, employee_id, sector))
+    user = c.fetchone()
+    conn.close()
+
+    if not user:
+        logger.error(f"Credenciales inválidas para {surname}: {employee_id}, {sector}")
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    # Generar token (legajo_name_function)
+    token_data = f"{employee_id}_{surname}_{sector}"
+    token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
+    logger.info(f"Login exitoso: {surname} ({employee_id}, {sector}), token: {token}")
+
+    return {"token": token, "message": "Inicio de sesión exitoso"}
+    
 # Ruta para obtener vuelos de Aeroparque
 @app.get("/aep_flights")
 async def get_aep_flights(query: str = None):
