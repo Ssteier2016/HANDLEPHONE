@@ -365,7 +365,7 @@ def is_near_aeroparque(lat, lon, max_distance_km=1500):
     return distance_km <= max_distance_km
 
 #Función unificada para obtener vuelos de AviationStack
-
+" " "
 async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparque, AEP"):
     flight_type_param = "dep_iata" if flight_type.lower() == "partidas" else "arr_iata"
     airport_code = airport.split(", ")[1] if ", " in airport else "AEP"
@@ -431,7 +431,7 @@ async def fetch_aviationstack_flights(flight_type="partidas", airport="Aeroparqu
                 else:
                     return []
     return []
-    /*
+    " " "
 
 # Función para obtener datos de OpenSky Network
 async def get_opensky_data():
