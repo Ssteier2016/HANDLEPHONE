@@ -143,6 +143,8 @@ async def get_aep_flights(query: str = None):
                     'gate': flight.get('departure', {}).get('gate', 'N/A'),
                     'delay': flight.get('departure', {}).get('delay', 0),
                     'registration': flight.get('aircraft', {}).get('registration', 'N/A')
+                    'destination': flight.get('arrival', {}).get('airport', ''),
+                    'origin': flight.get('departure', {}).get('airport', '')
                 }
                 filtered_flights.append(flight_data)
 
