@@ -49,8 +49,8 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 GOFLIGHTLABS_API_KEY = os.getenv("GOFLIGHTLABS_API_KEY")
 #AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
 if not GOFLIGHTLABS_API_KEY: # or not AVIATIONSTACK_API_KEY:
-    logger.error("Faltan claves de API en las variables de entorno")
-    raise ValueError("GOFLIGHTLABS_API_KEY o AVIATIONSTACK_API_KEY no están configuradas")
+    logger.error("Faltan claves de API de GoFlightLabs en las variables de entorno")
+    raise ValueError("GOFLIGHTLABS_API_KEY no están configuradas")
 
 # Cargar index.html
 with open("templates/index.html", "r") as f:
@@ -81,7 +81,7 @@ ICAO_ALPHABET = {
 }
 
 def to_icao(text):
-    """Convierte texto a pronunciación ICAO (ej. 'AR123' -> 'Alfa Romeo')."""
+    """Convierte texto a pronunciación ICAO (ej. 'Foxtrot Uniform Alfa' -> 'FUA')."""
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Estructuras de datos
@@ -186,10 +186,10 @@ async def get_flight_details(flight_number: str):
             'arr_iata': 'AEP'
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get('http://api.aviationstack.com/v1/flights', params=params, timeout=15) as response:
+            async with session.get('https://www.goflightlabs.com/flights', params=params, timeout=15) as response:
                 if response.status != 200:
-                    logger.error(f"Error AviationStack: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de AviationStack")
+                    logger.error(f"Error GoFlightLabs: {response.status}")
+                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs)
                 data = await response.json()
 
         flights = data.get('data', [])
@@ -199,7 +199,7 @@ async def get_flight_details(flight_number: str):
 
         flight = flights[0]
         flight_data = {
-            'flight_number': flight.get('flight', {}).get('iata', ''),
+            'flight_number': flight.get('flight', {}).get('number', ''),
             'departure_airport': flight.get('departure', {}).get('iata', ''),
             'departure_time': flight.get('departure', {}).get('scheduled', ''),
             'arrival_airport': flight.get('arrival', {}).get('iata', ''),
