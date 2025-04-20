@@ -999,16 +999,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             user_id = f"{user['name']}_{user['function']}"
                             users[token]["muted_users"].add(user_id)
                             muted_users.append(user_id)
-            elif message["type"] == "unmute_non_group":
-                group_id = users[token]["group_id"]
-                if group_id:
-                    unmuted_users = []
-                    for user_token, user in users.items():
-                        if user_token != token and user["group_id"] != group_id:
-                            user_id = f"{user['name']}_{user['function']}"
-                            if user_id in users[token]["muted_users"]:
-                                users[token]["muted_users"].discard(user_id)
-                                muted_users.append(user_id)
                     save_session(
                         token,
                         users[token]["user_id"],
@@ -1022,13 +1012,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "message": "Usuarios fuera del grupo muteados",
                         "muted_users": muted_users
                     })
-                    
                 else:
                     await websocket.send_json({
-                        "type": "unmute_non_group_error",
+                        "type": "mute_non_group_error",
                         "message": "No estás en ningún grupo"
                     })
-
+                    
             elif message["type"] == "mute":
                 await websocket.send_json({"type": "mute_success", "message": "Mute activado"})
 
