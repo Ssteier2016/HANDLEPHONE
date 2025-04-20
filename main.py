@@ -615,10 +615,10 @@ async def process_search_query(query, flights):
     query = query.lower().strip()
     results = []
     for flight in flights:
-        if (query in flight["flight"].lower() or
+        if (query in flight["flight_number"].lower() or
             query in flight["destination"].lower() or
             query in flight["status"].lower() or
-            "ar" + query in flight["flight"].lower()):
+            "ar" + query in flight["flight_number"].lower()):
             results.append(flight)
     if not results:
         return "No se encontraron vuelos para tu consulta."
@@ -635,11 +635,13 @@ def remove_duplicates(flights):
             unique_flights.append(flight)
     return unique_flights
 
+"""
 @app.get("/opensky")
 async def get_opensky_data_endpoint():
     data = await get_opensky_data()
     logger.info(f"Datos combinados: {len(data)} vuelos")
     return data
+    """
 
 def init_db():
     conn = sqlite3.connect("chat_history.db")
