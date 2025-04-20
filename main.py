@@ -508,17 +508,42 @@ async def get_opensky_data():
     except Exception as e:
         logger.error(f"Error al obtener OpenSky: {str(e)}")
         return []
-
+"""
 # Actualizar vuelos AviationStack
 async def update_flights():
     global flights_cache
     while True:
-        flights = []
-        for flight_type in ["llegadas", "partidas"]:
-            flights.extend(await fetch_aviationstack_flights(flight_type=flight_type))
-        flights_cache = remove_duplicates(flights)
-        if not flights_cache:
-            logger.warning("No se encontraron vuelos de AviationStack")
+        try:
+            response = await get_aep_flights()
+            flights_cache = response['flights']
+            if not flights_cache:
+                logger.warning("No se encontraron vuelos de GoFlightLabs")
+            else:
+                logger.info(f"Cache de vuelos actualizado: {len(flights_cache)} vuelos")
+            # Difundir actualización a clientes conectados
+            disconnected_users = []
+            for token, user in users.items():
+                if not user["logged_in"] or not user["websocket"]:
+                    disconnected_users.append(token)
+                    continue
+                try:
+                    await user["websocket"].send_json({
+                        "type": "flight_update",
+                        "flights": flights_cache
+                    })
+                    logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                except Exception as e:
+                    logger.error(f"Error enviando vuelos a {user['name']}: {e}")
+                    disconnected_users.append(token)
+            for token in disconnected_users:
+                if token in users:
+                    users[token]["websocket"] = None
+                    users[token]["logged_in"] = False
+                    logger.info(f"Usuario {token} marcado como desconectado")
+            if disconnected_users:
+                await broadcast_users()
+        except Exception as e:
+            logger.error(f"Error actualizando vuelos: {e}")
         await asyncio.sleep(300)
 
 # Actualizar vuelos OpenSky periódicamente
@@ -553,7 +578,7 @@ async def update_flights_periodically():
         except Exception as e:
             logger.error(f"Error actualizando vuelos: {e}")
         await asyncio.sleep(10)
-"""
+        
 # Función para transcribir audio
 async def transcribe_audio(audio_data):
     try:
@@ -604,7 +629,7 @@ def remove_duplicates(flights):
     seen = set()
     unique_flights = []
     for flight in flights:
-        flight_key = (flight["Vuelo"], flight["STD"])
+        flight_key = (flight["flight_number"], flight["departure_time"])
         if flight_key not in seen:
             seen.add(flight_key)
             unique_flights.append(flight)
