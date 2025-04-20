@@ -1,5 +1,3 @@
-/* style.css */
-
 /* Reset básico */
 * {
   box-sizing: border-box;
@@ -753,6 +751,104 @@ h3 {
   text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
+/* Estilos para formularios de autenticación */
+.auth-form {
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 3px solid #4682B4;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 600px;
+  padding: 15px;
+  text-align: center;
+  width: 100%;
+  position: relative;
+}
+
+.auth-form h2 {
+  color: #4682B4;
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+}
+
+.auth-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.auth-form label {
+  color: #4682B4;
+  font-size: 14px;
+  margin: 5px 0;
+  text-align: left;
+}
+
+.auth-form input,
+.auth-form select {
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: #333333;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  width: 100%;
+}
+
+.auth-form select {
+  appearance: none;
+  background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+  padding-right: 30px;
+}
+
+.auth-form select:hover {
+  background-color: #FF4500;
+  color: #FFFFFF;
+}
+
+.auth-form button {
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px;
+  transition: background-color 0.3s;
+}
+
+.auth-form button:hover {
+  background-color: #FF4500;
+}
+
+.auth-form p {
+  margin: 10px 0 0;
+}
+
+.auth-form a {
+  color: #4682B4;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.auth-form a:hover {
+  color: #FF4500;
+  text-decoration: underline;
+}
+
+.auth-form .error {
+  color: #FF4500;
+  font-size: 12px;
+  margin-top: 10px;
+  text-align: center;
+}
+
 /* Media queries para responsividad */
 @media (max-width: 768px) {
   body {
@@ -979,6 +1075,40 @@ h3 {
     font-size: 12px;
     padding: 6px;
   }
+
+  /* Ajustes para formularios de autenticación en móviles */
+  .auth-form {
+    margin: 0;
+    max-width: 100%;
+    padding: 10px;
+  }
+
+  .auth-form h2 {
+    font-size: 14px;
+  }
+
+  .auth-form label {
+    font-size: 12px;
+  }
+
+  .auth-form input,
+  .auth-form select {
+    font-size: 12px;
+    padding: 6px;
+  }
+
+  .auth-form button {
+    font-size: 12px;
+    padding: 6px;
+  }
+
+  .auth-form a {
+    font-size: 10px;
+  }
+
+  .auth-form .error {
+    font-size: 10px;
+  }
 }
 
 @media (min-width: 769px) {
@@ -1202,4 +1332,38 @@ h3 {
     font-size: 14px;
     padding: 8px;
   }
-    }
+
+  /* Ajustes para formularios de autenticación en escritorio */
+  .auth-form {
+    max-width: 600px;
+    padding: 20px;
+  }
+
+  .auth-form h2 {
+    font-size: 18px;
+  }
+
+  .auth-form label {
+    font-size: 14px;
+  }
+
+  .auth-form input,
+  .auth-form select {
+    font-size: 14px;
+    padding: 8px;
+  }
+
+  .auth-form button {
+    font-size: 14px;
+    padding: 8px;
+    width: 200px;
+  }
+
+  .auth-form a {
+    font-size: 12px;
+  }
+
+  .auth-form .error {
+    font-size: 12px;
+  }
+}
