@@ -18,6 +18,7 @@ from pydub import AudioSegment
 import math
 from dotenv import load_dotenv
 from cachetools import TTLCache
+from pydantic import BaseModel
 
 # Configurar logging
 logging.basicConfig(
