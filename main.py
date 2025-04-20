@@ -61,6 +61,26 @@ flight_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /aep_flights
 flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
 #opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos para OpenSky
 
+# Lista de usuarios permitidos (apellido: legajo o None si no se especifica)
+ALLOWED_USERS = {
+    "Souto": "35127",
+    "Vázquez": None,  # Sin legajo, se permitirá registro con cualquier legajo
+    "Giménez": "35145",
+    "Gómez": "35128",
+    "Benítez": "33366",
+    "Contartese": "38818",
+    "Leites": "38880",
+    "Duartero": "36000",
+    "Arena": "35596",
+    "Brandariz": "35417",
+    "Fossati": "35152",
+    "Test": "12345",
+    "Bot": "00000"
+}
+
+# Sectores disponibles
+ALLOWED_SECTORS = ["Operaciones", "Control", "Administración", "Mantenimiento", "Seguridad"]
+
 # Ruta raíz
 @app.get("/")
 async def read_root():
