@@ -59,7 +59,7 @@ with open("templates/index.html", "r") as f:
 # Crear cachés
 flight_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /aep_flights
 flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
-opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos para OpenSky
+#opensky_cache = TTLCache(maxsize=1, ttl=15)  # 15 segundos para OpenSky
 
 # Ruta raíz
 @app.get("/")
