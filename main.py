@@ -64,7 +64,7 @@ flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_
 # Lista de usuarios permitidos (apellido: legajo o None si no se especifica)
 ALLOWED_USERS = {
     "Souto": "35127",
-    "Vázquez": None,  # Sin legajo, se permitirá registro con cualquier legajo
+    "Vázquez": "35806",  
     "Giménez": "35145",
     "Gómez": "35128",
     "Benítez": "33366",
@@ -75,11 +75,13 @@ ALLOWED_USERS = {
     "Brandariz": "35417",
     "Fossati": "35152",
     "Test": "12345",
-    "Bot": "00000"
+    "Bot": "00000",
+    "Test2": "12345"
+    
 }
 
 # Sectores disponibles
-ALLOWED_SECTORS = ["Operaciones", "Control", "Administración", "Mantenimiento", "Seguridad"]
+ALLOWED_SECTORS = ["Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor", "Jefatura", "Movilero", "Señalero", "Pañolero"]
 
 # Ruta raíz
 @app.get("/")
