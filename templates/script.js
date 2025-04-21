@@ -1150,6 +1150,7 @@ function completeLogout() {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
+    const MAPBOX_TOKEN = 'TU_TOKEN_DE_MAPBOX'; // Reemplaza con tu token de Mapbox
     initSpeechRecognition();
     registerServiceWorker();
     checkNotificationPermission();
@@ -1173,6 +1174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Event listeners
+// Formulario de registro
     const registerForm = document.getElementById('register-form');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
@@ -1211,6 +1213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Formulario de inicio de sesión
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -1272,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('flight-details-modal')?.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) closeFlightDetailsModal();
     });
+    // Event listeners para botones
     document.getElementById('logout-button')?.addEventListener('click', logout);
     document.getElementById('join-group-btn')?.addEventListener('click', joinGroup);
     document.getElementById('create-group-btn')?.addEventListener('click', createGroup);
@@ -1289,7 +1293,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('mute-non-group')?.addEventListener('click', toggleMuteNonGroup);
     document.getElementById('search-bar')?.addEventListener('input', filterFlights);
     document.querySelector('.close-btn')?.addEventListener('click', backToMainFromRadar);
-
+    document.querySelectorAll('#main-flight-details-button, #group-flight-details-button').forEach(button => {
+        button.addEventListener('click', openFlightDetailsModal);
+    });
+    document.getElementById('close-modal')?.addEventListener('click', () => {
+        document.getElementById('flight-details-modal').style.display = 'none';
+    });
+});
     // Gestos táctiles
     document.addEventListener('touchstart', e => {
         if (!isSwiping) startX = e.touches[0].clientX;
