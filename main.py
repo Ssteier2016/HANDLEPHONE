@@ -243,7 +243,7 @@ async def login_user(request: LoginRequest):
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
     logger.info(f"Login exitoso: {surname} ({employee_id}, {sector}), token: {token}")
 
-    return {"token": token, "message": "Inicio Jahr de sesión exitoso"}
+    return {"token": token, "message": "Inicio de sesión exitoso"}
 
 # Endpoint para obtener vuelos de Aeroparque
 @app.get("/aep_flights")
@@ -908,6 +908,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     "group_id": group_id,
                     "in_group": in_group
                 })
+
             elif message["type"] == "group_message":
                 group_id = users[token]["group_id"]
                 if group_id and group_id in groups:
@@ -1115,3 +1116,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+                
