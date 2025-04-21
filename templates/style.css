@@ -1,6 +1,8 @@
 /* Reset básico */
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 /* Estilos generales */
@@ -15,7 +17,6 @@ body {
   display: flex;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   justify-content: center;
-  margin: 0;
   min-height: 100vh;
   overflow-x: hidden;
   padding: 10px;
@@ -28,7 +29,6 @@ select {
   background-color: #F5F5F5;
   border: 2px solid #4682B4;
   border-radius: 5px;
-  box-sizing: border-box;
   color: #333333;
   cursor: pointer;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
@@ -41,7 +41,7 @@ select {
 button {
   background-color: #4682B4;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-  position: relative;
+  color: #FFFFFF;
   transition: background-color 0.3s;
 }
 
@@ -52,18 +52,14 @@ button:hover {
 
 /* Estilos para el botón de cerrar sesión */
 .logout-btn {
-  background: url('/templates/logoutred.png') no-repeat center / cover !important;
-  background-color: transparent !important;
-  border: none !important;
-  outline: none !important;
+  background: url('/templates/logoutred.png') no-repeat center / cover;
+  border: none;
   cursor: pointer;
   height: 32px;
   width: 32px;
   position: absolute;
   top: 10px;
   left: 10px;
-  margin: 0;
-  padding: 0;
   transition: opacity 0.3s ease;
   z-index: 1001;
 }
@@ -73,11 +69,12 @@ button:hover {
 }
 
 .logout-btn:focus {
-  outline: none !important;
+  outline: none;
 }
 
-/* Estilos para el botón de detalles de vuelos */
-#flight-details-button {
+/* Estilos para los botones de detalles de vuelos */
+#main-flight-details-button,
+#group-flight-details-button {
   background-color: #4682B4;
   border: 2px solid #4682B4;
   border-radius: 5px;
@@ -91,7 +88,8 @@ button:hover {
   width: 200px;
 }
 
-#flight-details-button:hover {
+#main-flight-details-button:hover,
+#group-flight-details-button:hover {
   background-color: #FF4500;
 }
 
@@ -130,7 +128,6 @@ button:hover {
 .close:hover,
 .close:focus {
   color: #FF6347;
-  text-decoration: none;
 }
 
 .modal-content h2 {
@@ -179,7 +176,20 @@ button:hover {
 }
 
 .close-btn {
+  background-color: transparent;
+  border: none;
+  color: #FF4500;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 5px 10px;
+  position: absolute;
   right: 10px;
+  top: 10px;
+  transition: color 0.3s;
+}
+
+.close-btn:hover {
+  color: #FF6347;
 }
 
 .back-icon {
@@ -195,21 +205,6 @@ button:hover {
   cursor: pointer;
   margin: 5px 0;
   padding: 5px;
-  text-shadow: none;
-}
-
-.close-btn {
-  background-color: transparent;
-  border: none;
-  color: #FF4500;
-  cursor: pointer;
-  font-size: 20px;
-  padding: 5px 10px;
-  transition: color 0.3s;
-}
-
-.close-btn:hover {
-  color: #FF6347;
 }
 
 .flight {
@@ -230,22 +225,19 @@ button:hover {
 .flight-aterrizando,
 .flight-en-zona {
   background-color: #FFB6C1;
-  color: #333333 !important;
-  text-shadow: none;
+  color: #333333;
 }
 
 .flight-despegando,
 .flight-en-tierra,
 .flight-salida {
   background-color: #FFFFE0;
-  color: #333333 !important;
-  text-shadow: none;
+  color: #333333;
 }
 
 .flight-en-vuelo {
   background-color: #90EE90;
-  color: #333333 !important;
-  text-shadow: none;
+  color: #333333;
 }
 
 .flight-message {
@@ -255,7 +247,6 @@ button:hover {
   color: #333333;
   margin: 5px 0;
   padding: 5px;
-  text-shadow: none;
 }
 
 .logo {
@@ -323,7 +314,6 @@ button:hover {
   justify-content: space-between;
   margin: 5px 0;
   padding: 5px;
-  text-shadow: none;
 }
 
 .user-item.in-group {
@@ -445,7 +435,6 @@ button:hover {
   background-color: #F5F5F5;
   border: 2px solid #4682B4;
   border-radius: 5px;
-  box-sizing: border-box;
   color: #333333;
   flex-grow: 1;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
@@ -481,18 +470,7 @@ button:hover {
   vertical-align: middle;
 }
 
-#join-group-btn {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  transition: background-color 0.3s;
-}
-
+#join-group-btn,
 #create-group-btn {
   background-color: #4682B4;
   border: 2px solid #4682B4;
@@ -524,7 +502,6 @@ button:hover {
 
 #mute,
 #group-mute {
-  background-color: #008000;
   background-image: url('/templates/mic.png');
   background-repeat: no-repeat;
   background-size: cover;
@@ -537,13 +514,12 @@ button:hover {
   position: absolute;
   right: 50px;
   top: 10px;
-  transition: background-color 0.3s;
+  transition: background-image 0.3s;
   width: 24px;
 }
 
 #mute.muted,
 #group-mute.muted {
-  background-color: #ff0000;
   background-image: url('/templates/mute.png');
 }
 
@@ -592,7 +568,8 @@ button:hover {
   background-color: #f0f2f5;
 }
 
-#register,
+#login-form,
+#register-form,
 #main,
 #group-screen,
 #radar-screen,
@@ -611,7 +588,7 @@ button:hover {
   position: relative;
 }
 
-#register {
+#login-form {
   display: block;
 }
 
@@ -651,7 +628,6 @@ button:hover {
   background-color: #F5F5F5;
   border: 2px solid #4682B4;
   border-radius: 5px;
-  box-sizing: border-box;
   color: #333333;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
@@ -689,7 +665,6 @@ button:hover {
 
 #talk,
 #group-talk {
-  background-color: transparent;
   background-image: url('/templates/mic-off.png');
   background-position: center;
   background-repeat: no-repeat;
@@ -729,6 +704,32 @@ button:hover {
   text-align: left;
 }
 
+#radar,
+#history,
+#group-radar,
+#group-history,
+#leave-group-btn {
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin: 5px auto;
+  padding: 8px;
+  transition: background-color 0.3s;
+  width: 200px;
+}
+
+#radar:hover,
+#history:hover,
+#group-radar:hover,
+#group-history:hover,
+#leave-group-btn:hover {
+  background-color: #FF4500;
+}
+
 .slide-left {
   transform: translateX(-100%);
 }
@@ -757,7 +758,6 @@ h3 {
   border: 3px solid #4682B4;
   border-radius: 10px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
   margin: 0 auto;
   max-width: 600px;
   padding: 15px;
@@ -792,12 +792,10 @@ h3 {
   background-color: #F5F5F5;
   border: 2px solid #4682B4;
   border-radius: 5px;
-  box-sizing: border-box;
   color: #333333;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
   padding: 8px;
-  width: 100%;
 }
 
 .auth-form select {
@@ -816,7 +814,6 @@ h3 {
   border: 2px solid #4682B4;
   border-radius: 5px;
   color: #FFFFFF;
-  cursor: pointer;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
   padding: 8px;
@@ -852,10 +849,6 @@ h3 {
 /* Media queries para responsividad */
 @media (max-width: 768px) {
   body {
-    background-image: url('/templates/borde.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
     padding: 5px;
   }
 
@@ -913,10 +906,10 @@ h3 {
 
   #radar-screen {
     padding: 5px;
-    background-color: #f0f2f5;
   }
 
-  #register,
+  #login-form,
+  #register-form,
   #main,
   #group-screen,
   #radar-screen,
@@ -948,9 +941,6 @@ h3 {
   .mute-button {
     font-size: 10px;
     margin-right: 4px;
-    height: auto;
-    line-height: normal;
-    width: auto;
   }
 
   .user-item {
@@ -1014,12 +1004,7 @@ h3 {
     gap: 5px;
   }
 
-  #search-input {
-    font-size: 12px;
-    padding: 6px;
-    width: 100%;
-  }
-
+  #search-input,
   #search-button {
     font-size: 12px;
     padding: 6px;
@@ -1038,7 +1023,6 @@ h3 {
   }
 
   #group-private {
-    width: auto;
     margin: 5px 0;
   }
 
@@ -1070,13 +1054,13 @@ h3 {
     height: 24px;
   }
 
-  #flight-details-button {
+  #main-flight-details-button,
+  #group-flight-details-button {
     width: 100%;
     font-size: 12px;
     padding: 6px;
   }
 
-  /* Ajustes para formularios de autenticación en móviles */
   .auth-form {
     margin: 0;
     max-width: 100%;
@@ -1113,10 +1097,6 @@ h3 {
 
 @media (min-width: 769px) {
   body {
-    background-image: url('/templates/borde.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
     padding: 20px;
   }
 
@@ -1175,10 +1155,10 @@ h3 {
 
   #radar-screen {
     padding: 10px;
-    background-color: #f0f2f5;
   }
 
-  #register,
+  #login-form,
+  #register-form,
   #main,
   #group-screen,
   #radar-screen,
@@ -1209,9 +1189,6 @@ h3 {
   .mute-button {
     font-size: 12px;
     margin-right: 5px;
-    height: auto;
-    line-height: normal;
-    width: auto;
   }
 
   .user-item {
@@ -1280,7 +1257,6 @@ h3 {
     align-items: center;
     display: flex;
     gap: 10px;
-    margin-bottom: 10px;
     max-width: 400px;
     margin-left: auto;
     margin-right: auto;
@@ -1313,7 +1289,6 @@ h3 {
   }
 
   #group-private {
-    width: auto;
     margin: 5px 10px 5px 0;
   }
 
@@ -1327,13 +1302,13 @@ h3 {
     margin-right: 10px;
   }
 
-  #flight-details-button {
+  #main-flight-details-button,
+  #group-flight-details-button {
     width: 200px;
     font-size: 14px;
     padding: 8px;
   }
 
-  /* Ajustes para formularios de autenticación en escritorio */
   .auth-form {
     max-width: 600px;
     padding: 20px;
