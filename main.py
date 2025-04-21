@@ -782,16 +782,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         users[token]["muted_users"]
                     )
 
-            elif message["type"] == "mute_all":
-                global global_mute_active
-                global_mute_active = True
-                await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
-
-            elif message["type"] == "unmute_all":
-                global global_mute_active
-                global_mute_active = False
-                await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
-
             elif message["type"] == "mute_non_group":
                 group_id = users[token]["group_id"]
                 if group_id:
