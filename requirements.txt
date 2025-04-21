@@ -1,3 +1,6 @@
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+sqlalchemy==2.0.35
 fastapi>=0.115.0,<0.116.0
 uvicorn>=0.30.6,<0.31.0
 python-decouple==3.8  # Para manejar variables de entorno
