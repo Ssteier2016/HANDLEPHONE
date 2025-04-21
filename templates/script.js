@@ -72,6 +72,31 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         showScreen('login-form');
     }
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const surname = document.getElementById('surname').value;
+    const employee_id = document.getElementById('employee_id').value;
+    const sector = document.getElementById('sector').value;
+    const password = document.getElementById('password').value;
+
+    try {
+        const response = await fetch('/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ surname, employee_id, sector, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Registro exitoso');
+            // Redirigir al formulario de login
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (error) {
+        console.error('Error en registro:', error);
+        alert('Error al registrarse');
+    }
+});
 
     // Event listeners para formularios
     const loginForm = document.getElementById('login');
@@ -79,19 +104,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const showRegister = document.getElementById('show-register');
     const showLogin = document.getElementById('show-login');
 
-    if (loginForm) {
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const surname = document.getElementById('login-surname').value;
-            const employeeId = document.getElementById('login-employee-id').value;
-            const sector = document.getElementById('login-sector').value;
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+            const surname = document.getElementById('surname').value;
+            const employee_id = document.getElementById('employee_id').value;
+            const sector = document.getElementById('sector').value;
+            const password = document.getElementById('password').value;
             const errorElement = document.getElementById('login-error');
 
             try {
-                const response = await fetch('/api/login', {
+                const response = await fetch('/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ surname, employeeId, sector })
+                    body: JSON.stringify({ surname, employee_id, sector, password })
                 });
                 const data = await response.json();
                 if (response.ok) {
@@ -108,8 +133,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     errorElement.textContent = data.error || 'Error al iniciar sesión';
                 }
             } catch (error) {
-                console.error('Error en login:', error);
-                errorElement.textContent = 'Error al conectar con el servidor';
+                console.error('Error en registro:', error);
+                alert('Error al registrrse');
             }
         });
     }
