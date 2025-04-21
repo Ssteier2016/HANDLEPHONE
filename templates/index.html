@@ -9,8 +9,6 @@
     <title>HANDLEPHONE - Comunicación Aeronáutica</title>
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="https://unpkg.com/leaflet.movingmarker@0.2.1/MovingMarker.js"></script>
     <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
     <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
     <link rel="manifest" href="/templates/manifest.json">
@@ -32,7 +30,7 @@
 </head>
 <body>
     <!-- Formulario de Inicio de Sesión -->
-    <div id="login-form" class="auth-form">
+    <div id="login-form" class="auth-form" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Iniciar Sesión</h2>
         <form id="login-form-form">
@@ -74,14 +72,14 @@
             <label for="password">Contraseña:</label>
             <input type="password" id="password" name="password" required>
             <button type="submit">Registrarse</button>
-            <p><a href="#" id="show-login">¿Ya estás registrado? Inicia sesión aquí</a></p>
         </form>
         <p id="register-error" class="error"></p>
+        <p><a href="#" id="show-login">¿Ya estás registrado? Inicia sesión aquí</a></p>
     </div>
 
     <!-- Interfaz Principal -->
     <div id="main" style="display: none;">
-        <button id="logout-button" class="logout-btn" aria-label="Cerrar sesión"></button>
+        <button id="logout-button" class="logout-btn" onclick="logout()">Cerrar Sesión</button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
@@ -95,21 +93,7 @@
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
             <button id="main-flight-details-button">Ver Detalles de Vuelos</button>
-            <div id="flight-details">
-                <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th>N° Vuelo</th>
-                            <th>Origen</th>
-                            <th>Hr Salida</th>
-                            <th>Destino</th>
-                            <th>Hr Llegada</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+            <div id="flight-details"></div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
@@ -118,59 +102,39 @@
         <div id="group-join">
             <label for="group-id">Nombre del grupo</label>
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
-            <label for="group-private">Grupo Privado</label>
-            <input type="checkbox" id="group-private">
             <button id="join-group-btn">Unirme</button>
-            <button id="create-group-btn">Crear Grupo</button>
         </div>
-        <button id="talk"></button>
-        <button id="mute" class="active"></button>
-        <button id="radar">Radar</button>
-        <button id="history">Historial</button>
+        <button id="talk" onclick="toggleTalk()">Hablar</button>
+        <button id="mute" class="active" onclick="toggleMute()">Mutear</button>
+        <button id="radar" onclick="showRadar()">Radar</button>
+        <button id="history" onclick="showHistory()">Historial</button>
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
     <!-- Pantalla de Grupo -->
     <div id="group-screen" style="display: none;">
-        <button id="back-to-main">
+        <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
         </button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Grupo Privado</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
-            Deslizá derecha para volver a principal
+            Deslizá izquierda para volver a principal
         </div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
             <button id="group-flight-details-button">Ver Detalles de Vuelos</button>
-            <div id="group-flight-details">
-                <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th>N° Vuelo</th>
-                            <th>Origen</th>
-                            <th>Hr Salida</th>
-                            <th>Destino</th>
-                            <th>Hr Llegada</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+            <div id="group-flight-details"></div>
         </div>
         <div id="group-chat-window">
             <h3>Conversación</h3>
             <div id="group-chat-list"></div>
         </div>
-        <button id="group-talk"></button>
-        <button id="mute-non-group" title="Silenciar no grupo">
-            <img src="/templates/mute.png" alt="Silenciar" style="width: 24px; height: 24px;">
-        </button>
-        <button id="group-mute" class="active">Mutear Grupo</button>
-        <button id="group-radar">Radar</button>
-        <button id="group-history">Historial</button>
-        <button id="leave-group-btn">Salir del Grupo</button>
+        <button id="group-talk" onclick="toggleGroupTalk()">Hablar</button>
+        <button id="group-mute" class="active" onclick="toggleGroupMute()">Mutear Grupo</button>
+        <button id="group-radar" onclick="showGroupRadar()">Radar</button>
+        <button id="group-history" onclick="showGroupHistory()">Historial</button>
+        <button id="leave-group-btn" onclick="leaveGroup()">Salir del Grupo</button>
         <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
@@ -179,21 +143,20 @@
         <div class="radar-header">
             <h2>Radar</h2>
             <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
-            <button class="close-btn">✖</button>
+            <button class="close-btn" onclick="backToMainFromRadar()">✖</button>
         </div>
         <div id="map"></div>
     </div>
 
     <!-- Pantalla de Historial -->
     <div id="history-screen" style="display: none;">
-        <button class="logout-btn" aria-label="Cerrar sesión"></button>
-        <button id="back-to-main">Volver</button>
+        <button id="back-to-main" onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
     </div>
 
     <!-- Modal de Detalles de Vuelos -->
-    <div id="flight-details-modal" class="modal">
+    <div id="flight-details-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span id="close-modal" class="close">×</span>
             <h2>Detalles de Vuelos</h2>
@@ -213,6 +176,7 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="/templates/script.js"></script>
 </body>
-</html>
+                </html>
