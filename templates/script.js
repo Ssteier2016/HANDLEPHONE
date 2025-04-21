@@ -50,13 +50,199 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
 
+// Función para mostrar pantallas
+function showScreen(screenId) {
+    const screens = ['login-form', 'register-form', 'main'];
+    screens.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.style.display = id === screenId ? 'block' : 'none';
+        }
+    });
+}
+
+// Función para conectar al WebSocket
+function connectWebSocket(sessionToken) {
+    ws = new WebSocket(`wss://${window.location.host}/ws/${sessionToken}`);
+
+    ws.onopen = () => {
+        console.log('WebSocket conectado');
+        pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, PING_INTERVAL);
+        if (reconnectInterval) {
+            clearInterval(reconnectInterval);
+            reconnectInterval = null;
+        }
+    };
+
+    ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        switch (data.type) {
+            case 'connection_success':
+                console.log('Conexión WebSocket exitosa:', data.message);
+                break;
+            case 'flight_update':
+                flightData = data.flights;
+                updateFlightList();
+                break;
+            case 'users':
+                updateUserList(data.list);
+                break;
+            case 'audio':
+                if (!mutedUsers.has(`${data.sender}_${data.function}`)) {
+                    audioQueue.push(data);
+                    if (!isPlaying) {
+                        playNextAudio();
+                    }
+                }
+                break;
+            case 'group_message':
+                if (data.group_id === currentGroup && !mutedUsers.has(`${data.sender}_${data.function}`)) {
+                    audioQueue.push(data);
+                    if (!isPlaying) {
+                        playNextAudio();
+                    }
+                }
+                break;
+            case 'mute_state':
+                updateMuteState(data.global_mute_active);
+                break;
+            case 'mute_all_success':
+            case 'unmute_all_success':
+                alert(data.message);
+                break;
+            case 'error':
+                console.error('Error WebSocket:', data.message);
+                break;
+            default:
+                console.log('Mensaje desconocido:', data);
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket desconectado');
+        clearInterval(pingInterval);
+        if (!reconnectInterval) {
+            reconnectInterval = setInterval(() => attemptReconnect(sessionToken), RECONNECT_BASE_DELAY);
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error('Error WebSocket:', error);
+    };
+}
+
+// Función para intentar reconectar
+function attemptReconnect(sessionToken) {
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+        console.log('Intentando reconectar WebSocket...');
+        connectWebSocket(sessionToken);
+    }
+}
+
+// Función para actualizar lista de vuelos (placeholder)
+function updateFlightList() {
+    const flightList = document.getElementById('flight-list');
+    if (!flightList) return;
+    flightList.innerHTML = '';
+    flightData.forEach(flight => {
+        const li = document.createElement('li');
+        li.textContent = `${flight.flight_number} - ${flight.destination} (${flight.status})`;
+        flightList.appendChild(li);
+    });
+}
+
+// Función para actualizar lista de usuarios (placeholder)
+function updateUserList(userList) {
+    const userListElement = document.getElementById('user-list');
+    if (!userListElement) return;
+    userListElement.innerHTML = '';
+    userList.forEach(user => {
+        const li = document.createElement('li');
+        li.textContent = user.display;
+        userListElement.appendChild(li);
+    });
+}
+
+// Función para actualizar estado de muteo global (placeholder)
+function updateMuteState(isMuted) {
+    const muteStatus = document.getElementById('mute-status');
+    if (muteStatus) {
+        muteStatus.textContent = isMuted ? 'Muteo global activo' : 'Muteo global desactivado';
+    }
+}
+
+// Función para reproducir audio (placeholder)
+async function playNextAudio() {
+    if (audioQueue.length === 0 || isPlaying) return;
+    isPlaying = true;
+    const audioData = audioQueue.shift();
+    try {
+        const audioBlob = await fetch(`data:audio/webm;base64,${audioData.data}`).then(res => res.blob());
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.onended = () => {
+            isPlaying = false;
+            playNextAudio();
+        };
+        audio.play();
+    } catch (error) {
+        console.error('Error reproduciendo audio:', error);
+        isPlaying = false;
+        playNextAudio();
+    }
+}
+
+// Función para obtener vuelos de AEP
+async function fetchAEPFlights() {
+    try {
+        const response = await fetch('/api/flights');
+        const data = await response.json();
+        if (response.ok) {
+            flightData = data.flights;
+            updateFlightList();
+        } else {
+            console.error('Error obteniendo vuelos:', data);
+        }
+    } catch (error) {
+        console.error('Error en fetchAEPFlights:', error);
+    }
+}
+
+// Función para iniciar actualizaciones periódicas de vuelos
+function startFlightUpdates() {
+    if (flightInterval) clearInterval(flightInterval);
+    flightInterval = setInterval(fetchAEPFlights, 300000); // Cada 5 minutos
+}
+
+// Función para verificar estado del grupo (placeholder)
+async function checkGroupStatus() {
+    if (!currentGroup || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'check_group', group_id: currentGroup }));
+}
+
+// Registrar Service Worker
+async function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('Service Worker registrado:', registration);
+        } catch (error) {
+            console.error('Error registrando Service Worker:', error);
+        }
+    }
+}
+
 // Inicialización al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
     // Registrar Service Worker
     registerServiceWorker();
 
     // Verificar sesión activa
-    const sessionToken = localStorage.getItem('sessionToken');
+    const sessionToken = localStorage.getItem('token');
     const userName = localStorage.getItem('userName');
     const userFunction = localStorage.getItem('userFunction');
     const userLegajo = localStorage.getItem('userLegajo');
@@ -72,45 +258,27 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         showScreen('login-form');
     }
-    document.getElementById('register-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const surname = document.getElementById('surname').value;
-    const employee_id = document.getElementById('employee_id').value;
-    const sector = document.getElementById('sector').value;
-    const password = document.getElementById('password').value;
 
-    try {
-        const response = await fetch('/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ surname, employee_id, sector, password })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            alert('Registro exitoso');
-            // Redirigir al formulario de login
-        } else {
-            alert(`Error: ${data.detail}`);
-        }
-    } catch (error) {
-        console.error('Error en registro:', error);
-        alert('Error al registrarse');
-    }
-});
-
-    // Event listeners para formularios
-    const loginForm = document.getElementById('login');
-    const registerForm = document.getElementById('register');
-    const showRegister = document.getElementById('show-register');
-    const showLogin = document.getElementById('show-login');
-
-    document.getElementById('register-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+    // Event listener para el formulario de registro
+    const registerForm = document.getElementById('register-form');
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
             const surname = document.getElementById('surname').value;
             const employee_id = document.getElementById('employee_id').value;
             const sector = document.getElementById('sector').value;
             const password = document.getElementById('password').value;
-            const errorElement = document.getElementById('login-error');
+            const errorElement = document.getElementById('register-error');
+
+            if (!/^\d{5}$/.test(employee_id)) {
+                errorElement.textContent = 'El legajo debe contener exactamente 5 números.';
+                return;
+            }
+
+            if (password.length < 6) {
+                errorElement.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+                return;
+            }
 
             try {
                 const response = await fetch('/register', {
@@ -120,57 +288,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    userId = `${employeeId}_${surname}_${sector}`;
-                    token = data.sessionToken;
-                    localStorage.setItem('sessionToken', token);
-                    localStorage.setItem('userName', surname);
-                    localStorage.setItem('userFunction', sector);
-                    localStorage.setItem('userLegajo', employeeId);
-                    connectWebSocket(token);
-                    showScreen('main');
                     errorElement.textContent = '';
+                    alert('Registro exitoso. Por favor, inicia sesión.');
+                    showScreen('login-form');
                 } else {
-                    errorElement.textContent = data.error || 'Error al iniciar sesión';
-                }
-            } catch (error) {
-                console.error('Error en registro:', error);
-                alert('Error al registrrse');
-            }
-        });
-    }
-
-    if (registerForm) {
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const surname = document.getElementById('register-surname').value;
-            const employeeId = document.getElementById('register-employee-id').value;
-            const sector = document.getElementById('register-sector').value;
-            const errorElement = document.getElementById('register-error');
-
-            if (!/^\d{5}$/.test(employeeId)) {
-                errorElement.textContent = 'El legajo debe contener exactamente 5 números.';
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ surname, employeeId, sector })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    userId = `${employeeId}_${surname}_${sector}`;
-                    token = data.sessionToken;
-                    localStorage.setItem('sessionToken', token);
-                    localStorage.setItem('userName', surname);
-                    localStorage.setItem('userFunction', sector);
-                    localStorage.setItem('userLegajo', employeeId);
-                    connectWebSocket(token);
-                    showScreen('main');
-                    errorElement.textContent = '';
-                } else {
-                    errorElement.textContent = data.error || 'Error al registrarse';
+                    errorElement.textContent = data.detail || 'Error al registrarse';
                 }
             } catch (error) {
                 console.error('Error en registro:', error);
@@ -179,21 +301,70 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Event listener para el formulario de inicio de sesión
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const surname = document.getElementById('surname').value;
+            const employee_id = document.getElementById('employee_id').value;
+            const password = document.getElementById('password').value;
+            const errorElement = document.getElementById('login-error');
+
+            if (!/^\d{5}$/.test(employee_id)) {
+                errorElement.textContent = 'El legajo debe contener exactamente 5 números.';
+                return;
+            }
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ surname, employee_id, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    token = data.token;
+                    const [legajo, name, sector] = atob(token).split('_');
+                    userId = `${legajo}_${name}_${sector}`;
+                    localStorage.setItem('token', token);
+                    localStorage.setItem('userName', name);
+                    localStorage.setItem('userFunction', sector);
+                    localStorage.setItem('userLegajo', legajo);
+                    errorElement.textContent = '';
+                    connectWebSocket(token);
+                    showScreen('main');
+                    checkGroupStatus();
+                    fetchAEPFlights();
+                    startFlightUpdates();
+                } else {
+                    errorElement.textContent = data.detail || 'Error al iniciar sesión';
+                }
+            } catch (error) {
+                console.error('Error en login:', error);
+                errorElement.textContent = 'Error al conectar con el servidor';
+            }
+        });
+    }
+
+    // Event listeners para alternar entre login y registro
+    const showRegister = document.getElementById('show-register');
+    const showLogin = document.getElementById('show-login');
+
     if (showRegister) {
         showRegister.addEventListener('click', (e) => {
             e.preventDefault();
-            document.getElementById('login-form').style.display = 'none';
-            document.getElementById('register-form').style.display = 'block';
+            showScreen('register-form');
         });
     }
 
     if (showLogin) {
         showLogin.addEventListener('click', (e) => {
             e.preventDefault();
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
+            showScreen('login-form');
         });
     }
+});
 
     // Botón de búsqueda
     const searchButton = document.getElementById('search-button');
