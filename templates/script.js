@@ -1299,7 +1299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-modal')?.addEventListener('click', () => {
         document.getElementById('flight-details-modal').style.display = 'none';
     });
-});
+    
     // Gestos táctiles
     document.addEventListener('touchstart', e => {
         if (!isSwiping) startX = e.touches[0].clientX;
