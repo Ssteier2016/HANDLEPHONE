@@ -18,6 +18,7 @@ from pydub import AudioSegment
 from dotenv import load_dotenv
 from cachetools import TTLCache
 from pydantic import BaseModel, validator
+from passlib.context import CryptContext
 
 # Configurar logging
 logging.basicConfig(
@@ -31,6 +32,14 @@ load_dotenv()
 
 # Inicializar FastAPI
 app = FastAPI()
+
+# Estado de la aplicación
+app_state = {
+    "global_mute_active": False  # Estado de muteo global
+}
+
+# Configurar hash de contraseñas
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Configurar CORS
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://handyhandle.onrender.com").split(",")
@@ -89,6 +98,7 @@ class RegisterRequest(BaseModel):
     surname: str
     employee_id: str
     sector: str
+    password: str
 
     @validator('surname')
     def validate_surname(cls, v):
@@ -107,11 +117,17 @@ class RegisterRequest(BaseModel):
         if v not in ALLOWED_SECTORS:
             raise ValueError('Sector no válido')
         return v.strip()
+
+    @validator('password')
+    def validate_password(cls, v):
+        if len(v) < 6:
+            raise ValueError('La contraseña debe tener al menos 6 caracteres')
+        return v
 
 class LoginRequest(BaseModel):
     surname: str
     employee_id: str
-    sector: str
+    password: str
 
     @validator('surname')
     def validate_surname(cls, v):
@@ -123,12 +139,6 @@ class LoginRequest(BaseModel):
     def validate_employee_id(cls, v):
         if not v.strip().isdigit() or len(v.strip()) != 5:
             raise ValueError('El legajo debe ser un número de 5 dígitos')
-        return v.strip()
-
-    @validator('sector')
-    def validate_sector(cls, v):
-        if v not in ALLOWED_SECTORS:
-            raise ValueError('Sector no válido')
         return v.strip()
 
 # Ruta raíz
@@ -164,14 +174,13 @@ def init_db():
                      (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
                       muted_users TEXT, last_active TIMESTAMP)''')
         c.execute('''CREATE TABLE IF NOT EXISTS users 
-                     (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT)''')
+                     (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
         conn.commit()
 
 # Estructuras de datos
 users: Dict[str, Dict[str, any]] = {}  # Almacena info de usuarios
 audio_queue: asyncio.Queue = asyncio.Queue()  # Cola para procesar audio
 groups: Dict[str, List[str]] = {}  # Grupos de usuarios
-global_mute_active: bool = False  # Estado de muteo general
 
 # Endpoint de registro
 @app.post("/register")
@@ -180,6 +189,7 @@ async def register_user(request: RegisterRequest):
     surname = request.surname
     employee_id = request.employee_id
     sector = request.sector
+    password = request.password
 
     # Validar usuario permitido
     if surname not in ALLOWED_USERS:
@@ -200,9 +210,12 @@ async def register_user(request: RegisterRequest):
             logger.error(f"Usuario ya registrado: {surname}")
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
+        # Hashear la contraseña
+        hashed_password = pwd_context.hash(password)
+
         # Registrar usuario
-        c.execute("INSERT INTO users (surname, employee_id, sector) VALUES (?, ?, ?)",
-                  (surname, employee_id, sector))
+        c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
+                  (surname, employee_id, sector, hashed_password))
         conn.commit()
     
     logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
@@ -214,7 +227,7 @@ async def login_user(request: LoginRequest):
     """Inicia sesión de un usuario registrado."""
     surname = request.surname
     employee_id = request.employee_id
-    sector = request.sector
+    password = request.password
 
     # Validar usuario permitido
     if surname not in ALLOWED_USERS:
@@ -230,13 +243,21 @@ async def login_user(request: LoginRequest):
     # Verificar credenciales
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
-                  (surname, employee_id, sector))
+        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE surname = ? AND employee_id = ?",
+                  (surname, employee_id))
         user = c.fetchone()
 
     if not user:
-        logger.error(f"Credenciales inválidas para {surname}: {employee_id}, {sector}")
+        logger.error(f"Credenciales inválidas para {surname}: {employee_id}")
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    stored_password = user[3]  # Hash de la contraseña almacenada
+    if not pwd_context.verify(password, stored_password):
+        logger.error(f"Contraseña incorrecta para {surname}: {employee_id}")
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+
+    # Obtener sector desde la base de datos
+    sector = user[2]
 
     # Generar token
     token_data = f"{employee_id}_{surname}_{sector}"
@@ -542,7 +563,7 @@ async def process_audio_queue():
 
             logger.info(f"Procesando audio de {sender} ({function})")
 
-            if global_mute_active:
+            if app_state["global_mute_active"]:
                 logger.info("Muteo global activo, audio no transmitido")
                 await broadcast_message({
                     "type": "mute_notification",
@@ -704,7 +725,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             logger.info(f"Nueva sesión creada para {token}")
 
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
-        await websocket.send_json({"type": "mute_state", "global_mute_active": global_mute_active})
+        await websocket.send_json({"type": "mute_state", "global_mute_active": app_state["global_mute_active"]})
         await websocket.send_json({"type": "flight_update", "flights": (await get_aep_flights())['flights']})
         await broadcast_users()
 
@@ -781,6 +802,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         users[token]["group_id"],
                         users[token]["muted_users"]
                     )
+
+            elif message["type"] == "mute_all":
+                app_state["global_mute_active"] = True
+                await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
+
+            elif message["type"] == "unmute_all":
+                app_state["global_mute_active"] = False
+                await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
 
             elif message["type"] == "mute_non_group":
                 group_id = users[token]["group_id"]
@@ -1019,6 +1048,7 @@ async def broadcast_global_mute_state(message_type: str, message_text: str):
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"]:
             try:
+                await user["websocket"].send_json({"type": "mute_state", "global_mute_active": app_state["global_mute_active"]})
                 await user["websocket"].send_json({"type": message_type, "message": message_text})
             except Exception as e:
                 logger.error(f"Error al enviar mute global a {user['name']}: {e}")
@@ -1106,4 +1136,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-                
