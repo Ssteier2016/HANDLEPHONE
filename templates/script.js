@@ -1175,7 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listeners
 // Formulario de registro
-    const registerForm = document.getElementById('register-form');
+    const registerForm = document.getElementById('register-form-inner');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1214,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Formulario de inicio de sesión
-    const loginForm = document.getElementById('login-form');
+    const loginForm = document.getElementById('login-form-inner');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
