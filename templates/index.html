@@ -38,28 +38,16 @@
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Iniciar Sesión</h2>
         <form id="login">
-            <label for="login-surname">Apellido:</label>
-            <input type="text" id="login-surname" placeholder="Ej. Souto" required>
-            <label for="login-employee-id">Legajo:</label>
-            <input type="text" id="login-employee-id" placeholder="Ej. 35127" required>
-            <label for="login-sector">Sector:</label>
-            <select id="login-sector" required>
-                <option value="" disabled selected>Seleccionar sector</option>
-                <option value="Maletero">Maletero</option>
-                <option value="Cintero">Cintero</option>
-                <option value="Tractorista">Tractorista</option>
-                <option value="Equipos">Equipos</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Jefatura">Jefatura</option>
-                <option value="Movil">Movil</option>
-                <option value="Micros">Micros</option>
-                <option value="Señalero">Señalero</option>
-                <option value="Pañolero">Pañolero</option>
-            </select>
+            <label for="surname">Apellido:</label>
+            <input type="text" id="surname" name="surname" placeholder="Ej. Souto" required>
+            <label for="employee_id">Legajo:</label>
+            <input type="text" id="employee_id" name="employee_id" placeholder="Ej. 35127" required>
+            <label for="password">Contraseña:</label>
+            <input type="password" id="password" name="password" required>
             <button type="submit">Iniciar Sesión</button>
-            <p><a href="#" id="show-register">¿No estás registrado? Regístrate aquí</a></p>
         </form>
         <p id="login-error" class="error"></p>
+        <p><a href="#" id="show-register">¿No estás registrado? Regístrate aquí</a></p>
     </div>
 
     <!-- Formulario de Registro -->
@@ -67,12 +55,12 @@
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Registrarse</h2>
         <form id="register">
-            <label for="register-surname">Apellido:</label>
-            <input type="text" id="register-surname" placeholder="Ej. Souto" required>
-            <label for="register-employee-id">Legajo:</label>
-            <input type="text" id="register-employee-id" placeholder="Ej. 35127" required>
-            <label for="register-sector">Sector:</label>
-            <select id="register-sector" required>
+            <label for="surname">Apellido:</label>
+            <input type="text" id="surname" name="surname" placeholder="Ej. Souto" required>
+            <label for="employee_id">Legajo:</label>
+            <input type="text" id="employee_id" name="employee_id" placeholder="Ej. 35127" required>
+            <label for="sector">Sector:</label>
+            <select id="sector" name="sector" required>
                 <option value="" disabled selected>Seleccionar sector</option>
                 <option value="Maletero">Maletero</option>
                 <option value="Cintero">Cintero</option>
@@ -85,10 +73,8 @@
                 <option value="Señalero">Señalero</option>
                 <option value="Pañolero">Pañolero</option>
             </select>
-    <label for="password">Contraseña:</label>
-    <input type="password" id="password" name="password" required>
-    <button type="submit">Registrarse</button>
-        </form>
+            <label for="password">Contraseña:</label>
+            <input type="password" id="password" name="password" required>
             <button type="submit">Registrarse</button>
             <p><a href="#" id="show-login">¿Ya estás registrado? Inicia sesión aquí</a></p>
         </form>
@@ -115,11 +101,11 @@
                 <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr>
-                            <th>Número</th>
+                            <th>N° Vuelo</th>
                             <th>Origen</th>
-                            <th>Salida</th>
+                            <th>Hr Salida</th>
                             <th>Destino</th>
-                            <th>Llegada</th>
+                            <th>Hr Llegada</th>
                             <th>Estado</th>
                         </tr>
                     </thead>
@@ -163,11 +149,11 @@
                 <table id="flights-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr>
-                            <th>Número</th>
+                            <th>N° Vuelo</th>
                             <th>Origen</th>
-                            <th>Salida</th>
+                            <th>Hr Salida</th>
                             <th>Destino</th>
-                            <th>Llegada</th>
+                            <th>Hr Llegada</th>
                             <th>Estado</th>
                         </tr>
                     </thead>
@@ -216,11 +202,11 @@
             <table id="modal-flight-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr>
-                        <th>Número</th>
+                        <th>N° Vuelo</th>
                         <th>Origen</th>
-                        <th>Salida</th>
+                        <th>Hr Salida</th>
                         <th>Destino</th>
-                        <th>Llegada</th>
+                        <th>Hr Llegada</th>
                         <th>Estado</th>
                     </tr>
                 </thead>
