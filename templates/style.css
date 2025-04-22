@@ -106,6 +106,10 @@ button:hover {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
+#flight-details-modal.active {
+  display: block;
+}
+
 .modal-content {
   background-color: #F5F5F5;
   margin: 5% auto;
@@ -291,17 +295,6 @@ button:hover {
   gap: 10px;
 }
 
-.select {
-  appearance: none;
-  background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
-  padding-right: 30px;
-}
-
-.select:hover {
-  background-color: #FF4500;
-  color: #FFFFFF;
-}
-
 .user-item {
   align-items: center;
   background-color: #FFFFFF;
@@ -344,8 +337,7 @@ button:hover {
 
 #chat-list,
 #group-chat-list,
-#history-list,
-#message-list {
+#history-list {
   background-color: #FFFFFF;
   border: 2px solid #4682B4;
   border-radius: 5px;
@@ -384,32 +376,6 @@ button:hover {
   max-height: 200px;
   overflow-y: auto;
   padding: 10px;
-}
-
-#flights-table {
-  font-size: 10px;
-  width: 100%;
-  border-collapse: collapse;
-}
-
-#flights-table th,
-#flights-table td {
-  border: 1px solid #4682B4;
-  padding: 4px;
-  text-align: left;
-}
-
-#flights-table th {
-  background-color: #2196f3;
-  color: white;
-}
-
-#flights-table tbody tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-#flights-table tbody tr:hover {
-  background-color: #e0f7fa;
 }
 
 #flights-window,
@@ -458,20 +424,7 @@ button:hover {
   width: 100%;
 }
 
-#group-private {
-  width: auto;
-  margin: 5px 10px 5px 0;
-  cursor: default;
-}
-
-#group-private + label {
-  display: inline-block;
-  cursor: pointer;
-  vertical-align: middle;
-}
-
-#join-group-btn,
-#create-group-btn {
+#join-group-btn {
   background-color: #4682B4;
   border: 2px solid #4682B4;
   border-radius: 5px;
@@ -483,8 +436,7 @@ button:hover {
   transition: background-color 0.3s;
 }
 
-#join-group-btn:hover,
-#create-group-btn:hover {
+#join-group-btn:hover {
   background-color: #FF4500;
 }
 
@@ -493,11 +445,6 @@ button:hover {
   border: 2px solid #4682B4;
   border-radius: 5px;
   background-color: #87CEEB;
-}
-
-#messages,
-#history-screen {
-  margin-top: 15px;
 }
 
 #mute,
@@ -526,34 +473,6 @@ button:hover {
 #mute:hover,
 #group-mute:hover {
   opacity: 0.8;
-}
-
-#mute-non-group {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 10px auto;
-  padding: 10px;
-  transition: background-color 0.3s;
-  width: 40px;
-  height: 40px;
-}
-
-#mute-non-group img {
-  width: 32px;
-  height: 32px;
-}
-
-#mute-non-group.muted {
-  background-color: #FF4500;
-}
-
-#mute-non-group:hover {
-  background-color: #FF4500;
 }
 
 #radar-screen {
@@ -732,10 +651,12 @@ button:hover {
 
 .slide-left {
   transform: translateX(-100%);
+  transition: transform 0.3s ease;
 }
 
 .slide-right {
   transform: translateX(100%);
+  transition: transform 0.3s ease;
 }
 
 h2 {
@@ -877,8 +798,7 @@ h3 {
 
   #chat-list,
   #group-chat-list,
-  #history-list,
-  #message-list {
+  #history-list {
     max-height: 120px;
   }
 
@@ -1017,41 +937,14 @@ h3 {
   }
 
   #group-id,
-  #join-group-btn,
-  #create-group-btn {
+  #join-group-btn {
     width: 100%;
   }
 
-  #group-private {
-    margin: 5px 0;
-  }
-
-  #group-private + label {
+  #leave-group-btn {
+    width: 100%;
     font-size: 12px;
-  }
-
-  #group-join label {
-    font-size: 12px;
-  }
-
-  #flights-table {
-    font-size: 9px;
-  }
-
-  #flights-table th,
-  #flights-table td {
-    padding: 2px;
-  }
-
-  #mute-non-group {
-    width: 32px;
-    height: 32px;
-    padding: 8px;
-  }
-
-  #mute-non-group img {
-    width: 24px;
-    height: 24px;
+    padding: 6px;
   }
 
   #main-flight-details-button,
@@ -1126,8 +1019,7 @@ h3 {
 
   #chat-list,
   #group-chat-list,
-  #history-list,
-  #message-list {
+  #history-list {
     max-height: 200px;
   }
 
@@ -1283,30 +1175,12 @@ h3 {
     width: 200px;
   }
 
-  #join-group-btn,
-  #create-group-btn {
+  #join-group-btn {
     width: 120px;
   }
 
-  #group-private {
-    margin: 5px 10px 5px 0;
-  }
-
-  #group-private + label {
-    font-size: 14px;
-  }
-
-  #group-join label {
-    font-size: 14px;
-    width: auto;
-    margin-right: 10px;
-  }
-
-  #main-flight-details-button,
-  #group-flight-details-button {
+  #leave-group-btn {
     width: 200px;
-    font-size: 14px;
-    padding: 8px;
   }
 
   .auth-form {
@@ -1341,4 +1215,4 @@ h3 {
   .auth-form .error {
     font-size: 12px;
   }
-}
+  }
