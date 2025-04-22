@@ -4,6 +4,85 @@
   margin: 0;
   padding: 0;
 }
+/* Estilos para la pantalla de introducción con video */
+#intro-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+#intro-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#skip-video-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 8px 16px;
+  transition: background-color 0.3s, opacity 0.3s;
+}
+
+#skip-video-btn:hover {
+  background-color: #FF4500;
+}
+
+#skip-video-btn:active {
+  background-color: #4682B4;
+  opacity: 0.9;
+}
+
+/* Estilos para la barra de carga */
+#loading-bar-container {
+  width: 200px;
+  height: 20px;
+  background-color: #F5F5F5;
+  border: 2px solid #4682B4;
+  border-radius: 10px;
+  margin: 10px auto;
+  position: relative;
+  overflow: hidden;
+}
+
+#loading-bar {
+  width: 0%;
+  height: 100%;
+  background-color: #4682B4;
+  border-radius: 8px;
+  position: relative;
+  transition: width 3s linear;
+}
+
+#airplane-icon {
+  position: absolute;
+  top: -10px; /* Ajustar para que el avión esté centrado verticalmente sobre la barra */
+  left: 0;
+  width: 30px;
+  height: 30px;
+  transition: left 3s linear;
+}
+
+/* Asegurar que el logo y la barra de carga estén bien alineados */
+#login-form .logo {
+  display: block;
+  margin: 0 auto 8px;
+}
 
 /* Estilos generales */
 body {
@@ -860,6 +939,54 @@ h3 {
 }
 
 /* Media queries para responsividad */
+/* Media queries para responsividad */
+@media (max-width: 768px) {
+  #loading-bar-container {
+    width: 150px;
+    height: 15px;
+    margin: 5px auto;
+  }
+
+  #loading-bar {
+    border-radius: 6px;
+  }
+
+  #airplane-icon {
+    width: 24px;
+    height: 24px;
+    top: -8px;
+  }
+
+  #skip-video-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    bottom: 15px;
+    right: 15px;
+  }
+}
+
+@media (min-width: 769px) {
+  #loading-bar-container {
+    width: 200px;
+    height: 20px;
+  }
+
+  #loading-bar {
+    border-radius: 8px;
+  }
+
+  #airplane-icon {
+    width: 30px;
+    height: 30px;
+    top: -10px;
+  }
+
+  #skip-video-btn {
+    font-size: 14px;
+    padding: 8px 16px;
+  }
+}
+
 @media (max-width: 768px) {
   body {
     padding: 5px;
