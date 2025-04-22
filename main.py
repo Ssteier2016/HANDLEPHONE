@@ -202,7 +202,7 @@ def delete_session(token: str):
         conn.commit()
 
 def save_message(user_id: str, audio_data: str, text: str, timestamp: str):
-    date = datetime.utcnow().strftime("%Y-%m-%d")
+    date = datetime.utcnow().strftime("%Y-%m-d")
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
@@ -570,9 +570,48 @@ async def clear_messages():
         except Exception as e:
             logger.error(f"Error al limpiar mensajes: {e}")
 
+# Difundir estado de muteo global
+async def broadcast_global_mute_state(message_type: str, message_text: str):
+    for user in list(users.values()):
+        if user["logged_in"] and user["websocket"]:
+            try:
+                await user["websocket"].send_json({"type": message_type, "message": message_text})
+            except Exception as e:
+                logger.error(f"Error al enviar estado de muteo: {e}")
+                user["websocket"] = None
+                user["logged_in"] = False
+                await broadcast_users()
+
+# Difundir lista de usuarios
+async def broadcast_users():
+    user_list = []
+    for token in users:
+        if users[token]["logged_in"]:
+            decoded_token = base64.b64decode(token).decode('utf-8')
+            legajo, name, _ = decoded_token.split('_', 2)
+            user_id = f"{users[token]['name']}_{users[token]['function']}"
+            user_list.append({
+                "display": f"{users[token]['name']} ({legajo})",
+                "user_id": user_id,
+                "group_id": users[token]["group_id"]
+            })
+    for user in list(users.values()):
+        if user["logged_in"] and user["websocket"]:
+            try:
+                await user["websocket"].send_json({
+                    "type": "users",
+                    "count": len(user_list),
+                    "list": user_list
+                })
+            except Exception as e:
+                logger.error(f"Error al enviar lista de usuarios: {e}")
+                user["websocket"] = None
+                user["logged_in"] = False
+
 # WebSocket
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
+    global global_mute_active  # Declaración global al inicio de la función
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
@@ -676,12 +715,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     save_session(token, user_id, users[token]["name"], users[token]["function"], users[token]["group_id"], users[token]["muted_users"])
 
             elif message["type"] == "mute_all":
-                global global_mute_active
                 global_mute_active = True
                 await broadcast_global_mute_state("mute_all_success", "Muteo global activado")
 
             elif message["type"] == "unmute_all":
-                global global_mute_active
                 global_mute_active = False
                 await broadcast_global_mute_state("unmute_all_success", "Muteo global desactivado")
 
@@ -778,43 +815,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["logged_in"] = False
             save_session(token, users[token]["user_id"], users[token]["name"], users[token]["function"], users[token]["group_id"], users[token]["muted_users"])
             await broadcast_users()
-# Difundir estado de muteo global
-async def broadcast_global_mute_state(message_type: str, message_text: str):
-    for user in list(users.values()):
-        if user["logged_in"] and user["websocket"]:
-            try:
-                await user["websocket"].send_json({"type": message_type, "message": message_text})
-            except Exception as e:
-                logger.error(f"Error al enviar estado de muteo: {e}")
-                user["websocket"] = None
-                user["logged_in"] = False
-                await broadcast_users()
-
-# Difundir lista de usuarios
-async def broadcast_users():
-    user_list = []
-    for token in users:
-        if users[token]["logged_in"]:
-            decoded_token = base64.b64decode(token).decode('utf-8')
-            legajo, name, _ = decoded_token.split('_', 2)
-            user_id = f"{users[token]['name']}_{users[token]['function']}"
-            user_list.append({
-                "display": f"{users[token]['name']} ({legajo})",
-                "user_id": user_id,
-                "group_id": users[token]["group_id"]
-            })
-    for user in list(users.values()):
-        if user["logged_in"] and user["websocket"]:
-            try:
-                await user["websocket"].send_json({
-                    "type": "users",
-                    "count": len(user_list),
-                    "list": user_list
-                })
-            except Exception as e:
-                logger.error(f"Error al enviar lista de usuarios: {e}")
-                user["websocket"] = None
-                user["logged_in"] = False
 
 @app.get("/history")
 async def get_history_endpoint():
