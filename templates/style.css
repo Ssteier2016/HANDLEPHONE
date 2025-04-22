@@ -42,12 +42,17 @@ button {
   background-color: #4682B4;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
   color: #FFFFFF;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 button:hover {
   background-color: #FF4500;
   color: #FFFFFF;
+}
+
+button:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9; /* Ligera opacidad para indicar interacción */
 }
 
 /* Estilos para el botón de cerrar sesión */
@@ -68,6 +73,10 @@ button:hover {
   opacity: 0.8;
 }
 
+.logout-btn:active {
+  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
+}
+
 .logout-btn:focus {
   outline: none;
 }
@@ -84,13 +93,46 @@ button:hover {
   font-size: 14px;
   margin: 10px auto;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
   width: 200px;
 }
 
 #main-flight-details-button:hover,
 #group-flight-details-button:hover {
   background-color: #FF4500;
+}
+
+#main-flight-details-button:active,
+#group-flight-details-button:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
+}
+
+/* Estilos para los botones de muteo global */
+#mute-all,
+#unmute-all {
+  background-color: #4682B4;
+  border: 2px solid #4682B4;
+  border-radius: 5px;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-family: 'Orbitron', 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin: 5px auto;
+  padding: 8px;
+  transition: background-color 0.3s, opacity 0.3s;
+  width: 200px;
+}
+
+#mute-all:hover,
+#unmute-all:hover {
+  background-color: #FF4500;
+}
+
+#mute-all:active,
+#unmute-all:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 /* Estilos del modal */
@@ -328,11 +370,16 @@ button:hover {
   padding: 8px;
   position: absolute;
   top: 10px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 #back-to-main:hover {
   background-color: #FF4500;
+}
+
+#back-to-main:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 #chat-list,
@@ -433,11 +480,16 @@ button:hover {
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 #join-group-btn:hover {
   background-color: #FF4500;
+}
+
+#join-group-btn:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 #map {
@@ -461,7 +513,7 @@ button:hover {
   position: absolute;
   right: 50px;
   top: 10px;
-  transition: background-image 0.3s;
+  transition: background-image 0.3s, opacity 0.3s;
   width: 24px;
 }
 
@@ -473,6 +525,11 @@ button:hover {
 #mute:hover,
 #group-mute:hover {
   opacity: 0.8;
+}
+
+#mute:active,
+#group-mute:active {
+  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
 }
 
 #radar-screen {
@@ -521,11 +578,16 @@ button:hover {
   font-size: 14px;
   margin-bottom: 10px;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 #return-to-group-btn:hover {
   background-color: #FF4500;
+}
+
+#return-to-group-btn:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 #search-bar {
@@ -568,12 +630,17 @@ button:hover {
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
   width: 30%;
 }
 
 #search-button:hover {
   background-color: #FF4500;
+}
+
+#search-button:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 #swipe-hint {
@@ -584,6 +651,7 @@ button:hover {
 
 #talk,
 #group-talk {
+  background-color: transparent; /* Fondo transparente */
   background-image: url('/templates/mic-off.png');
   background-position: center;
   background-repeat: no-repeat;
@@ -596,7 +664,7 @@ button:hover {
   margin: 5px auto;
   max-width: 48px;
   padding: 0;
-  transition: background-image 0.3s ease;
+  transition: background-image 0.3s ease, opacity 0.3s;
   width: 48px;
 }
 
@@ -608,6 +676,11 @@ button:hover {
 #talk:hover,
 #group-talk:hover {
   opacity: 0.8;
+}
+
+#talk:active,
+#group-talk:active {
+  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
 }
 
 #users,
@@ -637,7 +710,7 @@ button:hover {
   font-size: 14px;
   margin: 5px auto;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
   width: 200px;
 }
 
@@ -647,6 +720,15 @@ button:hover {
 #group-history:hover,
 #leave-group-btn:hover {
   background-color: #FF4500;
+}
+
+#radar:active,
+#history:active,
+#group-radar:active,
+#group-history:active,
+#leave-group-btn:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 .slide-left {
@@ -730,6 +812,11 @@ h3 {
   color: #FFFFFF;
 }
 
+.auth-form select:active {
+  background-color: #F5F5F5; /* Mantener el color original al hacer clic */
+  color: #333333;
+}
+
 .auth-form button {
   background-color: #4682B4;
   border: 2px solid #4682B4;
@@ -738,11 +825,16 @@ h3 {
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
   font-size: 14px;
   padding: 8px;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, opacity 0.3s;
 }
 
 .auth-form button:hover {
   background-color: #FF4500;
+}
+
+.auth-form button:active {
+  background-color: #4682B4; /* Mantener el color original al hacer clic */
+  opacity: 0.9;
 }
 
 .auth-form p {
@@ -949,6 +1041,13 @@ h3 {
 
   #main-flight-details-button,
   #group-flight-details-button {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px;
+  }
+
+  #mute-all,
+  #unmute-all {
     width: 100%;
     font-size: 12px;
     padding: 6px;
@@ -1183,6 +1282,11 @@ h3 {
     width: 200px;
   }
 
+  #mute-all,
+  #unmute-all {
+    width: 200px;
+  }
+
   .auth-form {
     max-width: 600px;
     padding: 20px;
@@ -1215,4 +1319,4 @@ h3 {
   .auth-form .error {
     font-size: 12px;
   }
-  }
+    }
