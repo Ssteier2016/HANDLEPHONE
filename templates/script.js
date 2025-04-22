@@ -1,4 +1,4 @@
-// Variables globales
+ // Variables globales
 let ws; // WebSocket para la comunicación con el servidor
 let userId; // Identificador único del usuario (legajo_name_function)
 let audioChunks = []; // Almacena fragmentos de audio durante la grabación
@@ -298,7 +298,27 @@ function playAudio(blob) {
         navigator.mediaSession.setActionHandler('pause', () => audio.pause());
     }
 }
+function muteAll() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: "mute_all",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+        }));
+    } else {
+        alert("No estás conectado al servidor.");
+    }
+}
 
+function unmuteAll() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: "unmute_all",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+        }));
+    } else {
+        alert("No estás conectado al servidor.");
+    }
+}
 // Reproducir el siguiente audio en la cola
 function playNextAudio() {
     if (audioQueue.length === 0 || isPlaying) return;
