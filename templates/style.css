@@ -117,9 +117,9 @@ button:active {
   color: #FFFFFF;
   cursor: pointer;
   font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  margin: 5px auto;
-  padding: 8px;
+  font-size: 30px;
+  margin: 10px auto;
+  padding: 20px;
   transition: background-color 0.3s, opacity 0.3s;
   width: 200px;
 }
@@ -297,9 +297,9 @@ button:active {
 
 .logo {
   display: block;
-  height: 24px;
-  margin: 0 auto 8px;
-  width: 24px;
+  height: 48px;
+  margin: 0 auto 16px;
+  width: 48px;
 }
 
 .mute-button {
@@ -307,8 +307,8 @@ button:active {
   border: none;
   color: #FF4500;
   cursor: pointer;
-  font-size: 16px;
-  margin-right: 5px;
+  font-size: 32px;
+  margin-right: 10px;
   outline: none;
   padding: 0;
   transition: opacity 0.3s;
