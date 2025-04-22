@@ -35,9 +35,9 @@
         <h2>Iniciar Sesión</h2>
         <form id="login-form-form">
             <label for="surname">Apellido:</label>
-            <input type="text" id="surname" name="surname" placeholder="Ej. Souto" required>
+            <input type="text" id="surname" name="surname" placeholder="Ej. Arena" required>
             <label for="employee_id">Legajo:</label>
-            <input type="text" id="employee_id" name="employee_id" placeholder="Ej. 35127" required>
+            <input type="text" id="employee_id" name="employee_id" placeholder="Ej. 35596" required>
             <label for="password">Contraseña:</label>
             <input type="password" id="password" name="password" required>
             <button type="submit">Iniciar Sesión</button>
@@ -55,9 +55,9 @@
             <input type="text" id="surname" name="surname" placeholder="Ej. Souto" required>
             <label for="employee_id">Legajo:</label>
             <input type="text" id="employee_id" name="employee_id" placeholder="Ej. 35127" required>
-            <label for="sector">Sector:</label>
+            <label for="sector">Posición:</label>
             <select id="sector" name="sector" required>
-                <option value="" disabled selected>Seleccionar sector</option>
+                <option value="" disabled selected>Seleccionar posición</option>
                 <option value="Maletero">Maletero</option>
                 <option value="Cintero">Cintero</option>
                 <option value="Tractorista">Tractorista</option>
@@ -104,10 +104,10 @@
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
             <button id="join-group-btn">Unirme</button>
         </div>
-        <button id="talk" onclick="toggleTalk()">Hablar</button>
+        <button id="talk" onclick="toggleTalk()"></button>
         <button id="mute-all" onclick="muteAll()">Mutear Todos</button>
         <button id="unmute-all" onclick="unmuteAll()">Desmutear Todos</button>
-        <button id="mute" class="active" onclick="toggleMute()">Mutear</button>
+        <button id="mute" class="active" onclick="toggleMute()"></button>
         <button id="radar" onclick="showRadar()">Radar</button>
         <button id="history" onclick="showHistory()">Historial</button>
         <div id="users">Usuarios conectados: 0</div>
@@ -132,7 +132,7 @@
             <h3>Conversación</h3>
             <div id="group-chat-list"></div>
         </div>
-        <button id="group-talk" onclick="toggleGroupTalk()">Hablar</button>
+        <button id="group-talk" onclick="toggleGroupTalk()"></button>
         <button id="group-mute" class="active" onclick="toggleGroupMute()">Mutear Grupo</button>
         <button id="group-radar" onclick="showGroupRadar()">Radar</button>
         <button id="group-history" onclick="showGroupHistory()">Historial</button>
