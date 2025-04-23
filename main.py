@@ -63,7 +63,7 @@ ALLOWED_USERS = {
     "Souto": "35127", "Vázquez": "35806", "Giménez": "35145", "Gómez": "35128",
     "Benítez": "33366", "Contartese": "38818", "Leites": "38880", "Duartero": "36000",
     "Arena": "35596", "Brandariz": "35417", "Fossati": "35152", "Test": "12345",
-    "Bot": "00000", "Test2": "12345", "Binda": "38530", "Galofalo": "39157", "Mamani": "335753", "Leto": "38546"
+    "Bot": "00000", "France": "35574", "Test2": "12345", "Binda": "38530", "Galofalo": "39157", "Mamani": "335753", "Leto": "38546"
 }
 
 ALLOWED_SECTORS = [
