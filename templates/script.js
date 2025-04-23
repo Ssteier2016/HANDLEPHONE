@@ -236,7 +236,6 @@ function showScreen(screenId) {
     updateSwipeHint();
 }
 
-// Cargar la página y manejar la pantalla de introducción
 window.onload = function() {
     console.log("window.onload ejecutado");
 
@@ -245,83 +244,70 @@ window.onload = function() {
 
     const introVideo = document.getElementById('intro-video');
     const airplaneIcon = document.getElementById('airplane-icon');
+    const loadingBar = document.getElementById('loading-bar');
+    const loadingPercentage = document.getElementById('loading-percentage');
 
-    if (!introVideo || !airplaneIcon) {
-        console.error("Elementos de introducción no encontrados en el DOM");
-        showScreen('login-form');
+    // Verificar que los elementos existan
+    if (!introVideo || !airplaneIcon || !loadingBar || !loadingPercentage) {
+        console.error("Elementos de introducción no encontrados:", {
+            introVideo: !!introVideo,
+            airplaneIcon: !!airplaneIcon,
+            loadingBar: !!loadingBar,
+            loadingPercentage: !!loadingPercentage
+        });
+        setTimeout(() => showScreen('login-form'), 10000); // Cambiar al login tras 10s
         return;
     }
+
+    // Iniciar animación de la barra y el avión
+    setTimeout(() => {
+        console.log("Iniciando animación de barra y avión");
+        loadingBar.classList.add('loading');
+        airplaneIcon.classList.add('loading');
+    }, 100);
+
+    // Animar el porcentaje de 0% a 100% en 10 segundos
+    let percentage = 0;
+    console.log("Iniciando animación del porcentaje");
+    const interval = setInterval(() => {
+        percentage += 1;
+        if (percentage <= 100) {
+            console.log(`Actualizando porcentaje a ${percentage}%`);
+            loadingPercentage.textContent = `${percentage}%`;
+        } else {
+            console.log("Porcentaje completado, limpiando intervalo");
+            clearInterval(interval);
+        }
+    }, 100); // 10000ms / 100 pasos = 100ms por paso
 
     // Reproducir el video
     introVideo.play().catch(err => {
         console.error("Error al reproducir el video:", err);
-        showScreen('login-form');
+        // No detener la animación si el video falla
     });
-    // Animar la barra de carga
-    let progress = 0;
-    const duration = 10000; // 10 segundos
-    const interval = 100; // Actualizar cada 100ms
-    const steps = duration / interval;
-    const increment = 100 / steps;
 
-    const progressInterval = setInterval(() => {
-        progress += increment;
-        progressBar.value = progress;
-        if (progress >= 100) {
-            clearInterval(progressInterval);
-        }
-    }, interval);
-    
- // Animar el avión
-    setTimeout(() => {
-        airplaneIcon.classList.add('loading');
-    }, 100); // Pequeño retraso para asegurar que el CSS se aplique
-
-    // Función para saltar a la pantalla de login
-    function skipToLogin() {
-        introVideo.pause();
-        airplaneIcon.classList.remove('loading');
-        checkSessionAndShowScreen();
-    }
-    
-    
     // Cambiar a la pantalla de login después de 10 segundos
     setTimeout(() => {
+        console.log("Finalizando introducción, cambiando a login");
         introVideo.pause();
-        showScreen('login-form');
+        loadingBar.classList.remove('loading');
+        airplaneIcon.classList.remove('loading');
+        loadingPercentage.textContent = '100%';
+        clearInterval(interval); // Asegurar que el intervalo se detenga
+        checkSessionAndShowScreen();
+    }, 10000);
+
+    // Verificar la sesión
+    function checkSessionAndShowScreen() {
         const sessionToken = localStorage.getItem("token");
-        console.log("sessionToken:", sessionToken);
-        const loginForm = document.getElementById("login-form");
-        const registerForm = document.getElementById("register-form");
-        const mainDiv = document.getElementById("main");
-        const radarDiv = document.getElementById("radar-screen");
-        const historyDiv = document.getElementById("history-screen");
-
-        if (!loginForm || !registerForm || !mainDiv || !radarDiv || !historyDiv) {
-            console.error("Uno o más elementos no se encontraron en el DOM:", {
-                loginForm: !!loginForm,
-                registerForm: !!registerForm,
-                mainDiv: !!mainDiv,
-                radarDiv: !!radarDiv,
-                historyDiv: !!historyDiv
-            });
-            return;
-        }
-
         if (sessionToken && localStorage.getItem("userName") && localStorage.getItem("userFunction") && localStorage.getItem("userLegajo")) {
-            console.log("Usuario autenticado, mostrando pantalla principal");
             userId = `${localStorage.getItem("userLegajo")}_${localStorage.getItem("userName")}_${localStorage.getItem("userFunction")}`;
             connectWebSocket(sessionToken);
             showScreen('main');
-            const muteButton = document.getElementById("mute");
-            if (muteButton) {
-                muteButton.classList.add("unmuted");
-            }
         } else {
-            console.log("Usuario no autenticado, mostrando pantalla de login");
             showScreen('login-form');
         }
-    }, 10000);
+    }
 };
 
 // Manejo de doble toque en el botón de volumen (+) para activar la grabación
