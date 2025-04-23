@@ -1,69 +1,51 @@
 /* Reset básico */
 * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
+
 /* Estilos para la pantalla de introducción con video */
 #intro-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
 }
 
 #intro-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1; /* Asegurar que el video esté detrás de la barra y el logo */
 }
 
-#skip-video-btn {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px 16px;
-  transition: background-color 0.3s, opacity 0.3s;
+#intro-screen .logo {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 48px;
+    width: 48px;
+    z-index: 10; /* Asegurar que esté sobre el video */
 }
 
-#skip-video-btn:hover {
-  background-color: #FF4500;
-}
-
-#skip-video-btn:active {
-  background-color: #4682B4;
-  opacity: 0.9;
-}
-
-
-/* Asegurar que el logo y la barra de carga estén bien alineados */
-#login-form .logo {
-  display: block;
-  margin: 0 auto 8px;
-}
 /* Estilos para la barra de carga */
 #loading-bar-container {
-    width: 400px;
-    height: 40px;
+    width: 300px; /* Tamaño aumentado */
+    height: 30px; /* Tamaño aumentado */
     background-color: #F5F5F5;
     border: 2px solid #4682B4;
     border-radius: 10px;
     position: absolute;
-    bottom: 20px; /* Posicionado en la parte inferior */
-    left: 100%;
+    bottom: 40px; /* Más espacio en la parte inferior */
+    left: 50%;
     transform: translateX(-50%);
     z-index: 10; /* Asegurar que esté sobre el video */
     overflow: hidden;
@@ -75,7 +57,7 @@
     background-color: #4682B4;
     border-radius: 8px;
     position: relative;
-    transition: width 10s linear; /* Ajustado a 10s */
+    transition: width 10s linear; /* Duración de 10 segundos */
 }
 
 #loading-bar.loading {
@@ -84,554 +66,566 @@
 
 #airplane-icon {
     position: absolute;
-    top: -10px; /* Ajustar para que el avión esté centrado verticalmente sobre la barra */
-    left: 0;
-    width: 60px;
-    height: 60px;
-    transition: left 10s linear; /* Ajustado a 10s */
+    top: 0; /* Alineado con la barra */
+    left: 0; /* Comienza en el extremo izquierdo */
+    width: 30px; /* Igual a la altura de la barra */
+    height: 30px;
+    transition: left 10s linear; /* Movimiento de 10 segundos */
 }
 
 #airplane-icon.loading {
-    left: calc(100% - 60px); /* Mueve el avión al final de la barra */
+    left: calc(100% - 30px); /* Mueve al extremo derecho, ajustado al ancho del avión */
+}
+
+#loading-percentage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #333333;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 11; /* Sobre la barra */
 }
 
 /* Estilos generales */
 body {
-  align-items: center;
-  background-color: #87CEEB;
-  background-image: url('/templates/fondoaero.png');
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-  color: #333333;
-  display: flex;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  justify-content: center;
-  min-height: 100vh;
-  overflow-x: hidden;
-  padding: 10px;
-  position: relative;
+    align-items: center;
+    background-color: #87CEEB;
+    background-image: url('/templates/fondoaero.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    color: #333333;
+    display: flex;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    justify-content: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding: 10px;
+    position: relative;
 }
 
 button,
 input,
 select {
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  margin: 5px 0;
-  padding: 8px;
-  width: 100%;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 8px;
+    width: 100%;
 }
 
 button {
-  background-color: #4682B4;
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-  color: #FFFFFF;
-  transition: background-color 0.3s, opacity 0.3s;
+    background-color: #4682B4;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    color: #FFFFFF;
+    transition: background-color 0.3s, opacity 0.3s;
 }
 
 button:hover {
-  background-color: #FF4500;
-  color: #FFFFFF;
+    background-color: #FF4500;
+    color: #FFFFFF;
 }
 
 button:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9; /* Ligera opacidad para indicar interacción */
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 /* Estilos para el botón de cerrar sesión */
 .logout-btn {
-  background: url('/templates/logoutred.png') no-repeat center / cover;
-  border: none;
-  cursor: pointer;
-  height: 40px;
-  width: 40px;
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  transition: opacity 0.3s ease;
-  z-index: 1001;
+    background: url('/templates/logoutred.png') no-repeat center / cover;
+    border: none;
+    cursor: pointer;
+    height: 40px;
+    width: 40px;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    transition: opacity 0.3s ease;
+    z-index: 1001;
 }
 
 .logout-btn:hover {
-  opacity: 0.8;
+    opacity: 0.8;
 }
 
 .logout-btn:active {
-  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
+    opacity: 0.7;
 }
 
 .logout-btn:focus {
-  outline: none;
+    outline: none;
 }
 
 /* Estilos para los botones de detalles de vuelos */
 #main-flight-details-button,
 #group-flight-details-button {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  margin: 10px auto;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
-  width: 200px;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 10px auto;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
+    width: 200px;
 }
 
 #main-flight-details-button:hover,
 #group-flight-details-button:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #main-flight-details-button:active,
 #group-flight-details-button:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 /* Estilos para los botones de muteo global */
 #mute-all,
 #unmute-all {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 30px;
-  margin: 10px auto;
-  padding: 20px;
-  transition: background-color 0.3s, opacity 0.3s;
-  width: 200px;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 30px;
+    margin: 10px auto;
+    padding: 20px;
+    transition: background-color 0.3s, opacity 0.3s;
+    width: 200px;
 }
 
 #mute-all:hover,
 #unmute-all:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #mute-all:active,
 #unmute-all:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 /* Estilos del modal */
 #flight-details-modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0, 0, 0, 0.5);
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
 }
 
 #flight-details-modal.active {
-  display: block;
+    display: block;
 }
 
 .modal-content {
-  background-color: #F5F5F5;
-  margin: 5% auto;
-  padding: 15px;
-  border: 3px solid #4682B4;
-  border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 600px;
+    background-color: #F5F5F5;
+    margin: 5% auto;
+    padding: 15px;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 600px;
 }
 
 .close {
-  color: #FF4500;
-  float: right;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
+    color: #FF4500;
+    float: right;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 .close:hover,
 .close:focus {
-  color: #FF6347;
+    color: #FF6347;
 }
 
 .modal-content h2 {
-  color: #4682B4;
-  font-size: 16px;
-  margin: 0 0 10px 0;
-  text-align: center;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 /* Tabla dentro del modal */
 #modal-flight-table {
-  font-size: 10px;
-  width: 100%;
-  border-collapse: collapse;
+    font-size: 10px;
+    width: 100%;
+    border-collapse: collapse;
 }
 
 #modal-flight-table th,
 #modal-flight-table td {
-  border: 1px solid #4682B4;
-  padding: 4px;
-  text-align: left;
+    border: 1px solid #4682B4;
+    padding: 4px;
+    text-align: left;
 }
 
 #modal-flight-table th {
-  background-color: #2196f3;
-  color: white;
+    background-color: #2196f3;
+    color: white;
 }
 
 #modal-flight-table tbody tr:nth-child(even) {
-  background-color: #f9f9f9;
+    background-color: #f9f9f9;
 }
 
 #modal-flight-table tbody tr:hover {
-  background-color: #e0f7fa;
+    background-color: #e0f7fa;
 }
 
 /* Asegurar que otros botones no se solapen */
 #mute,
 #group-mute {
-  right: 50px;
+    right: 50px;
 }
 
 #back-to-main {
-  left: 50px;
+    left: 50px;
 }
 
 .close-btn {
-  background-color: transparent;
-  border: none;
-  color: #FF4500;
-  cursor: pointer;
-  font-size: 20px;
-  padding: 5px 10px;
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  transition: color 0.3s;
+    background-color: transparent;
+    border: none;
+    color: #FF4500;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 5px 10px;
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    transition: color 0.3s;
 }
 
 .close-btn:hover {
-  color: #FF6347;
+    color: #FF6347;
 }
 
 .back-icon {
-  height: 24px;
-  width: 24px;
+    height: 24px;
+    width: 24px;
 }
 
 .chat-message {
-  background-color: #FFFFFF;
-  border: 1px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  cursor: pointer;
-  margin: 5px 0;
-  padding: 5px;
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    cursor: pointer;
+    margin: 5px 0;
+    padding: 5px;
 }
 
 .flight {
-  background-color: #F5F5F5;
-  border: 1px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  font-size: 14px;
-  margin: 5px 0;
-  padding: 8px;
-  transition: background-color 0.3s;
+    background-color: #F5F5F5;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 8px;
+    transition: background-color 0.3s;
 }
 
 .flight:last-child {
-  margin-bottom: 0;
+    margin-bottom: 0;
 }
 
 .flight-aterrizando,
 .flight-en-zona {
-  background-color: #FFB6C1;
-  color: #333333;
+    background-color: #FFB6C1;
+    color: #333333;
 }
 
 .flight-despegando,
 .flight-en-tierra,
 .flight-salida {
-  background-color: #FFFFE0;
-  color: #333333;
+    background-color: #FFFFE0;
+    color: #333333;
 }
 
 .flight-en-vuelo {
-  background-color: #90EE90;
-  color: #333333;
+    background-color: #90EE90;
+    color: #333333;
 }
 
 .flight-message {
-  background-color: #FFFFFF;
-  border: 1px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  margin: 5px 0;
-  padding: 5px;
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    margin: 5px 0;
+    padding: 5px;
 }
 
 .logo {
-  display: block;
-  height: 48px;
-  margin: 0 auto 16px;
-  width: 48px;
+    display: block;
+    height: 48px;
+    margin: 0 auto 16px;
+    width: 48px;
 }
 
 .mute-button {
-  background: transparent;
-  border: none;
-  color: #FF4500;
-  cursor: pointer;
-  font-size: 32px;
-  margin-right: 10px;
-  outline: none;
-  padding: 0;
-  transition: opacity 0.3s;
+    background: transparent;
+    border: none;
+    color: #FF4500;
+    cursor: pointer;
+    font-size: 32px;
+    margin-right: 10px;
+    outline: none;
+    padding: 0;
+    transition: opacity 0.3s;
 }
 
 .mute-button:hover {
-  opacity: 0.7;
+    opacity: 0.7;
 }
 
 .mute-button:focus {
-  outline: none;
+    outline: none;
 }
 
 .play-icon {
-  color: #FF4500;
-  font-size: 10px;
-  margin-right: 5px;
+    color: #FF4500;
+    font-size: 10px;
+    margin-right: 5px;
 }
 
 .radar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-  gap: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .user-item {
-  align-items: center;
-  background-color: #FFFFFF;
-  border: 1px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  cursor: default;
-  display: flex;
-  gap: 5px;
-  justify-content: space-between;
-  margin: 5px 0;
-  padding: 5px;
+    align-items: center;
+    background-color: #FFFFFF;
+    border: 1px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    cursor: default;
+    display: flex;
+    gap: 5px;
+    justify-content: space-between;
+    margin: 5px 0;
+    padding: 5px;
 }
 
 .user-item.in-group {
-  background-color: #90EE90;
+    background-color: #90EE90;
 }
 
 .user-item span {
-  flex-grow: 1;
+    flex-grow: 1;
 }
 
 #back-to-main {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  position: absolute;
-  top: 10px;
-  transition: background-color 0.3s, opacity 0.3s;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    position: absolute;
+    top: 10px;
+    transition: background-color 0.3s, opacity 0.3s;
 }
 
 #back-to-main:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #back-to-main:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 #chat-list,
 #group-chat-list,
 #history-list {
-  background-color: #FFFFFF;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-  max-height: 150px;
-  overflow-y: auto;
-  padding: 8px;
-  text-align: left;
+    background-color: #FFFFFF;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 8px;
+    text-align: left;
 }
 
 #chat-window,
 #group-chat-window {
-  background-color: #F5F5F5;
-  border: 3px solid #4682B4;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 10px;
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
 }
 
 #chat-window h3,
 #group-chat-window h3 {
-  color: #4682B4;
-  font-size: 16px;
-  margin: 0 0 10px 0;
-  text-align: center;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #flight-details,
 #group-flight-details {
-  background-color: #FFFFFF;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
-  font-family: 'Orbitron', sans-serif;
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 10px;
+    background-color: #FFFFFF;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+    font-family: 'Orbitron', sans-serif;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px;
 }
 
 #flights-window,
 #group-flights-window {
-  background-color: #F5F5F5;
-  border: 3px solid #4682B4;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin-bottom: 15px;
-  padding: 10px;
+    background-color: #F5F5F5;
+    border: 3px solid #4682B4;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
+    padding: 10px;
 }
 
 #flights-window h3,
 #group-flights-window h3 {
-  color: #4682B4;
-  font-size: 16px;
-  margin: 0 0 10px 0;
-  text-align: center;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 #group-id {
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  flex-grow: 1;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    flex-grow: 1;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
 }
 
 #group-join {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px 0;
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0;
 }
 
 #group-join label {
-  color: #4682B4;
-  font-size: 14px;
-  margin: 5px 0;
-  text-align: left;
-  width: 100%;
+    color: #4682B4;
+    font-size: 14px;
+    margin: 5px 0;
+    text-align: left;
+    width: 100%;
 }
 
 #join-group-btn {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
 }
 
 #join-group-btn:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #join-group-btn:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 #map {
-  height: calc(100% - 60px);
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  background-color: #87CEEB;
+    height: calc(100% - 60px);
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    background-color: #87CEEB;
 }
 
 #mute,
 #group-mute {
-  background-image: url('/templates/mic.png');
-  background-repeat: no-repeat;
-  background-size: cover;
-  border: none;
-  border-radius: 5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  height: 24px;
-  padding: 0;
-  position: absolute;
-  right: 50px;
-  top: 10px;
-  transition: background-image 0.3s, opacity 0.3s;
-  width: 24px;
+    background-image: url('/templates/mic.png');
+    background-repeat: no-repeat;
+    background-size: cover;
+    border: none;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    height: 24px;
+    padding: 0;
+    position: absolute;
+    right: 50px;
+    top: 10px;
+    transition: background-image 0.3s, opacity 0.3s;
+    width: 24px;
 }
 
 #mute.muted,
 #group-mute.muted {
-  background-image: url('/templates/mute.png');
+    background-image: url('/templates/mute.png');
 }
 
 #mute:hover,
 #group-mute:hover {
-  opacity: 0.8;
+    opacity: 0.8;
 }
 
 #mute:active,
 #group-mute:active {
-  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
+    opacity: 0.7;
 }
 
 #radar-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  padding: 10px;
-  box-sizing: border-box;
-  z-index: 1000;
-  background-color: #f0f2f5;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+    z-index: 1000;
+    background-color: #f0f2f5;
 }
 
 #login-form,
@@ -640,150 +634,150 @@ button:active {
 #group-screen,
 #radar-screen,
 #history-screen {
-  background-color: rgba(255, 255, 255, 0.9);
-  border: 3px solid #4682B4;
-  border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
-  display: none;
-  margin: 0 auto;
-  max-width: 600px;
-  padding: 15px;
-  text-align: center;
-  width: 100%;
-  position: relative;
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 3px solid #4682B4;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    margin: 0 auto;
+    max-width: 600px;
+    padding: 15px;
+    text-align: center;
+    width: 100%;
+    position: relative;
 }
 
 #login-form {
-  display: block;
+    display: block;
 }
 
 #return-to-group-btn {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  margin-bottom: 10px;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin-bottom: 10px;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
 }
 
 #return-to-group-btn:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #return-to-group-btn:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 #search-bar {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid #4682B4;
-  border-radius: 4px;
-  font-size: 16px;
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #4682B4;
+    border-radius: 4px;
+    font-size: 16px;
 }
 
 #search-container {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  margin-bottom: 10px;
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
 #search-input {
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  transition: border-color 0.3s;
-  width: 70%;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: border-color 0.3s;
+    width: 70%;
 }
 
 #search-input:hover {
-  border-color: #FF4500;
+    border-color: #FF4500;
 }
 
 #search-button {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
-  width: 30%;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
+    width: 30%;
 }
 
 #search-button:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #search-button:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 #swipe-hint {
-  color: #4682B4;
-  font-size: 12px;
-  margin-bottom: 10px;
+    color: #4682B4;
+    font-size: 12px;
+    margin-bottom: 10px;
 }
 
 #talk,
 #group-talk {
-  background-color: transparent; /* Fondo transparente */
-  background-image: url('/templates/mic-off.png');
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-  border: none;
-  border-radius: 5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  height: 48px;
-  margin: 5px auto;
-  max-width: 48px;
-  padding: 0;
-  transition: background-image 0.3s ease, opacity 0.3s;
-  width: 48px;
+    background-color: transparent;
+    background-image: url('/templates/mic-off.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    border: none;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    height: 48px;
+    margin: 5px auto;
+    max-width: 48px;
+    padding: 0;
+    transition: background-image 0.3s ease, opacity 0.3s;
+    width: 48px;
 }
 
 #talk.recording,
 #group-talk.recording {
-  background-image: url('/templates/mic-on.png');
+    background-image: url('/templates/mic-on.png');
 }
 
 #talk:hover,
 #group-talk:hover {
-  opacity: 0.8;
+    opacity: 0.8;
 }
 
 #talk:active,
 #group-talk:active {
-  opacity: 0.7; /* Mantener estilo consistente al hacer clic */
+    opacity: 0.7;
 }
 
 #users,
 #group-users {
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-  max-height: 150px;
-  margin-top: 10px;
-  overflow-y: auto;
-  padding: 8px;
-  text-align: left;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+    max-height: 150px;
+    margin-top: 10px;
+    overflow-y: auto;
+    padding: 8px;
+    text-align: left;
 }
 
 #radar,
@@ -791,17 +785,17 @@ button:active {
 #group-radar,
 #group-history,
 #leave-group-btn {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  margin: 5px auto;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
-  width: 200px;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 5px auto;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
+    width: 200px;
 }
 
 #radar:hover,
@@ -809,7 +803,7 @@ button:active {
 #group-radar:hover,
 #group-history:hover,
 #leave-group-btn:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 #radar:active,
@@ -817,644 +811,646 @@ button:active {
 #group-radar:active,
 #group-history:active,
 #leave-group-btn:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 .slide-left {
-  transform: translateX(-100%);
-  transition: transform 0.3s ease;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
 }
 
 .slide-right {
-  transform: translateX(100%);
-  transition: transform 0.3s ease;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
 }
 
 h2 {
-  color: #4682B4;
-  font-size: 16px;
-  margin: 8px 0;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 16px;
+    margin: 8px 0;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 h3 {
-  color: #4682B4;
-  font-size: 14px;
-  margin: 8px 0;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 14px;
+    margin: 8px 0;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 /* Estilos para formularios de autenticación */
 .auth-form {
-  background-color: rgba(255, 255, 255, 0.9);
-  border: 3px solid #4682B4;
-  border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  margin: 0 auto;
-  max-width: 600px;
-  padding: 15px;
-  text-align: center;
-  width: 100%;
-  position: relative;
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 3px solid #4682B4;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    margin: 0 auto;
+    max-width: 600px;
+    padding: 15px;
+    text-align: center;
+    width: 100%;
+    position: relative;
 }
 
 .auth-form h2 {
-  color: #4682B4;
-  font-size: 16px;
-  margin: 0 0 10px 0;
-  text-align: center;
-  text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
+    color: #4682B4;
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    text-shadow: 0 0 3px rgba(70, 130, 180, 0.3);
 }
 
 .auth-form form {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
 .auth-form label {
-  color: #4682B4;
-  font-size: 14px;
-  margin: 5px 0;
-  text-align: left;
+    color: #4682B4;
+    font-size: 14px;
+    margin: 5px 0;
+    text-align: left;
 }
 
 .auth-form input,
 .auth-form select {
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #333333;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #333333;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
 }
 
 .auth-form select {
-  appearance: none;
-  background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
-  padding-right: 30px;
+    appearance: none;
+    background: #F5F5F5 url('data:image/svg+xml;utf8,<svg fill="%234682B4" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat 98% 50%;
+    padding-right: 30px;
 }
 
 .auth-form select:hover {
-  background-color: #FF4500;
-  color: #FFFFFF;
+    background-color: #FF4500;
+    color: #FFFFFF;
 }
 
 .auth-form select:active {
-  background-color: #F5F5F5; /* Mantener el color original al hacer clic */
-  color: #333333;
+    background-color: #F5F5F5;
+    color: #333333;
 }
 
 .auth-form button {
-  background-color: #4682B4;
-  border: 2px solid #4682B4;
-  border-radius: 5px;
-  color: #FFFFFF;
-  font-family: 'Orbitron', 'Courier New', Courier, monospace;
-  font-size: 14px;
-  padding: 8px;
-  transition: background-color 0.3s, opacity 0.3s;
+    background-color: #4682B4;
+    border: 2px solid #4682B4;
+    border-radius: 5px;
+    color: #FFFFFF;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 8px;
+    transition: background-color 0.3s, opacity 0.3s;
 }
 
 .auth-form button:hover {
-  background-color: #FF4500;
+    background-color: #FF4500;
 }
 
 .auth-form button:active {
-  background-color: #4682B4; /* Mantener el color original al hacer clic */
-  opacity: 0.9;
+    background-color: #4682B4;
+    opacity: 0.9;
 }
 
 .auth-form p {
-  margin: 10px 0 0;
+    margin: 10px 0 0;
 }
 
 .auth-form a {
-  color: #4682B4;
-  font-size: 12px;
-  text-decoration: none;
+    color: #4682B4;
+    font-size: 12px;
+    text-decoration: none;
 }
 
 .auth-form a:hover {
-  color: #FF4500;
-  text-decoration: underline;
+    color: #FF4500;
+    text-decoration: underline;
 }
 
 .auth-form .error {
-  color: #FF4500;
-  font-size: 12px;
-  margin-top: 10px;
-  text-align: center;
+    color: #FF4500;
+    font-size: 12px;
+    margin-top: 10px;
+    text-align: center;
 }
 
 /* Media queries para responsividad */
-/* Media queries para responsividad */
 @media (max-width: 768px) {
-  #loading-bar-container {
-    width: 150px;
-    height: 15px;
-    margin: 5px auto;
-  }
-
-  #loading-bar {
-    border-radius: 6px;
-  }
-
-  #airplane-icon {
-    width: 24px;
-    height: 24px;
-    top: -8px;
-  }
-
-  #skip-video-btn {
-    font-size: 12px;
-    padding: 6px 12px;
-    bottom: 15px;
-    right: 15px;
-  }
-}
-
-@media (min-width: 769px) {
-  #loading-bar-container {
-    width: 200px;
-    height: 20px;
-  }
-
-  #loading-bar {
-    border-radius: 8px;
-  }
-
-  #airplane-icon {
-    width: 30px;
-    height: 30px;
-    top: -10px;
-  }
-
-  #skip-video-btn {
-    font-size: 14px;
-    padding: 8px 16px;
-  }
-}
-
-@media (max-width: 768px) {
-  body {
-    padding: 5px;
-  }
-
-  #flight-details-modal {
-    width: 100%;
-  }
-
-  .modal-content {
-    width: 95%;
-    margin: 10% auto;
-    padding: 10px;
-  }
-
-  #modal-flight-table {
-    font-size: 9px;
-  }
-
-  #modal-flight-table th,
-  #modal-flight-table td {
-    padding: 2px;
-  }
-
-  .modal-content h2 {
-    font-size: 14px;
-  }
-
-  #chat-list,
-  #group-chat-list,
-  #history-list {
-    max-height: 120px;
-  }
-
-  #flights-window,
-  #group-flights-window,
-  #chat-window,
-  #group-chat-window {
-    width: 100%;
-  }
-
-  #main,
-  #group-screen {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  #mute,
-  #group-mute {
-    height: 20px;
-    right: 45px;
-    top: 5px;
-    width: 20px;
-  }
-
-  #radar-screen {
-    padding: 5px;
-  }
-
-  #login-form,
-  #register-form,
-  #main,
-  #group-screen,
-  #radar-screen,
-  #history-screen {
-    margin: 0;
-    max-width: 100%;
-    padding: 10px;
-  }
-
-  #talk,
-  #group-talk {
-    height: 65px;
-    max-width: 65px;
-    width: 65px;
-  }
-
-  #users,
-  #group-users {
-    font-size: 10px;
-    max-height: 120px;
-    padding: 6px;
-  }
-
-  .logo {
-    height: 20px;
-    width: 20px;
-  }
-
-  .mute-button {
-    font-size: 10px;
-    margin-right: 4px;
-  }
-
-  .user-item {
-    margin: 4px 0;
-    padding: 4px;
-  }
-
-  .logout-btn {
-    height: 24px;
-    width: 24px;
-    top: 5px;
-    left: 5px;
-  }
-
-  #back-to-main {
-    left: 35px;
-  }
-
-  button,
-  input,
-  select {
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  h2 {
-    font-size: 14px;
-  }
-
-  h3 {
-    font-size: 12px;
-  }
-
-  #map {
-    height: calc(100% - 50px);
-  }
-
-  #search-bar {
-    font-size: 12px;
-    padding: 6px;
-    width: 100%;
-  }
-
-  .radar-header {
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .radar-header h2 {
-    font-size: 14px;
-    margin: 5px 0;
-  }
-
-  .close-btn {
-    font-size: 16px;
-    padding: 4px 8px;
-  }
-
-  #search-container {
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  #search-input,
-  #search-button {
-    font-size: 12px;
-    padding: 6px;
-    width: 100%;
-  }
-
-  #group-join {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  #group-id,
-  #join-group-btn {
-    width: 100%;
-  }
-
-  #leave-group-btn {
-    width: 100%;
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  #main-flight-details-button,
-  #group-flight-details-button {
-    width: 100%;
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  #mute-all,
-  #unmute-all {
-    width: 100%;
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  .auth-form {
-    margin: 0;
-    max-width: 100%;
-    padding: 10px;
-  }
-
-  .auth-form h2 {
-    font-size: 14px;
-  }
-
-  .auth-form label {
-    font-size: 12px;
-  }
-
-  .auth-form input,
-  .auth-form select {
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  .auth-form button {
-    font-size: 12px;
-    padding: 6px;
-  }
-
-  .auth-form a {
-    font-size: 10px;
-  }
-
-  .auth-form .error {
-    font-size: 10px;
-  }
-}
-
-@media (min-width: 769px) {
-  body {
-    padding: 20px;
-  }
-
-  #flight-details-modal {
-    width: 100%;
-  }
-
-  .modal-content {
-    width: 90%;
-    max-width: 600px;
-    margin: 5% auto;
-    padding: 15px;
-  }
-
-  #modal-flight-table {
-    font-size: 10px;
-  }
-
-  #modal-flight-table th,
-  #modal-flight-table td {
-    padding: 4px;
-  }
-
-  .modal-content h2 {
-    font-size: 16px;
-  }
-
-  #chat-list,
-  #group-chat-list,
-  #history-list {
-    max-height: 200px;
-  }
-
-  #flights-window,
-  #group-flights-window,
-  #chat-window,
-  #group-chat-window {
-    width: 100%;
-  }
-
-  #main,
-  #group-screen {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  #mute,
-  #group-mute {
-    height: 24px;
-    right: 50px;
-    top: 10px;
-    width: 24px;
-  }
-
-  #radar-screen {
-    padding: 10px;
-  }
-
-  #login-form,
-  #register-form,
-  #main,
-  #group-screen,
-  #radar-screen,
-  #history-screen {
-    max-width: 600px;
-    padding: 20px;
-  }
-
-  #talk,
-  #group-talk {
-    height: 65px;
-    max-width: 65px;
-    width: 65px;
-  }
-
-  #users,
-  #group-users {
-    font-size: 14px;
-    max-height: 200px;
-    padding: 8px;
-  }
-
-  .logo {
-    height: 32px;
-    width: 32px;
-  }
-
-  .mute-button {
-    font-size: 12px;
-    margin-right: 5px;
-  }
-
-  .user-item {
-    margin: 5px 0;
-    padding: 5px;
-  }
-
-  .logout-btn {
-    height: 32px;
-    width: 32px;
-    top: 10px;
-    left: 10px;
-  }
-
-  #back-to-main {
-    left: 50px;
-  }
-
-  button {
-    margin: 5px auto;
-    width: 200px;
-  }
-
-  input,
-  select {
-    font-size: 16px;
-    max-width: 100%;
-    padding: 10px;
-    width: auto;
-  }
-
-  h2 {
-    font-size: 18px;
-  }
-
-  h3 {
-    font-size: 16px;
-  }
-
-  #map {
-    height: calc(100% - 60px);
-  }
-
-  #search-bar {
-    font-size: 16px;
-    padding: 8px;
-    flex: 1;
-  }
-
-  .radar-header {
-    flex-direction: row;
-    gap: 10px;
-  }
-
-  .radar-header h2 {
-    font-size: 16px;
-    margin: 0;
-  }
-
-  .close-btn {
-    font-size: 20px;
-    padding: 5px 10px;
-  }
-
-  #search-container {
-    align-items: center;
-    display: flex;
-    gap: 10px;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  #search-input {
-    font-size: 14px;
-    padding: 8px;
-    width: 70%;
-  }
-
-  #search-button {
-    font-size: 14px;
-    padding: 8px;
-    width: 30%;
-  }
-
-  #group-join {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  #group-id {
-    width: 200px;
-  }
-
-  #join-group-btn {
-    width: 120px;
-  }
-
-  #leave-group-btn {
-    width: 200px;
-  }
-
-  #mute-all,
-  #unmute-all {
-    width: 200px;
-  }
-
-  .auth-form {
-    max-width: 600px;
-    padding: 20px;
-  }
-
-  .auth-form h2 {
-    font-size: 18px;
-  }
-
-  .auth-form label {
-    font-size: 14px;
-  }
-
-  .auth-form input,
-  .auth-form select {
-    font-size: 14px;
-    padding: 8px;
-  }
-
-  .auth-form button {
-    font-size: 14px;
-    padding: 8px;
-    width: 200px;
-  }
-
-  .auth-form a {
-    font-size: 12px;
-  }
-
-  .auth-form .error {
-    font-size: 12px;
-  }
+    #loading-bar-container {
+        width: 250px; /* Tamaño ajustado para móvil */
+        height: 25px;
+        bottom: 30px;
+        z-index: 10;
     }
+
+    #loading-bar {
+        border-radius: 6px;
+    }
+
+    #airplane-icon {
+        width: 25px; /* Igual a la altura de la barra */
+        height: 25px;
+        top: 0;
+    }
+
+    #airplane-icon.loading {
+        left: calc(100% - 25px); /* Ajustado al nuevo ancho del avión */
+    }
+
+    #loading-percentage {
+        font-size: 12px;
+    }
+
+    body {
+        padding: 5px;
+    }
+
+    #flight-details-modal {
+        width: 100%;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 10% auto;
+        padding: 10px;
+    }
+
+    #modal-flight-table {
+        font-size: 9px;
+    }
+
+    #modal-flight-table th,
+    #modal-flight-table td {
+        padding: 2px;
+    }
+
+    .modal-content h2 {
+        font-size: 14px;
+    }
+
+    #chat-list,
+    #group-chat-list,
+    #history-list {
+        max-height: 120px;
+    }
+
+    #flights-window,
+    #group-flights-window,
+    #chat-window,
+    #group-chat-window {
+        width: 100%;
+    }
+
+    #main,
+    #group-screen {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #mute,
+    #group-mute {
+        height: 20px;
+        right: 45px;
+        top: 5px;
+        width: 20px;
+    }
+
+    #radar-screen {
+        padding: 5px;
+    }
+
+    #login-form,
+    #register-form,
+    #main,
+    #group-screen,
+    #radar-screen,
+    #history-screen {
+        margin: 0;
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    #talk,
+    #group-talk {
+        height: 65px;
+        max-width: 65px;
+        width: 65px;
+    }
+
+    #users,
+    #group-users {
+        font-size: 10px;
+        max-height: 120px;
+        padding: 6px;
+    }
+
+    .logo {
+        height: 20px;
+        width: 20px;
+    }
+
+    .mute-button {
+        font-size: 10px;
+        margin-right: 4px;
+    }
+
+    .user-item {
+        margin: 4px 0;
+        padding: 4px;
+    }
+
+    .logout-btn {
+        height: 24px;
+        width: 24px;
+        top: 5px;
+        left: 5px;
+    }
+
+    #back-to-main {
+        left: 35px;
+    }
+
+    button,
+    input,
+    select {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    h2 {
+        font-size: 14px;
+    }
+
+    h3 {
+        font-size: 12px;
+    }
+
+    #map {
+        height: calc(100% - 50px);
+    }
+
+    #search-bar {
+        font-size: 12px;
+        padding: 6px;
+        width: 100%;
+    }
+
+    .radar-header {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .radar-header h2 {
+        font-size: 14px;
+        margin: 5px 0;
+    }
+
+    .close-btn {
+        font-size: 16px;
+        padding: 4px 8px;
+    }
+
+    #search-container {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    #search-input,
+    #search-button {
+        font-size: 12px;
+        padding: 6px;
+        width: 100%;
+    }
+
+    #group-join {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #group-id,
+    #join-group-btn {
+        width: 100%;
+    }
+
+    #leave-group-btn {
+        width: 100%;
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    #main-flight-details-button,
+    #group-flight-details-button {
+        width: 100%;
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    #mute-all,
+    #unmute-all {
+        width: 100%;
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    .auth-form {
+        margin: 0;
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    .auth-form h2 {
+        font-size: 14px;
+    }
+
+    .auth-form label {
+        font-size: 12px;
+    }
+
+    .auth-form input,
+    .auth-form select {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    .auth-form button {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    .auth-form a {
+        font-size: 10px;
+    }
+
+    .auth-form .error {
+        font-size: 10px;
+    }
+}
+
+@media (min-width: 769px) {
+    #loading-bar-container {
+        width: 300px;
+        height: 30px;
+        bottom: 40px;
+        z-index: 10;
+    }
+
+    #loading-bar {
+        border-radius: 8px;
+    }
+
+    #airplane-icon {
+        width: 30px;
+        height: 30px;
+        top: 0;
+    }
+
+    #airplane-icon.loading {
+        left: calc(100% - 30px);
+    }
+
+    #loading-percentage {
+        font-size: 14px;
+    }
+
+    body {
+        padding: 20px;
+    }
+
+    #flight-details-modal {
+        width: 100%;
+    }
+
+    .modal-content {
+        width: 90%;
+        max-width: 600px;
+        margin: 5% auto;
+        padding: 15px;
+    }
+
+    #modal-flight-table {
+        font-size: 10px;
+    }
+
+    #modal-flight-table th,
+    #modal-flight-table td {
+        padding: 4px;
+    }
+
+    .modal-content h2 {
+        font-size: 16px;
+    }
+
+    #chat-list,
+    #group-chat-list,
+    #history-list {
+        max-height: 200px;
+    }
+
+    #flights-window,
+    #group-flights-window,
+    #chat-window,
+    #group-chat-window {
+        width: 100%;
+    }
+
+    #main,
+    #group-screen {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    #mute,
+    #group-mute {
+        height: 24px;
+        right: 50px;
+        top: 10px;
+        width: 24px;
+    }
+
+    #radar-screen {
+        padding: 10px;
+    }
+
+    #login-form,
+    #register-form,
+    #main,
+    #group-screen,
+    #radar-screen,
+    #history-screen {
+        max-width: 600px;
+        padding: 20px;
+    }
+
+    #talk,
+    #group-talk {
+        height: 65px;
+        max-width: 65px;
+        width: 65px;
+    }
+
+    #users,
+    #group-users {
+        font-size: 14px;
+        max-height: 200px;
+        padding: 8px;
+    }
+
+    .logo {
+        height: 32px;
+        width: 32px;
+    }
+
+    .mute-button {
+        font-size: 12px;
+        margin-right: 5px;
+    }
+
+    .user-item {
+        margin: 5px 0;
+        padding: 5px;
+    }
+
+    .logout-btn {
+        height: 32px;
+        width: 32px;
+        top: 10px;
+        left: 10px;
+    }
+
+    #back-to-main {
+        left: 50px;
+    }
+
+    button {
+        margin: 5px auto;
+        width: 200px;
+    }
+
+    input,
+    select {
+        font-size: 16px;
+        max-width: 100%;
+        padding: 10px;
+        width: auto;
+    }
+
+    h2 {
+        font-size: 18px;
+    }
+
+    h3 {
+        font-size: 16px;
+    }
+
+    #map {
+        height: calc(100% - 60px);
+    }
+
+    #search-bar {
+        font-size: 16px;
+        padding: 8px;
+        flex: 1;
+    }
+
+    .radar-header {
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .radar-header h2 {
+        font-size: 16px;
+        margin: 0;
+    }
+
+    .close-btn {
+        font-size: 20px;
+        padding: 5px 10px;
+    }
+
+    #search-container {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    #search-input {
+        font-size: 14px;
+        padding: 8px;
+        width: 70%;
+    }
+
+    #search-button {
+        font-size: 14px;
+        padding: 8px;
+        width: 30%;
+    }
+
+    #group-join {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    #group-id {
+        width: 200px;
+    }
+
+    #join-group-btn {
+        width: 120px;
+    }
+
+    #leave-group-btn {
+        width: 200px;
+    }
+
+    #mute-all,
+    #unmute-all {
+        width: 200px;
+    }
+
+    .auth-form {
+        max-width: 600px;
+        padding: 20px;
+    }
+
+    .auth-form h2 {
+        font-size: 18px;
+    }
+
+    .auth-form label {
+        font-size: 14px;
+    }
+
+    .auth-form input,
+    .auth-form select {
+        font-size: 14px;
+        padding: 8px;
+    }
+
+    .auth-form button {
+        font-size: 14px;
+        padding: 8px;
+        width: 200px;
+    }
+
+    .auth-form a {
+        font-size: 12px;
+    }
+
+    .auth-form .error {
+        font-size: 12px;
+    }
+      }
