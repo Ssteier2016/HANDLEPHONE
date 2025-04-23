@@ -1,4 +1,4 @@
- // Variables globales
+// Variables globales
 let ws; // WebSocket para la comunicación con el servidor
 let userId; // Identificador único del usuario (legajo_name_function)
 let audioChunks = []; // Almacena fragmentos de audio durante la grabación
@@ -193,6 +193,18 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
 
     ws.onclose = function() {
         console.log("WebSocket cerrado");
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+        }
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        const talkButton = document.getElementById("talk");
+        if (talkButton) {
+            talkButton.src = "/templates/mic-off.png";
+            talkButton.alt = "Micrófono apagado";
+        }
         const sessionToken = localStorage.getItem("token");
         if (sessionToken && retryCount < maxRetries) {
             setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
@@ -206,7 +218,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
 
 // Mostrar pantallas
 function showScreen(screenId) {
-    const screens = ['login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen'];
+    const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen'];
     screens.forEach(id => {
         const element = document.getElementById(id);
         if (element) element.style.display = id === screenId ? 'block' : 'none';
@@ -224,41 +236,80 @@ function showScreen(screenId) {
     updateSwipeHint();
 }
 
-// Cargar la página y verificar si el usuario ya está autenticado
+// Cargar la página y manejar la pantalla de introducción
 window.onload = function() {
     console.log("window.onload ejecutado");
-    const sessionToken = localStorage.getItem("token");
-    console.log("sessionToken:", sessionToken);
-    const loginForm = document.getElementById("login-form");
-    const registerForm = document.getElementById("register-form");
-    const mainDiv = document.getElementById("main");
-    const radarDiv = document.getElementById("radar-screen");
-    const historyDiv = document.getElementById("history-screen");
 
-    if (!loginForm || !registerForm || !mainDiv || !radarDiv || !historyDiv) {
-        console.error("Uno o más elementos no se encontraron en el DOM:", {
-            loginForm: !!loginForm,
-            registerForm: !!registerForm,
-            mainDiv: !!mainDiv,
-            radarDiv: !!radarDiv,
-            historyDiv: !!historyDiv
-        });
+    // Mostrar la pantalla de introducción
+    showScreen('intro-screen');
+
+    const introVideo = document.getElementById('intro-video');
+    const progressBar = document.getElementById('progress-bar');
+
+    if (!introVideo || !progressBar) {
+        console.error("Elementos de introducción no encontrados en el DOM");
+        showScreen('login-form');
         return;
     }
 
-    if (sessionToken && localStorage.getItem("userName") && localStorage.getItem("userFunction") && localStorage.getItem("userLegajo")) {
-        console.log("Usuario autenticado, mostrando pantalla principal");
-        userId = `${localStorage.getItem("userLegajo")}_${localStorage.getItem("userName")}_${localStorage.getItem("userFunction")}`;
-        connectWebSocket(sessionToken);
-        showScreen('main');
-        const muteButton = document.getElementById("mute");
-        if (muteButton) {
-            muteButton.classList.add("unmuted");
-        }
-    } else {
-        console.log("Usuario no autenticado, mostrando pantalla de login");
+    // Reproducir el video
+    introVideo.play().catch(err => {
+        console.error("Error al reproducir el video:", err);
         showScreen('login-form');
-    }
+    });
+
+    // Animar la barra de carga
+    let progress = 0;
+    const duration = 10000; // 10 segundos
+    const interval = 100; // Actualizar cada 100ms
+    const steps = duration / interval;
+    const increment = 100 / steps;
+
+    const progressInterval = setInterval(() => {
+        progress += increment;
+        progressBar.value = progress;
+        if (progress >= 100) {
+            clearInterval(progressInterval);
+        }
+    }, interval);
+
+    // Cambiar a la pantalla de login después de 10 segundos
+    setTimeout(() => {
+        introVideo.pause();
+        showScreen('login-form');
+        const sessionToken = localStorage.getItem("token");
+        console.log("sessionToken:", sessionToken);
+        const loginForm = document.getElementById("login-form");
+        const registerForm = document.getElementById("register-form");
+        const mainDiv = document.getElementById("main");
+        const radarDiv = document.getElementById("radar-screen");
+        const historyDiv = document.getElementById("history-screen");
+
+        if (!loginForm || !registerForm || !mainDiv || !radarDiv || !historyDiv) {
+            console.error("Uno o más elementos no se encontraron en el DOM:", {
+                loginForm: !!loginForm,
+                registerForm: !!registerForm,
+                mainDiv: !!mainDiv,
+                radarDiv: !!radarDiv,
+                historyDiv: !!historyDiv
+            });
+            return;
+        }
+
+        if (sessionToken && localStorage.getItem("userName") && localStorage.getItem("userFunction") && localStorage.getItem("userLegajo")) {
+            console.log("Usuario autenticado, mostrando pantalla principal");
+            userId = `${localStorage.getItem("userLegajo")}_${localStorage.getItem("userName")}_${localStorage.getItem("userFunction")}`;
+            connectWebSocket(sessionToken);
+            showScreen('main');
+            const muteButton = document.getElementById("mute");
+            if (muteButton) {
+                muteButton.classList.add("unmuted");
+            }
+        } else {
+            console.log("Usuario no autenticado, mostrando pantalla de login");
+            showScreen('login-form');
+        }
+    }, 10000);
 };
 
 // Manejo de doble toque en el botón de volumen (+) para activar la grabación
@@ -298,6 +349,7 @@ function playAudio(blob) {
         navigator.mediaSession.setActionHandler('pause', () => audio.pause());
     }
 }
+
 function muteAll() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -319,6 +371,7 @@ function unmuteAll() {
         alert("No estás conectado al servidor.");
     }
 }
+
 // Reproducir el siguiente audio en la cola
 function playNextAudio() {
     if (audioQueue.length === 0 || isPlaying) return;
@@ -508,6 +561,12 @@ function updateOpenSkyData() {
 // Alternar la grabación de audio
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
+    if (!talkButton) {
+        console.error("Botón de hablar no encontrado en el DOM");
+        return;
+    }
+
+    // Si no estamos grabando o el grabador está inactivo
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
         console.log("Iniciando grabación...");
         stream = await requestMicPermission();
@@ -529,15 +588,12 @@ async function toggleTalk() {
         audioChunks = [];
         let transcript = supportsSpeechRecognition ? "" : "Pendiente de transcripción";
 
+        // Configurar SpeechRecognition si está soportado
         if (supportsSpeechRecognition && recognition) {
             recognition.onresult = (event) => {
                 transcript = "";
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                        transcript += event.results[i][0].transcript;
-                    } else {
-                        transcript += event.results[i][0].transcript;
-                    }
+                    transcript += event.results[i][0].transcript;
                 }
                 console.log("Transcripción parcial:", transcript);
             };
@@ -554,6 +610,7 @@ async function toggleTalk() {
             }
         }
 
+        // Manejar datos de audio
         mediaRecorder.ondataavailable = function(event) {
             console.log("Datos de audio disponibles:", event.data.size, "bytes");
             if (event.data.size > 0) {
@@ -562,6 +619,8 @@ async function toggleTalk() {
                 console.warn("Fragmento de audio vacío recibido");
             }
         };
+
+        // Manejar detención de la grabación
         mediaRecorder.onstop = function() {
             console.log("Grabación detenida");
             console.log("Tamaño de audioChunks:", audioChunks.length);
@@ -570,6 +629,7 @@ async function toggleTalk() {
                 alert("No se grabó ningún audio. Verifica tu micrófono.");
                 return;
             }
+
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             console.log("Audio Blob creado, tamaño:", audioBlob.size, "bytes");
             if (audioBlob.size === 0) {
@@ -577,14 +637,21 @@ async function toggleTalk() {
                 alert("El audio grabado está vacío. Verifica tu micrófono.");
                 return;
             }
+
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = function() {
                 const base64data = reader.result.split(',')[1];
                 console.log("Audio convertido a Base64, longitud:", base64data.length);
+                if (!base64data || base64data.length < 100) {
+                    console.error("Datos de audio inválidos o demasiado pequeños");
+                    alert("El audio grabado es inválido. Por favor, intenta de nuevo.");
+                    return;
+                }
                 const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                 const sender = localStorage.getItem("userName") || "Anónimo";
                 const userFunction = localStorage.getItem("userFunction") || "Desconocida";
+
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     const message = {
                         type: "audio",
@@ -624,31 +691,49 @@ async function toggleTalk() {
                 console.error("Error al leer el audio como Base64:", err);
                 alert("Error al procesar el audio: " + err.message);
             };
+
+            // Limpiar recursos
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
             }
             audioChunks = [];
             mediaRecorder = null;
-            if (supportsSpeechRecognition && recognition) recognition.stop();
+            if (supportsSpeechRecognition && recognition) {
+                recognition.stop();
+            }
+
+            // Cambiar la imagen del botón a "mic-off.png"
+            talkButton.src = "/templates/mic-off.png";
+            talkButton.alt = "Micrófono apagado";
         };
+
         mediaRecorder.onerror = function(err) {
             console.error("Error en MediaRecorder:", err);
             alert("Error durante la grabación: " + err.message);
+            talkButton.src = "/templates/mic-off.png";
+            talkButton.alt = "Micrófono apagado";
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            mediaRecorder = null;
         };
+
         try {
-            mediaRecorder.start(100);
+            mediaRecorder.start(100); // Capturar datos cada 100ms
             console.log("Grabación iniciada");
-            talkButton.textContent = "Grabando...";
-            talkButton.style.backgroundColor = "green";
+            talkButton.src = "/templates/mic-on.png";
+            talkButton.alt = "Micrófono encendido";
         } catch (err) {
             console.error("Error al iniciar la grabación:", err);
             alert("Error al iniciar la grabación: " + err.message);
+            talkButton.src = "/templates/mic-off.png";
+            talkButton.alt = "Micrófono apagado";
         }
     } else if (mediaRecorder.state === "recording") {
+        console.log("Deteniendo grabación...");
         mediaRecorder.stop();
-        talkButton.textContent = "Hablar";
-        talkButton.style.backgroundColor = "red";
     }
 }
 
