@@ -192,51 +192,66 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 
     ws.onclose = function() {
-        console.log("WebSocket cerrado");
-        if (mediaRecorder && mediaRecorder.state === "recording") {
-            mediaRecorder.stop();
-        }
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            stream = null;
-        }
-        const talkButton = document.getElementById("talk");
-        if (talkButton) {
-            talkButton.src = "/templates/mic-off.png";
-            talkButton.alt = "Micrófono apagado";
-        }
-        const sessionToken = localStorage.getItem("token");
-        if (sessionToken && retryCount < maxRetries) {
-            setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
-        } else if (retryCount >= maxRetries) {
-            console.error("Máximo número de intentos de reconexión alcanzado. Por favor, recarga la página.");
-            alert("No se pudo reconectar al servidor después de varios intentos. Por favor, recarga la página.");
-            showScreen('login-form');
-        }
-    };
-}
+    console.log("WebSocket cerrado");
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+    }
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    const talkButton = document.getElementById("talk");
+    if (talkButton) {
+        talkButton.src = "/templates/mic-off.png";
+        talkButton.alt = "Micrófono apagado";
+    }
+    const sessionToken = localStorage.getItem("token");
+    if (sessionToken && retryCount < maxRetries) {
+        console.log(`Reintentando conexión WebSocket (intento ${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
+    } else if (retryCount >= maxRetries) {
+        console.error("Máximo número de intentos de reconexión alcanzado");
+        localStorage.removeItem("token");
+        localStorage.removeItem("userName");
+        localStorage.removeItem("userFunction");
+        localStorage.removeItem("userLegajo");
+        showScreen('login-form');
+        alert("No se pudo conectar al servidor después de varios intentos. Por favor, inicia sesión nuevamente.");
+    }
+};
 
 // Mostrar pantallas
 function showScreen(screenId) {
     const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen', 'flight-details-modal'];
     screens.forEach(id => {
         const element = document.getElementById(id);
-        if (element) element.style.display = id === screenId ? 'block' : 'none';
+        if (element) {
+            element.style.display = id === screenId ? 'block' : 'none';
+            console.log(`Pantalla ${id}: ${id === screenId ? 'mostrada' : 'oculta'}`);
+        } else {
+            console.warn(`Elemento #${id} no encontrado en el DOM`);
+        }
     });
 
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
         logoutButton.style.display = screenId === 'main' || screenId === 'group-screen' ? 'block' : 'none';
+        console.log(`Botón de logout: ${logoutButton.style.display}`);
+    } else {
+        console.warn("Elemento #logout-button no encontrado en el DOM");
     }
 
     if (screenId === 'main' || screenId === 'group-screen') {
+        console.log("Actualizando datos de vuelos para pantalla:", screenId);
         updateOpenSkyData();
     }
 
     if (screenId === 'radar-screen' && map) {
+        console.log("Invalidando tamaño del mapa para radar-screen");
         map.invalidateSize();
     }
 
+    console.log("Actualizando indicación de deslizamiento");
     updateSwipeHint();
 }
 
@@ -247,20 +262,15 @@ window.onload = function() {
     // Mostrar la pantalla de introducción
     showScreen('intro-screen');
 
+    // Verificar si los elementos de introducción existen
     const introVideo = document.getElementById('intro-video');
     const airplaneIcon = document.getElementById('airplane-icon');
     const loadingBar = document.getElementById('loading-bar');
     const loadingPercentage = document.getElementById('loading-percentage');
 
-    // Verificar que los elementos existan
     if (!introVideo || !airplaneIcon || !loadingBar || !loadingPercentage) {
-        console.error("Elementos de introducción no encontrados:", {
-            introVideo: !!introVideo,
-            airplaneIcon: !!airplaneIcon,
-            loadingBar: !!loadingBar,
-            loadingPercentage: !!loadingPercentage
-        });
-        setTimeout(() => showScreen('login-form'), 10000); // Cambiar al login tras 10s
+        console.warn("Uno o más elementos de introducción no encontrados. Saltando a login-form.");
+        setTimeout(checkSessionAndShowScreen, 1000); // Mostrar login-form después de 1 segundo
         return;
     }
 
@@ -273,7 +283,6 @@ window.onload = function() {
 
     // Animar el porcentaje de 0% a 100% en 10 segundos
     let percentage = 0;
-    console.log("Iniciando animación del porcentaje");
     const interval = setInterval(() => {
         percentage += 1;
         if (percentage <= 100) {
@@ -288,28 +297,34 @@ window.onload = function() {
     // Reproducir el video
     introVideo.play().catch(err => {
         console.error("Error al reproducir el video:", err);
-        // No detener la animación si el video falla
+        // Continuar con la animación aunque el video falle
     });
 
     // Cambiar a la pantalla de login después de 10 segundos
     setTimeout(() => {
-        console.log("Finalizando introducción, cambiando a login");
+        console.log("Finalizando introducción, verificando sesión");
         introVideo.pause();
         loadingBar.classList.remove('loading');
         airplaneIcon.classList.remove('loading');
         loadingPercentage.textContent = '100%';
-        clearInterval(interval); // Asegurar que el intervalo se detenga
+        clearInterval(interval);
         checkSessionAndShowScreen();
     }, 10000);
 
     // Verificar la sesión
     function checkSessionAndShowScreen() {
         const sessionToken = localStorage.getItem("token");
-        if (sessionToken && localStorage.getItem("userName") && localStorage.getItem("userFunction") && localStorage.getItem("userLegajo")) {
-            userId = `${localStorage.getItem("userLegajo")}_${localStorage.getItem("userName")}_${localStorage.getItem("userFunction")}`;
+        const userName = localStorage.getItem("userName");
+        const userFunction = localStorage.getItem("userFunction");
+        const userLegajo = localStorage.getItem("userLegajo");
+
+        if (sessionToken && userName && userFunction && userLegajo) {
+            console.log("Sesión encontrada en localStorage, intentando conectar WebSocket");
+            userId = `${userLegajo}_${userName}_${userFunction}`;
             connectWebSocket(sessionToken);
-            showScreen('main');
+            // No mostrar 'main' aquí, esperar confirmación del WebSocket
         } else {
+            console.log("No hay sesión válida, mostrando login-form");
             showScreen('login-form');
         }
     }
