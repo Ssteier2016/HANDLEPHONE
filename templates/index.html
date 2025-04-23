@@ -16,7 +16,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
+                navigator.serviceWorker.register('/templates/sw.js', { scope: '/' })
                     .then(reg => {
                         console.log('Service Worker registrado:', reg);
                         if (reg.waiting) {
@@ -32,13 +32,12 @@
     <!-- Pantalla de introducción con video -->
     <div id="intro-screen" style="display: block;">
         <video id="intro-video" muted>
-            <source src="/templates/introvideo.mp4" type="video/mp4">
+            <source src="/templates/introvideo.mp4" type="video/mp4" onerror="console.error('Video de introducción no encontrado'); alert('No se pudo cargar el video de introducción. Continuando al inicio de sesión.');">
             Tu navegador no soporta el elemento de video.
         </video>
         <div id="loading-bar-container">
             <div id="loading-bar">
                 <img src="/templates/airplane.png" alt="Airplane" id="airplane-icon">
-            </ Consolidation
             </div>
             <span id="loading-percentage">0%</span>
         </div>
@@ -94,7 +93,7 @@
 
     <!-- Interfaz Principal -->
     <div id="main" style="display: none;">
-        <button id="logout-button" class="logout-btn" onclick="logout()"></button>
+        <button id="logout-button" class="logout-btn"></button>
         <img src="/templates/logo2.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;">
