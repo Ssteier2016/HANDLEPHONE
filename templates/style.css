@@ -48,40 +48,51 @@
   opacity: 0.9;
 }
 
-/* Estilos para la barra de carga */
-#loading-bar-container {
-  width: 200px;
-  height: 20px;
-  background-color: #F5F5F5;
-  border: 2px solid #4682B4;
-  border-radius: 10px;
-  margin: 10px auto;
-  position: absolute;
-  overflow: hidden;
-}
-
-#loading-bar {
-  width: 0%;
-  height: 100%;
-  background-color: #4682B4;
-  border-radius: 8px;
-  position: absolute;
-  transition: width 3s linear;
-}
-
-#airplane-icon {
-  position: absolute;
-  top: -10px; /* Ajustar para que el avión esté centrado verticalmente sobre la barra */
-  left: 0;
-  width: 30px;
-  height: 30px;
-  transition: left 3s linear;
-}
 
 /* Asegurar que el logo y la barra de carga estén bien alineados */
 #login-form .logo {
   display: block;
   margin: 0 auto 8px;
+}
+/* Estilos para la barra de carga */
+#loading-bar-container {
+    width: 200px;
+    height: 20px;
+    background-color: #F5F5F5;
+    border: 2px solid #4682B4;
+    border-radius: 10px;
+    position: absolute;
+    bottom: 20px; /* Posicionado en la parte inferior */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10; /* Asegurar que esté sobre el video */
+    overflow: hidden;
+}
+
+#loading-bar {
+    width: 0%;
+    height: 100%;
+    background-color: #4682B4;
+    border-radius: 8px;
+    position: relative;
+    transition: width 10s linear; /* Ajustado a 10s */
+}
+
+#loading-bar.loading {
+    width: 100%; /* Llena la barra al añadir la clase */
+}
+
+#airplane-icon {
+    position: absolute;
+    top: -10px; /* Ajustar para que el avión esté centrado verticalmente sobre la barra */
+    left: 0;
+    width: 30px;
+    height: 30px;
+    transition: left 10s linear; /* Ajustado a 10s */
+}
+
+#airplane-icon.loading {
+    left: calc(100% - 30px); /* Mueve el avión al final de la barra */
 }
 
 /* Estilos generales */
