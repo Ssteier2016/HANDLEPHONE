@@ -218,7 +218,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
 
 // Mostrar pantallas
 function showScreen(screenId) {
-    const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen'];
+    const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen', 'flight-details-modal'];
     screens.forEach(id => {
         const element = document.getElementById(id);
         if (element) element.style.display = id === screenId ? 'block' : 'none';
@@ -233,9 +233,14 @@ function showScreen(screenId) {
         updateOpenSkyData();
     }
 
+    if (screenId === 'radar-screen' && map) {
+        map.invalidateSize();
+    }
+
     updateSwipeHint();
 }
 
+// Manejo de la pantalla de introducción
 window.onload = function() {
     console.log("window.onload ejecutado");
 
@@ -388,22 +393,24 @@ function playNextAudio() {
 
 // Inicializar el mapa de Leaflet para el radar
 function initMap() {
-    map = L.map('map').setView([-34.5597, -58.4116], 10);
+    if (map) {
+        map.remove(); // Limpiar mapa existente
+    }
+    map = L.map('map').setView([-34.5597, -58.4116], 8); // Centro en Buenos Aires
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
     var airplaneIcon = L.icon({
-        iconUrl: 'templates/airport.png',
+        iconUrl: '/templates/airport.png',
         iconSize: [30, 30],
     });
 
-    L.marker([-34.5597, -58.4116], { icon: airplaneIcon }).addTo(map)
-        .bindPopup("Aeroparque").openPopup();
-
-    const searchBar = document.getElementById("search-bar");
-    searchBar.addEventListener("input", filterFlights);
+    L.marker([-34.5597, -58.4116], { icon: airplaneIcon })
+        .addTo(map)
+        .bindPopup("Aeroparque")
+        .openPopup();
 }
 
 // Calcular la distancia entre dos puntos (en millas náuticas)
@@ -461,6 +468,22 @@ function filterFlights() {
             }
         }
     });
+
+    const modalTableBody = document.querySelector('#modal-flight-table tbody');
+    if (modalTableBody) {
+        const rows = modalTableBody.getElementsByTagName('tr');
+        flightData.forEach((flight, index) => {
+            const flightNumber = flight.flight_number.replace("ARG", "").replace("AR", "");
+            const displayFlight = `AEP${flightNumber}`;
+            const matches = 
+                flight.registration.toUpperCase().includes(searchTerm) || 
+                displayFlight.toUpperCase().includes(searchTerm) ||
+                flightNumber === searchTerm;
+            if (rows[index]) {
+                rows[index].style.display = matches ? '' : 'none';
+            }
+        });
+    }
 }
 
 // Actualizar datos de vuelos desde /opensky
@@ -469,6 +492,10 @@ function updateOpenSkyData() {
         .then(response => response.json())
         .then(data => {
             console.log("Datos recibidos de /opensky:", data);
+            flightData = data;
+            markers = [];
+
+            // Actualizar flight-details y group-flight-details
             const flightDetails = document.getElementById("flight-details");
             const groupFlightDetails = document.getElementById("group-flight-details");
             if (!flightDetails || !groupFlightDetails) {
@@ -477,9 +504,14 @@ function updateOpenSkyData() {
             }
             flightDetails.innerHTML = "";
             groupFlightDetails.innerHTML = "";
-            flightData = data;
-            markers = [];
 
+            // Actualizar tabla del modal
+            const modalTableBody = document.querySelector('#modal-flight-table tbody');
+            if (modalTableBody) {
+                modalTableBody.innerHTML = "";
+            }
+
+            // Limpiar marcadores del mapa (excepto Aeroparque)
             if (map) {
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker && layer.getPopup().getContent() !== "Aeroparque") {
@@ -489,34 +521,35 @@ function updateOpenSkyData() {
             }
 
             if (data.error) {
-                console.warn("Error en Airplanes.Live:", data.error);
-                flightDetails.textContent = "Esperando datos de Airplanes.Live...";
-                groupFlightDetails.textContent = "Esperando datos de Airplanes.Live...";
+                console.warn("Error en datos de vuelos:", data.error);
+                flightDetails.textContent = "Esperando datos de vuelos...";
+                groupFlightDetails.textContent = "Esperando datos de vuelos...";
+                if (modalTableBody) {
+                    modalTableBody.innerHTML = "<tr><td colspan='7'>Esperando datos de vuelos...</td></tr>";
+                }
             } else {
                 data.forEach(state => {
+                    const flight = state.flight_number ? state.flight_number.trim() : 'N/A';
+                    const registration = state.registration || "LV-XXX";
+                    const scheduled = state.scheduled_time || "N/A";
+                    const origin = state.origin || "N/A";
+                    const destination = state.destination || "N/A";
+                    const status = state.status || getFlightStatus(state.alt_geom || 0, state.gs || 0, state.vert_rate || 0);
+                    const source = state.source || "Desconocida";
                     const lat = state.lat;
                     const lon = state.lon;
-                    const flight = state.flight ? state.flight.trim() : 'N/A';
-                    const registration = state.registration || "LV-XXX";
-                    const speed = state.gs;
-                    const altitude = state.alt_geom || 0;
-                    const verticalRate = state.vert_rate || 0;
-                    const originDest = state.origin_dest || "N/A";
-                    const scheduled = state.scheduled || "N/A";
-                    const position = state.position || "N/A";
-                    const destination = state.destination || "N/A";
-                    const status = state.status || getFlightStatus(altitude, speed, verticalRate);
 
                     if (flight.startsWith("AR") || flight.startsWith("ARG")) {
                         const flightNumber = flight.replace("ARG", "").replace("AR", "");
                         const displayFlight = `AEP${flightNumber}`;
 
+                        // Añadir a flight-details y group-flight-details
                         const flightDiv = document.createElement("div");
                         flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
                         flightDiv.innerHTML = `
                             <strong>Vuelo:</strong> ${displayFlight} | 
                             <strong>STD:</strong> ${scheduled} | 
-                            <strong>Posición:</strong> ${position} | 
+                            <strong>Origen:</strong> ${origin} | 
                             <strong>Destino:</strong> ${destination} | 
                             <strong>Matrícula:</strong> ${registration} | 
                             <strong>Estado:</strong> ${status}
@@ -524,14 +557,36 @@ function updateOpenSkyData() {
                         flightDetails.appendChild(flightDiv);
                         groupFlightDetails.appendChild(flightDiv.cloneNode(true));
 
+                        // Añadir a la tabla del modal
+                        if (modalTableBody) {
+                            const row = document.createElement("tr");
+                            row.innerHTML = `
+                                <td>${displayFlight}</td>
+                                <td>${registration}</td>
+                                <td>${scheduled}</td>
+                                <td>${origin}</td>
+                                <td>${destination}</td>
+                                <td>${status}</td>
+                                <td>${source}</td>
+                            `;
+                            modalTableBody.appendChild(row);
+                        }
+
+                        // Añadir marcador al mapa
                         if (lat && lon && map) {
-                            const marker = L.marker([lat, lon], { 
+                            const marker = L.marker([lat, lon], {
                                 icon: L.icon({
                                     iconUrl: '/templates/aero.png',
                                     iconSize: [30, 30]
                                 })
                             }).addTo(map)
-                              .bindPopup(`Vuelo: ${displayFlight} / ${registration}<br>Ruta: ${originDest}<br>Estado: ${status}`);
+                              .bindPopup(`
+                                  Vuelo: ${displayFlight} (${registration})<br>
+                                  Origen: ${origin}<br>
+                                  Destino: ${destination}<br>
+                                  Estado: ${status}<br>
+                                  Fuente: ${source}
+                              `);
                             marker.flight = flight;
                             marker.registration = registration;
                             markers.push(marker);
@@ -543,17 +598,27 @@ function updateOpenSkyData() {
             }
         })
         .catch(err => {
-            console.error("Error al cargar datos de Airplanes.Live:", err);
+            console.error("Error al cargar datos de vuelos:", err);
             const flightDetails = document.getElementById("flight-details");
             const groupFlightDetails = document.getElementById("group-flight-details");
+            const modalTableBody = document.querySelector('#modal-flight-table tbody');
             if (flightDetails) {
-                flightDetails.textContent = "Error al conectar con Airplanes.Live";
+                flightDetails.textContent = "Error al conectar con el servidor de vuelos";
             }
             if (groupFlightDetails) {
-                groupFlightDetails.textContent = "Error al conectar con Airplanes.Live";
+                groupFlightDetails.textContent = "Error al conectar con el servidor de vuelos";
+            }
+            if (modalTableBody) {
+                modalTableBody.innerHTML = "<tr><td colspan='7'>Error al conectar con el servidor de vuelos</td></tr>";
             }
         });
     setTimeout(updateOpenSkyData, 15000);
+}
+
+// Mostrar modal de detalles de vuelos
+function showFlightDetails() {
+    showScreen('flight-details-modal');
+    updateOpenSkyData();
 }
 
 // Alternar la grabación de audio
@@ -973,7 +1038,13 @@ function sendGroupMessage(audioData) {
 // Funciones para mostrar radar e historial desde el grupo
 function showGroupRadar() {
     showScreen('radar-screen');
-    initMap();
+    if (!map) {
+        initMap();
+        updateOpenSkyData();
+    } else {
+        map.invalidateSize();
+        filterFlights();
+    }
 }
 
 function showGroupHistory() {
@@ -1040,7 +1111,7 @@ function backToMainFromRadar() {
     showScreen("main");
     document.getElementById("search-bar").value = "";
     filterFlights();
-}
+            }
 
 // Mostrar el historial de mensajes
 function showHistory() {
@@ -1288,4 +1359,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('group-mute')?.addEventListener('click', toggleGroupMute);
     document.getElementById('search-bar')?.addEventListener('input', filterFlights);
     document.querySelector('.close-btn')?.addEventListener('click', backToMainFromRadar);
+    document.getElementById('main-flight-details-button')?.addEventListener('click', showFlightDetails);
+    document.getElementById('group-flight-details-button')?.addEventListener('click', showFlightDetails);
+    document.getElementById('close-modal')?.addEventListener('click', () => {
+        showScreen('main');
+        document.getElementById("search-bar").value = "";
+        filterFlights();
+    });
 });
