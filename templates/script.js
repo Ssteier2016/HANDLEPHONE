@@ -244,9 +244,9 @@ window.onload = function() {
     showScreen('intro-screen');
 
     const introVideo = document.getElementById('intro-video');
-    const progressBar = document.getElementById('progress-bar');
+    const airplaneIcon = document.getElementById('airplane-icon');
 
-    if (!introVideo || !progressBar) {
+    if (!introVideo || !airolaneIcon) {
         console.error("Elementos de introducción no encontrados en el DOM");
         showScreen('login-form');
         return;
@@ -257,7 +257,6 @@ window.onload = function() {
         console.error("Error al reproducir el video:", err);
         showScreen('login-form');
     });
-
     // Animar la barra de carga
     let progress = 0;
     const duration = 10000; // 10 segundos
@@ -272,7 +271,20 @@ window.onload = function() {
             clearInterval(progressInterval);
         }
     }, interval);
+    
+ // Animar el avión
+    setTimeout(() => {
+        airplaneIcon.classList.add('loading');
+    }, 100); // Pequeño retraso para asegurar que el CSS se aplique
 
+    // Función para saltar a la pantalla de login
+    function skipToLogin() {
+        introVideo.pause();
+        airplaneIcon.classList.remove('loading');
+        checkSessionAndShowScreen();
+    }
+    
+    
     // Cambiar a la pantalla de login después de 10 segundos
     setTimeout(() => {
         introVideo.pause();
