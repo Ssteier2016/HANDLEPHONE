@@ -246,7 +246,7 @@ window.onload = function() {
     const introVideo = document.getElementById('intro-video');
     const airplaneIcon = document.getElementById('airplane-icon');
 
-    if (!introVideo || !airolaneIcon) {
+    if (!introVideo || !airplaneIcon) {
         console.error("Elementos de introducción no encontrados en el DOM");
         showScreen('login-form');
         return;
