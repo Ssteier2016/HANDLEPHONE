@@ -29,21 +29,23 @@
     </script>
 </head>
 <body>
-     <!-- Pantalla de introducción con video -->
-  <div id="intro-screen">
-    <video id="intro-video" autoplay muted>
-      <source src="/templates/intro-video.mp4" type="video/mp4">
-      Tu navegador no soporta el elemento de video.
-    </video>
-    <img src="/templates/logo.png" alt="Logo" class="logo">
-    <div id="loading-bar-container">
-      <div id="loading-bar">
-        <img src="/templates/airplane.png" alt="Airplane" id="airplane-icon">
-    <button id="skip-video-btn"></button>
-      
-  </div>
+    <!-- Pantalla de introducción con video -->
+    <div id="intro-screen" style="display: block;">
+        <video id="intro-video" muted>
+            <source src="/templates/intro-video.mp4" type="video/mp4">
+            Tu navegador no soporta el elemento de video.
+        </video>
+        <img src="/templates/logo.png" alt="Logo" class="logo">
+        <div id="loading-bar-container">
+            <div id="loading-bar">
+                <img src="/templates/airplane.png" alt="Airplane" id="airplane-icon">
+            </div>
+        </div>
+        <button id="skip-video-btn">Omitir</button>
+    </div>
+
     <!-- Formulario de Inicio de Sesión -->
-    <div id="login-form" class="auth-form" style="display: block;">
+    <div id="login-form" class="auth-form" style="display: none;">
         <img src="/templates/logo2.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Iniciar Sesión</h2>
         <form id="login-form-form">
@@ -117,7 +119,7 @@
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
             <button id="join-group-btn">Unirme</button>
         </div>
-        <button id="talk" onclick="toggleTalk()"></button>
+        <img id="talk" src="/templates/mic-off.png" alt="Micrófono apagado" class="mic-button">
         <button id="mute-all" onclick="muteAll()">Mutear Todos</button>
         <button id="unmute-all" onclick="unmuteAll()">Desmutear Todos</button>
         <button id="mute" class="active" onclick="toggleMute()"></button>
@@ -194,4 +196,4 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="/templates/script.js"></script>
 </body>
-                </html>
+</html>
