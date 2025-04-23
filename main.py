@@ -10,6 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import FileResponse
 import logging
 import aiohttp
 import requests
@@ -123,7 +124,14 @@ class LoginRequest(BaseModel):
         if not v.strip().isdigit() or len(v.strip()) != 5:
             raise ValueError('El legajo debe ser un número de 5 dígitos')
         return v.strip()
-
+# Ruta específica para sw.js con encabezado personalizado
+@app.get("/templates/sw.js")
+async def serve_service_worker():
+    file_path = os.path.join("templates", "sw.js")
+    return FileResponse(
+        file_path,
+        headers={"Service-Worker-Allowed": "/"}
+        )
 # Ruta raíz
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
