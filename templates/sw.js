@@ -1,14 +1,15 @@
-const CACHE_NAME = 'handyhandle-cache-v3';
+const CACHE_NAME = 'handyhandle-cache-v4'; // Incrementar versión para forzar actualización
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'handyhandle-sync';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
-const FLIGHT_CACHE_TTL = 5 * 60 * 1000; // 5 minutos para caché de vuelos
+const FLIGHT_CACHE_TTL = 10 * 60 * 1000; // 10 minutos para caché de vuelos
 
 const urlsToCache = [
   '/',
   '/templates/index.html',
   '/templates/style.css',
   '/templates/script.js',
+  '/templates/sw.js',
   '/templates/manifest.json',
   '/templates/aero.png',
   '/templates/airport.png',
@@ -72,7 +73,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request).catch(err => {
         console.error('Error en fetch de red:', err);
-        return new Response('Offline', { status: 503 });
+        return new Response('No hay conexión a internet. Los datos en tiempo real no están disponibles.', { status: 503 });
       })
     );
     return;
@@ -105,20 +106,20 @@ self.addEventListener('fetch', event => {
             })
             .catch(err => {
               console.error('Error al obtener /aep_flights:', err);
-              return cachedResponse || new Response('Offline', { status: 503 });
+              return cachedResponse || new Response('No hay conexión a internet. Usando datos cacheados o sin datos disponibles.', { status: 503 });
             });
         })
     );
     return;
   }
 
-  // Cachear tiles de Mapbox dinámicamente con limpieza periódica
-  if (requestUrl.hostname.includes('api.mapbox.com')) {
+  // Cachear tiles de OpenStreetMap dinámicamente con limpieza periódica
+  if (requestUrl.hostname.includes('tile.openstreetmap.org')) {
     event.respondWith(
       caches.match(event.request)
         .then(response => {
           if (response) {
-            console.log('Sirviendo tile de Mapbox desde cache:', event.request.url);
+            console.log('Sirviendo tile de OpenStreetMap desde cache:', event.request.url);
             return response;
           }
           return fetch(event.request)
@@ -131,13 +132,13 @@ self.addEventListener('fetch', event => {
                 .then(cache => {
                   cache.put(event.request, responseToCache);
                   // Limpiar tiles antiguos (más de 1 hora)
-                  cleanOldMapboxTiles();
+                  cleanOldTiles();
                 });
               return networkResponse;
             })
             .catch(err => {
-              console.error('Error al obtener tile de Mapbox:', err);
-              return new Response('Offline', { status: 503 });
+              console.error('Error al obtener tile de OpenStreetMap:', err);
+              return new Response('No hay conexión a internet. Mapa sin tiles disponibles.', { status: 503 });
             });
         })
     );
@@ -167,24 +168,24 @@ self.addEventListener('fetch', event => {
             if (event.request.destination === 'document') {
               return caches.match('/templates/index.html');
             }
-            return new Response('Offline', { status: 503 });
+            return new Response('No hay conexión a internet. Algunos recursos no están disponibles.', { status: 503 });
           });
       })
   );
 });
 
-// Limpiar tiles de Mapbox antiguos
-async function cleanOldMapboxTiles() {
+// Limpiar tiles de OpenStreetMap antiguos
+async function cleanOldTiles() {
   const cache = await caches.open(CACHE_NAME);
   const requests = await cache.keys();
   const now = Date.now();
   for (const request of requests) {
-    if (request.url.includes('api.mapbox.com')) {
+    if (request.url.includes('tile.openstreetmap.org')) {
       const response = await cache.match(request);
       const cachedTime = new Date(response.headers.get('date')).getTime();
       if (now - cachedTime > 60 * 60 * 1000) { // 1 hora
         await cache.delete(request);
-        console.log('Eliminado tile antiguo de Mapbox:', request.url);
+        console.log('Eliminado tile antiguo de OpenStreetMap:', request.url);
       }
     }
   }
@@ -304,7 +305,7 @@ async function sendToServer(message, endpoint) {
       body: JSON.stringify(message)
     });
     if (!response.ok) {
-      throw new Error('Error al enviar mensaje al servidor');
+      throw new Error('Error al enviar mensaje al servidor: ' + response.status);
     }
   }
 }
@@ -338,7 +339,7 @@ function openDB() {
   });
 }
 
-// Manejo de notificaciones push (activado con configuración VAPID)
+// Manejo de notificaciones push
 self.addEventListener('push', event => {
   const data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje o vuelo recibido' };
   event.waitUntil(
