@@ -56,14 +56,14 @@
 }
 /* Estilos para la barra de carga */
 #loading-bar-container {
-    width: 200px;
-    height: 20px;
+    width: 400px;
+    height: 40px;
     background-color: #F5F5F5;
     border: 2px solid #4682B4;
     border-radius: 10px;
     position: absolute;
     bottom: 20px; /* Posicionado en la parte inferior */
-    left: 50%;
+    left: 100%;
     transform: translateX(-50%);
     z-index: 10; /* Asegurar que esté sobre el video */
     overflow: hidden;
@@ -86,13 +86,13 @@
     position: absolute;
     top: -10px; /* Ajustar para que el avión esté centrado verticalmente sobre la barra */
     left: 0;
-    width: 30px;
-    height: 30px;
+    width: 60px;
+    height: 60px;
     transition: left 10s linear; /* Ajustado a 10s */
 }
 
 #airplane-icon.loading {
-    left: calc(100% - 30px); /* Mueve el avión al final de la barra */
+    left: calc(100% - 60px); /* Mueve el avión al final de la barra */
 }
 
 /* Estilos generales */
