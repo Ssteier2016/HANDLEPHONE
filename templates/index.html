@@ -38,6 +38,7 @@
         <div id="loading-bar-container">
             <div id="loading-bar">
                 <img src="/templates/airplane.png" alt="Airplane" id="airplane-icon">
+            </ Consolidation
             </div>
             <span id="loading-percentage">0%</span>
         </div>
@@ -101,7 +102,7 @@
         </div>
         <button id="return-to-group-btn" style="display: none;">Volver al Grupo</button>
         <div id="search-container">
-            <input type="text" id="search-input" placeholder="Ej. Vuelos a AEP">
+            <input type="text" id="search-input" placeholder="Ej. Vuelos a AEP" maxlength="20">
             <button id="search-button">Consultar</button>
         </div>
         <div id="flights-window">
@@ -159,7 +160,7 @@
             <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
             <button class="close-btn" onclick="backToMainFromRadar()">✖</button>
         </div>
-        <div id="map"></div>
+        <div id="map" style="height: 400px; width: 100%;"></div>
     </div>
 
     <!-- Pantalla de Historial -->
@@ -177,12 +178,13 @@
             <table id="modal-flight-table" style="font-size: 12px; width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr>
-                        <th>N° Vuelo</th>
+                        <th>Vuelo</th>
+                        <th>Matrícula</th>
+                        <th>Hora Programada</th>
                         <th>Origen</th>
-                        <th>Hr Salida</th>
                         <th>Destino</th>
-                        <th>Hr Llegada</th>
                         <th>Estado</th>
+                        <th>Fuente</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
