@@ -132,14 +132,6 @@ async def serve_service_worker():
         file_path,
         headers={"Service-Worker-Allowed": "/"}
         )
-# Ruta raíz
-@app.get("/", response_class=HTMLResponse)
-async def read_root():
-    response = HTMLResponse(content=INDEX_HTML)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
 
 # Diccionario ICAO
 ICAO_ALPHABET = {
