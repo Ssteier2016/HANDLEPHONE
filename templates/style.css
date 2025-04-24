@@ -40,7 +40,7 @@
 #loading-bar-container {
     width: 300px; /* Tamaño aumentado */
     height: 30px; /* Tamaño aumentado */
-    background-color: #F5F5F5;
+    background-color: #ffffff;
     border: 2px solid #4682B4;
     border-radius: 10px;
     position: absolute;
@@ -54,7 +54,7 @@
 #loading-bar {
     width: 0%;
     height: 100%;
-    background-color: #4682B4;
+    background-color: #0052cc; /*fondo azul*/
     border-radius: 8px;
     position: relative;
     transition: width 10s linear; /* Duración de 10 segundos */
@@ -69,7 +69,7 @@
     top: 0; /* Alineado con la barra */
     left: 0; /* Comienza en el extremo izquierdo */
     width: 30px; /* Igual a la altura de la barra */
-    height: 30px;
+    height: 35px;
     transition: left 10s linear; /* Movimiento de 10 segundos */
 }
 
