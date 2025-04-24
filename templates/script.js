@@ -1,3 +1,6 @@
+// script.js
+// Maneja la interfaz de usuario, autenticación, WebSocket, audio, vuelos, radar y chat para HANDLEPHONE
+
 // Variables globales
 let ws; // WebSocket para la comunicación con el servidor
 let userId; // Identificador único del usuario (legajo_name_function)
@@ -145,6 +148,7 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
                 currentGroup = message.group_id;
                 updateSwipeHint();
                 console.log(`Unido al grupo: ${message.group_id}`);
+                showScreen('group-screen');
             } else if (message.type === "check_group") {
                 if (!message.in_group) {
                     currentGroup = null;
@@ -192,36 +196,38 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 
     ws.onclose = function() {
-    console.log("WebSocket cerrado");
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-    }
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    const talkButton = document.getElementById("talk");
-    if (talkButton) {
-        talkButton.src = "/templates/mic-off.png";
-        talkButton.alt = "Micrófono apagado";
-    }
-    const sessionToken = localStorage.getItem("token");
-    if (sessionToken && retryCount < maxRetries) {
-        console.log(`Reintentando conexión WebSocket (intento ${retryCount + 1}/${maxRetries})`);
-        setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
-    } else if (retryCount >= maxRetries) {
-        console.error("Máximo número de intentos de reconexión alcanzado");
-        localStorage.removeItem("token");
-        localStorage.removeItem("userName");
-        localStorage.removeItem("userFunction");
-        localStorage.removeItem("userLegajo");
-        showScreen('login-form');
-        alert("No se pudo conectar al servidor después de varios intentos. Por favor, inicia sesión nuevamente.");
-    }
-};
+        console.log("WebSocket cerrado");
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+        }
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        const talkButton = document.getElementById("talk");
+        if (talkButton) {
+            talkButton.src = "/templates/mic-off.png";
+            talkButton.alt = "Micrófono apagado";
+        }
+        const sessionToken = localStorage.getItem("token");
+        if (sessionToken && retryCount < maxRetries) {
+            console.log(`Reintentando conexión WebSocket (intento ${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => connectWebSocket(sessionToken, retryCount + 1, maxRetries), 5000);
+        } else if (retryCount >= maxRetries) {
+            console.error("Máximo número de intentos de reconexión alcanzado");
+            localStorage.removeItem("token");
+            localStorage.removeItem("userName");
+            localStorage.removeItem("userFunction");
+            localStorage.removeItem("userLegajo");
+            showScreen('login-form');
+            alert("No se pudo conectar al servidor después de varios intentos. Por favor, inicia sesión nuevamente.");
+        }
+    };
+}
 
 // Mostrar pantallas
 function showScreen(screenId) {
+    console.log(`Mostrando pantalla: ${screenId}`);
     const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen', 'flight-details-modal'];
     screens.forEach(id => {
         const element = document.getElementById(id);
@@ -295,15 +301,23 @@ window.onload = function() {
     }, 100); // 10000ms / 100 pasos = 100ms por paso
 
     // Reproducir el video
-    introVideo.play().catch(err => {
-        console.error("Error al reproducir el video:", err);
-        // Continuar con la animación aunque el video falle
-    });
+    try {
+        introVideo.play().catch(err => {
+            console.error("Error al reproducir el video:", err);
+            // Continuar con la animación aunque el video falle
+        });
+    } catch (err) {
+        console.error("Error al intentar reproducir el video:", err);
+    }
 
     // Cambiar a la pantalla de login después de 10 segundos
     setTimeout(() => {
         console.log("Finalizando introducción, verificando sesión");
-        introVideo.pause();
+        try {
+            introVideo.pause();
+        } catch (err) {
+            console.warn("No se pudo pausar el video:", err);
+        }
         loadingBar.classList.remove('loading');
         airplaneIcon.classList.remove('loading');
         loadingPercentage.textContent = '100%';
@@ -322,7 +336,6 @@ window.onload = function() {
             console.log("Sesión encontrada en localStorage, intentando conectar WebSocket");
             userId = `${userLegajo}_${userName}_${userFunction}`;
             connectWebSocket(sessionToken);
-            // No mostrar 'main' aquí, esperar confirmación del WebSocket
         } else {
             console.log("No hay sesión válida, mostrando login-form");
             showScreen('login-form');
@@ -408,24 +421,35 @@ function playNextAudio() {
 
 // Inicializar el mapa de Leaflet para el radar
 function initMap() {
-    if (map) {
-        map.remove(); // Limpiar mapa existente
+    console.log("Inicializando mapa Leaflet...");
+    const mapElement = document.getElementById('map');
+    if (!mapElement) {
+        console.warn("Elemento #map no encontrado");
+        return;
     }
-    map = L.map('map').setView([-34.5597, -58.4116], 8); // Centro en Buenos Aires
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
+    try {
+        if (map) {
+            map.remove(); // Limpiar mapa existente
+        }
+        map = L.map('map').setView([-34.5597, -58.4116], 8); // Centro en Buenos Aires
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
 
-    var airplaneIcon = L.icon({
-        iconUrl: '/templates/airport.png',
-        iconSize: [30, 30],
-    });
+        var airplaneIcon = L.icon({
+            iconUrl: '/templates/airport.png',
+            iconSize: [30, 30],
+        });
 
-    L.marker([-34.5597, -58.4116], { icon: airplaneIcon })
-        .addTo(map)
-        .bindPopup("Aeroparque")
-        .openPopup();
+        L.marker([-34.5597, -58.4116], { icon: airplaneIcon })
+            .addTo(map)
+            .bindPopup("Aeroparque")
+            .openPopup();
+        console.log("Mapa inicializado correctamente");
+    } catch (err) {
+        console.error("Error al inicializar mapa:", err);
+    }
 }
 
 // Calcular la distancia entre dos puntos (en millas náuticas)
@@ -503,6 +527,7 @@ function filterFlights() {
 
 // Actualizar datos de vuelos desde /opensky
 function updateOpenSkyData() {
+    console.log("Actualizando datos de /opensky...");
     fetch('/opensky')
         .then(response => response.json())
         .then(data => {
@@ -535,8 +560,8 @@ function updateOpenSkyData() {
                 });
             }
 
-            if (data.error) {
-                console.warn("Error en datos de vuelos:", data.error);
+            if (data.error || !Array.isArray(data)) {
+                console.warn("Error en datos de vuelos:", data.error || "Datos no válidos");
                 flightDetails.textContent = "Esperando datos de vuelos...";
                 groupFlightDetails.textContent = "Esperando datos de vuelos...";
                 if (modalTableBody) {
@@ -751,6 +776,11 @@ async function toggleTalk() {
                 } else {
                     console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
                     alert("No se pudo enviar el mensaje: WebSocket no está conectado.");
+                    // Encolar para sincronización offline
+                    navigator.serviceWorker.controller?.postMessage({
+                        type: 'QUEUE_MESSAGE',
+                        message: { type: 'audio', data: base64data, text: transcript, timestamp, sender, function: userFunction }
+                    });
                 }
 
                 const chatList = document.getElementById("chat-list");
@@ -812,8 +842,8 @@ async function toggleTalk() {
     } else if (mediaRecorder.state === "recording") {
         console.log("Deteniendo grabación...");
         mediaRecorder.stop();
+                    }
     }
-}
 
 // Alternar el estado de muteo global
 function toggleMute() {
@@ -953,34 +983,51 @@ function checkGroupStatus() {
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
     const returnToGroupBtn = document.getElementById('return-to-group-btn');
-    if (currentGroup) {
-        swipeHint.style.display = 'block';
-        returnToGroupBtn.style.display = 'block';
+    if (swipeHint && returnToGroupBtn) {
+        if (currentGroup) {
+            swipeHint.style.display = 'block';
+            returnToGroupBtn.style.display = 'block';
+        } else {
+            swipeHint.style.display = 'none';
+            returnToGroupBtn.style.display = 'none';
+        }
     } else {
-        swipeHint.style.display = 'none';
-        returnToGroupBtn.style.display = 'none';
+        console.warn("Elementos #swipe-hint o #return-to-group-btn no encontrados en el DOM");
     }
 }
 
 // Función para regresar al grupo desde la pantalla principal
 function returnToGroup() {
     if (currentGroup) {
-        document.getElementById('main').classList.add('slide-left');
-        setTimeout(() => {
+        const mainScreen = document.getElementById('main');
+        if (mainScreen) {
+            mainScreen.classList.add('slide-left');
+            setTimeout(() => {
+                showScreen('group-screen');
+                mainScreen.classList.remove('slide-left');
+            }, 300);
+        } else {
+            console.warn("Elemento #main no encontrado en el DOM");
             showScreen('group-screen');
-            document.getElementById('main').classList.remove('slide-left');
-        }, 300);
+        }
     }
 }
 
 // Función para volver a la pantalla principal desde el grupo
 function backToMainFromGroup() {
-    document.getElementById('group-screen').classList.add('slide-right');
-    setTimeout(() => {
+    const groupScreen = document.getElementById('group-screen');
+    if (groupScreen) {
+        groupScreen.classList.add('slide-right');
+        setTimeout(() => {
+            showScreen('main');
+            groupScreen.classList.remove('slide-right');
+            checkGroupStatus();
+        }, 300);
+    } else {
+        console.warn("Elemento #group-screen no encontrado en el DOM");
         showScreen('main');
-        document.getElementById('group-screen').classList.remove('slide-right');
         checkGroupStatus();
-    }, 300);
+    }
 }
 
 // Funciones para manejar mensajes de voz en el grupo
@@ -989,6 +1036,11 @@ let groupMediaRecorder = null;
 
 function toggleGroupTalk() {
     const talkButton = document.getElementById('group-talk');
+    if (!talkButton) {
+        console.error("Botón #group-talk no encontrado en el DOM");
+        return;
+    }
+
     if (!groupRecording) {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
@@ -1003,10 +1055,12 @@ function toggleGroupTalk() {
                         sendGroupMessage(audioData);
                     };
                     reader.readAsDataURL(blob);
+                    stream.getTracks().forEach(track => track.stop());
                 };
                 groupMediaRecorder.start();
                 groupRecording = true;
                 talkButton.style.backgroundColor = '#32CD32';
+                console.log("Grabación de grupo iniciada");
             })
             .catch(err => {
                 console.error('Error al acceder al micrófono:', err);
@@ -1016,11 +1070,16 @@ function toggleGroupTalk() {
         groupMediaRecorder.stop();
         groupRecording = false;
         talkButton.style.backgroundColor = '#FF4500';
+        console.log("Grabación de grupo detenida");
     }
 }
 
 function toggleGroupMute() {
     const muteButton = document.getElementById('group-mute');
+    if (!muteButton) {
+        console.error("Elemento #group-mute no encontrado en el DOM");
+        return;
+    }
     if (muteButton.classList.contains("unmuted")) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "mute" }));
@@ -1047,6 +1106,20 @@ function sendGroupMessage(audioData) {
             timestamp: timestamp,
             text: 'Pendiente de transcripción'
         }));
+        console.log("Mensaje de grupo enviado");
+    } else {
+        console.error("WebSocket no está abierto. Encolando mensaje de grupo para sincronización offline");
+        navigator.serviceWorker.controller?.postMessage({
+            type: 'QUEUE_MESSAGE',
+            message: {
+                type: 'group_message',
+                data: audioData,
+                sender: localStorage.getItem('userName'),
+                function: localStorage.getItem('userFunction'),
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                text: 'Pendiente de transcripción'
+            }
+        });
     }
 }
 
@@ -1071,25 +1144,27 @@ function showGroupHistory() {
 document.addEventListener('touchstart', e => {
     if (!isSwiping) {
         startX = e.touches[0].clientX;
+        isSwiping = true;
     }
 });
 
 document.addEventListener('touchmove', e => {
-    if (!isSwiping) {
+    if (isSwiping) {
         currentX = e.touches[0].clientX;
     }
 });
 
 document.addEventListener('touchend', e => {
-    if (isSwiping) return;
+    if (!isSwiping) return;
     const deltaX = currentX - startX;
     if (Math.abs(deltaX) > 50) {
-        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
+        if (deltaX > 0 && document.getElementById('group-screen')?.style.display === 'block') {
             backToMainFromGroup();
-        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
+        } else if (deltaX < 0 && document.getElementById('main')?.style.display === 'block' && currentGroup) {
             returnToGroup();
         }
     }
+    isSwiping = false;
 });
 
 // Cerrar sesión
@@ -1106,6 +1181,13 @@ function logout() {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
     }
+    userId = null;
+    currentGroup = null;
+    audioChunks = [];
+    audioQueue = [];
+    isPlaying = false;
+    flightData = [];
+    markers = [];
     console.log("Sesión cerrada");
 }
 
@@ -1124,9 +1206,12 @@ function showRadar() {
 // Volver a la pantalla principal desde el radar
 function backToMainFromRadar() {
     showScreen("main");
-    document.getElementById("search-bar").value = "";
-    filterFlights();
-            }
+    const searchBar = document.getElementById("search-bar");
+    if (searchBar) {
+        searchBar.value = "";
+        filterFlights();
+    }
+}
 
 // Mostrar el historial de mensajes
 function showHistory() {
@@ -1134,6 +1219,10 @@ function showHistory() {
         .then(response => response.json())
         .then(data => {
             const historyList = document.getElementById("history-list");
+            if (!historyList) {
+                console.error("Elemento #history-list no encontrado en el DOM");
+                return;
+            }
             historyList.innerHTML = "";
             data.forEach(msg => {
                 const msgDiv = document.createElement("div");
@@ -1149,12 +1238,18 @@ function showHistory() {
             });
             showScreen("history-screen");
         })
-        .catch(err => console.error("Error al cargar historial:", err));
+        .catch(err => {
+            console.error("Error al cargar historial:", err);
+            const historyList = document.getElementById("history-list");
+            if (historyList) {
+                historyList.textContent = "Error al cargar historial";
+            }
+        });
 }
 
-// Volver a la pantalla principal desde el historial
-function backToMain() {
-    showScreen("main");
+// Cargar historial (para consistencia con showGroupHistory)
+function loadHistory() {
+    showHistory();
 }
 
 // Convertir Base64 a Blob para audio
@@ -1176,18 +1271,64 @@ function base64ToBlob(base64, mime) {
 // Registro del Service Worker para PWA
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-        fetch('/templates/sw.js', { method: 'HEAD' })
+        // Intentar registrar en la raíz primero
+        fetch('/sw.js', { method: 'HEAD' })
             .then(response => {
                 if (response.ok) {
-                    navigator.serviceWorker.register('/templates/sw.js')
-                        .then(() => console.log('Service Worker registrado'))
-                        .catch(err => console.error('Error al registrar Service Worker:', err));
+                    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                        .then(reg => {
+                            console.log('Service Worker registrado en /:', reg);
+                        })
+                        .catch(err => {
+                            console.error('Error al registrar Service Worker en /:', err);
+                            // Fallback a /templates/sw.js
+                            fetch('/templates/sw.js', { method: 'HEAD' })
+                                .then(response => {
+                                    if (response.ok) {
+                                        navigator.serviceWorker.register('/templates/sw.js')
+                                            .then(reg => {
+                                                console.log('Service Worker registrado en /templates:', reg);
+                                            })
+                                            .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                                    } else {
+                                        console.warn('Archivo /templates/sw.js no encontrado');
+                                    }
+                                })
+                                .catch(err => console.warn('No se pudo verificar /templates/sw.js:', err));
+                        });
                 } else {
-                    console.warn('Archivo sw.js no encontrado.');
+                    console.warn('Archivo /sw.js no encontrado, intentando /templates/sw.js');
+                    fetch('/templates/sw.js', { method: 'HEAD' })
+                        .then(response => {
+                            if (response.ok) {
+                                navigator.serviceWorker.register('/templates/sw.js')
+                                    .then(reg => {
+                                        console.log('Service Worker registrado en /templates:', reg);
+                                    })
+                                    .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                            } else {
+                                console.warn('Archivo /templates/sw.js no encontrado');
+                            }
+                        })
+                        .catch(err => console.warn('No se pudo verificar /templates/sw.js:', err));
                 }
             })
             .catch(err => {
-                console.warn('No se pudo verificar sw.js:', err);
+                console.warn('No se pudo verificar /sw.js:', err);
+                // Fallback a /templates/sw.js
+                fetch('/templates/sw.js', { method: 'HEAD' })
+                    .then(response => {
+                        if (response.ok) {
+                            navigator.serviceWorker.register('/templates/sw.js')
+                                .then(reg => {
+                                    console.log('Service Worker registrado en /templates:', reg);
+                                })
+                                .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                        } else {
+                            console.warn('Archivo /templates/sw.js no encontrado');
+                        }
+                    })
+                    .catch(err => console.warn('No se pudo verificar /templates/sw.js:', err));
             });
     } else {
         console.warn('Service Worker no soportado.');
@@ -1265,6 +1406,7 @@ function urlBase64ToUint8Array(base64String) {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM completamente cargado, inicializando...");
     registerServiceWorker();
     checkNotificationPermission();
 
@@ -1273,6 +1415,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log("Enviando formulario de registro...");
             const surname = document.getElementById('surname').value;
             const employee_id = document.getElementById('employee_id').value;
             const sector = document.getElementById('sector').value;
@@ -1281,10 +1424,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!/^\d{5}$/.test(employee_id)) {
                 errorElement.textContent = 'El legajo debe contener 5 números.';
+                console.warn("Validación fallida: legajo inválido");
                 return;
             }
             if (password.length < 6) {
                 errorElement.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+                console.warn("Validación fallida: contraseña demasiado corta");
                 return;
             }
 
@@ -1296,15 +1441,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await response.json();
                 if (response.ok) {
+                    console.log("Registro exitoso:", data);
                     alert('Registro exitoso. Inicia sesión.');
                     showScreen('login-form');
                 } else {
+                    console.error("Error al registrarse:", data.detail);
                     errorElement.textContent = data.detail || 'Error al registrarse';
                 }
             } catch (error) {
+                console.error("Error al conectar con el servidor:", error);
                 errorElement.textContent = 'Error al conectar con el servidor';
             }
         });
+    } else {
+        console.warn("Elemento #register-form-form no encontrado en el DOM");
     }
 
     // Formulario de inicio de sesión
@@ -1312,6 +1462,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log("Enviando formulario de inicio de sesión...");
             const surname = document.getElementById('surname').value;
             const employee_id = document.getElementById('employee_id').value;
             const password = document.getElementById('password').value;
@@ -1319,6 +1470,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!/^\d{5}$/.test(employee_id)) {
                 errorElement.textContent = 'El legajo debe contener 5 números.';
+                console.warn("Validación fallida: legajo inválido");
                 return;
             }
 
@@ -1330,6 +1482,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await response.json();
                 if (response.ok) {
+                    console.log("Inicio de sesión exitoso:", data);
                     const token = data.token;
                     const [legajo, name, sector] = atob(token).split('_');
                     userId = `${legajo}_${name}_${sector}`;
@@ -1341,44 +1494,172 @@ document.addEventListener('DOMContentLoaded', () => {
                     showScreen('main');
                     checkGroupStatus();
                 } else {
+                    console.error("Error al iniciar sesión:", data.detail);
                     errorElement.textContent = data.detail || 'Error al iniciar sesión';
                 }
             } catch (error) {
+                console.error("Error al conectar con el servidor:", error);
                 errorElement.textContent = 'Error al conectar con el servidor';
             }
         });
+    } else {
+        console.warn("Elemento #login-form-form no encontrado en el DOM");
     }
 
-    document.getElementById('show-register')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('register-form');
-    });
+    // Event listeners para botones y elementos interactivos
+    const showRegister = document.getElementById('show-register');
+    if (showRegister) {
+        showRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log("Mostrando formulario de registro");
+            showScreen('register-form');
+        });
+    } else {
+        console.warn("Elemento #show-register no encontrado en el DOM");
+    }
 
-    document.getElementById('show-login')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        showScreen('login-form');
-    });
+    const showLogin = document.getElementById('show-login');
+    if (showLogin) {
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log("Mostrando formulario de inicio de sesión");
+            showScreen('login-form');
+        });
+    } else {
+        console.warn("Elemento #show-login no encontrado en el DOM");
+    }
 
-    document.getElementById('logout-button')?.addEventListener('click', logout);
-    document.getElementById('join-group-btn')?.addEventListener('click', joinGroup);
-    document.getElementById('leave-group-btn')?.addEventListener('click', leaveGroup);
-    document.getElementById('return-to-group-btn')?.addEventListener('click', returnToGroup);
-    document.getElementById('radar')?.addEventListener('click', showRadar);
-    document.getElementById('history')?.addEventListener('click', showHistory);
-    document.getElementById('group-radar')?.addEventListener('click', showGroupRadar);
-    document.getElementById('group-history')?.addEventListener('click', showGroupHistory);
-    document.getElementById('back-to-main')?.addEventListener('click', backToMain);
-    document.getElementById('talk')?.addEventListener('click', toggleTalk);
-    document.getElementById('mute')?.addEventListener('click', toggleMute);
-    document.getElementById('group-talk')?.addEventListener('click', toggleGroupTalk);
-    document.getElementById('group-mute')?.addEventListener('click', toggleGroupMute);
-    document.getElementById('search-bar')?.addEventListener('input', filterFlights);
-    document.querySelector('.close-btn')?.addEventListener('click', backToMainFromRadar);
-    document.getElementById('main-flight-details-button')?.addEventListener('click', showFlightDetails);
-    document.getElementById('group-flight-details-button')?.addEventListener('click', showFlightDetails);
-    document.getElementById('close-modal')?.addEventListener('click', () => {
-        showScreen('main');
-        document.getElementById("search-bar").value = "";
-        filterFlights();
-    });
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', logout);
+    } else {
+        console.warn("Elemento #logout-button no encontrado en el DOM");
+    }
+
+    const joinGroupBtn = document.getElementById('join-group-btn');
+    if (joinGroupBtn) {
+        joinGroupBtn.addEventListener('click', joinGroup);
+    } else {
+        console.warn("Elemento #join-group-btn no encontrado en el DOM");
+    }
+
+    const leaveGroupBtn = document.getElementById('leave-group-btn');
+    if (leaveGroupBtn) {
+        leaveGroupBtn.addEventListener('click', leaveGroup);
+    } else {
+        console.warn("Elemento #leave-group-btn no encontrado en el DOM");
+    }
+
+    const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (returnToGroupBtn) {
+        returnToGroupBtn.addEventListener('click', returnToGroup);
+    } else {
+        console.warn("Elemento #return-to-group-btn no encontrado en el DOM");
+    }
+
+    const radarBtn = document.getElementById('radar');
+    if (radarBtn) {
+        radarBtn.addEventListener('click', showRadar);
+    } else {
+        console.warn("Elemento #radar no encontrado en el DOM");
+    }
+
+    const historyBtn = document.getElementById('history');
+    if (historyBtn) {
+        historyBtn.addEventListener('click', showHistory);
+    } else {
+        console.warn("Elemento #history no encontrado en el DOM");
+    }
+
+    const groupRadarBtn = document.getElementById('group-radar');
+    if (groupRadarBtn) {
+        groupRadarBtn.addEventListener('click', showGroupRadar);
+    } else {
+        console.warn("Elemento #group-radar no encontrado en el DOM");
+    }
+
+    const groupHistoryBtn = document.getElementById('group-history');
+    if (groupHistoryBtn) {
+        groupHistoryBtn.addEventListener('click', showGroupHistory);
+    } else {
+        console.warn("Elemento #group-history no encontrado en el DOM");
+    }
+
+    const backToMainBtn = document.getElementById('back-to-main');
+    if (backToMainBtn) {
+        backToMainBtn.addEventListener('click', backToMain);
+    } else {
+        console.warn("Elemento #back-to-main no encontrado en el DOM");
+    }
+
+    const talkBtn = document.getElementById('talk');
+    if (talkBtn) {
+        talkBtn.addEventListener('click', toggleTalk);
+    } else {
+        console.warn("Elemento #talk no encontrado en el DOM");
+    }
+
+    const muteBtn = document.getElementById('mute');
+    if (muteBtn) {
+        muteBtn.addEventListener('click', toggleMute);
+    } else {
+        console.warn("Elemento #mute no encontrado en el DOM");
+    }
+
+    const groupTalkBtn = document.getElementById('group-talk');
+    if (groupTalkBtn) {
+        groupTalkBtn.addEventListener('click', toggleGroupTalk);
+    } else {
+        console.warn("Elemento #group-talk no encontrado en el DOM");
+    }
+
+    const groupMuteBtn = document.getElementById('group-mute');
+    if (groupMuteBtn) {
+        groupMuteBtn.addEventListener('click', toggleGroupMute);
+    } else {
+        console.warn("Elemento #group-mute no encontrado en el DOM");
+    }
+
+    const searchBar = document.getElementById('search-bar');
+    if (searchBar) {
+        searchBar.addEventListener('input', filterFlights);
+    } else {
+        console.warn("Elemento #search-bar no encontrado en el DOM");
+    }
+
+    const closeBtn = document.querySelector('.close-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', backToMainFromRadar);
+    } else {
+        console.warn("Elemento .close-btn no encontrado en el DOM");
+    }
+
+    const mainFlightDetailsBtn = document.getElementById('main-flight-details-button');
+    if (mainFlightDetailsBtn) {
+        mainFlightDetailsBtn.addEventListener('click', showFlightDetails);
+    } else {
+        console.warn("Elemento #main-flight-details-button no encontrado en el DOM");
+    }
+
+    const groupFlightDetailsBtn = document.getElementById('group-flight-details-button');
+    if (groupFlightDetailsBtn) {
+        groupFlightDetailsBtn.addEventListener('click', showFlightDetails);
+    } else {
+        console.warn("Elemento #group-flight-details-button no encontrado en el DOM");
+    }
+
+    const closeModalBtn = document.getElementById('close-modal');
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            showScreen('main');
+            const searchBar = document.getElementById("search-bar");
+            if (searchBar) {
+                searchBar.value = "";
+                filterFlights();
+            }
+        });
+    } else {
+        console.warn("Elemento #close-modal no encontrado en el DOM");
+    }
 });
+ 
