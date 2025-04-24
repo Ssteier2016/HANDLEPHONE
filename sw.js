@@ -1,11 +1,11 @@
 // sw.js
 // Service Worker para cacheo offline y sincronización
 
-const CACHE_NAME = 'handyhandle-cache-v6'; // Incrementar versión para limpiar caché antigua
+const CACHE_NAME = 'handyhandle-cache-v6'; // Incrementar versión para limpiar caché antiguo
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'handyhandle-sync';
-const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas
-const FLIGHT_CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+const FLIGHT_CACHE_TTL = 10 * 60 * 1000; // 10 minutos para caché de vuelos
 
 const urlsToCache = [
     '/',
@@ -23,23 +23,24 @@ const urlsToCache = [
     '/templates/icon-512x512.png',
     '/templates/icon-maskable-192x192.png',
     '/templates/introvideo.mp4'
-    // Nota: Eliminé recursos potencialmente inexistentes como logoutred.png, volver.png, mute.png, mic.png, airplane.png
-    // Añade solo los que existan en /templates/
+    // Nota: Eliminé logoutred.png, airplane.png, volver.png, mic.png, mute.png porque podrían no existir
+    // Añade solo los recursos que confirmes que están en /templates/
 ];
 
+// Instalar el Service Worker y cachear los recursos
 self.addEventListener('install', event => {
     console.log('Instalando Service Worker...');
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Cache abierto:', CACHE_NAME);
-                // Cachear recursos uno por uno para identificar fallos
+                // Cachear recursos uno por uno para evitar fallos totales
                 return Promise.all(
                     urlsToCache.map(url => {
                         return fetch(url, { method: 'GET' })
                             .then(response => {
                                 if (!response.ok) {
-                                    console.warn(`No se pudo cachear ${url}: ${response.status}`);
+                                    console.warn(`No se pudo cachear ${url}: ${response.status} ${response.statusText}`);
                                     return;
                                 }
                                 return cache.put(url, response);
@@ -57,6 +58,7 @@ self.addEventListener('install', event => {
     self.skipWaiting();
 });
 
+// Activar el Service Worker y eliminar caches antiguos
 self.addEventListener('activate', event => {
     console.log('Activando Service Worker...');
     event.waitUntil(
@@ -74,11 +76,12 @@ self.addEventListener('activate', event => {
     self.clients.claim();
 });
 
+// Interceptar solicitudes y responder con recursos cacheados o de la red
 self.addEventListener('fetch', event => {
     const requestUrl = new URL(event.request.url);
     console.log('Fetch:', requestUrl.pathname);
 
-    // Excluir endpoints dinámicos y WebSocket
+    // No cachear WebSocket ni rutas dinámicas específicas
     if (
         requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
@@ -97,7 +100,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Manejo especial para /aep_flights
+    // Cachear endpoint /aep_flights con TTL
     if (requestUrl.pathname === '/aep_flights') {
         event.respondWith(
             caches.match(event.request)
@@ -130,7 +133,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Manejo de tiles de OpenStreetMap
+    // Cachear tiles de OpenStreetMap dinámicamente con limpieza periódica
     if (requestUrl.hostname.includes('tile.openstreetmap.org')) {
         event.respondWith(
             caches.match(event.request)
@@ -161,7 +164,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Manejo general de recursos
+    // Estrategia cache-first para recursos estáticos
     event.respondWith(
         caches.match(event.request)
             .then(response => {
@@ -190,6 +193,7 @@ self.addEventListener('fetch', event => {
     );
 });
 
+// Limpiar tiles de OpenStreetMap antiguos
 async function cleanOldTiles() {
     console.log('Limpiando tiles antiguos de OpenStreetMap...');
     const cache = await caches.open(CACHE_NAME);
@@ -201,8 +205,209 @@ async function cleanOldTiles() {
             const cachedTime = new Date(response.headers.get('date')).getTime();
             if (now - cachedTime > 60 * 60 * 1000) { // 1 hora
                 await cache.delete(request);
-                console.log('Eliminado tile antiguo:', request.url);
+                console.log('Eliminado tile antiguo de OpenStreetMap:', request.url);
             }
         }
     }
+}
+
+// Manejar mensajes desde script.js
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'QUEUE_MESSAGE') {
+        console.log('Recibiendo mensaje para encolar:', event.data.message);
+        queueMessage(event.data.message);
+    }
+});
+
+// Sincronización en segundo plano
+self.addEventListener('sync', event => {
+    if (event.tag === SYNC_TAG) {
+        console.log('Iniciando sincronización en segundo plano...');
+        event.waitUntil(syncMessages());
+    }
+});
+
+// Almacenar mensaje en IndexedDB
+async function queueMessage(message) {
+    console.log('Encolando mensaje:', message);
+    try {
+        const db = await openDB();
+        const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
+        const store = tx.objectStore(MESSAGE_QUEUE);
+        const messageWithTimestamp = {
+            ...message,
+            timestamp: Date.now()
+        };
+        await store.add(messageWithTimestamp);
+        await tx.done;
+        console.log('Mensaje encolado:', messageWithTimestamp);
+    } catch (err) {
+        console.error('Error al encolar mensaje:', err);
+    }
+}
+
+// Sincronizar mensajes pendientes
+async function syncMessages() {
+    console.log('Sincronizando mensajes pendientes...');
+    try {
+        const db = await openDB();
+        const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
+        const store = tx.objectStore(MESSAGE_QUEUE);
+        const messages = await store.getAll();
+        const now = Date.now();
+
+        for (const message of messages) {
+            if (now - message.timestamp > MAX_MESSAGE_AGE) {
+                console.log('Descartando mensaje antiguo:', message);
+                await store.delete(message.id);
+                continue;
             }
+
+            try {
+                if (message.type === 'logout') {
+                    console.log('Sincronizando logout:', message);
+                    await sendToServer(message, '/logout');
+                    await store.delete(message.id);
+                } else if (message.type === 'create_group') {
+                    console.log('Sincronizando create_group:', message);
+                    await sendToServer(message, '/create_group');
+                    await store.delete(message.id);
+                } else if (message.type === 'message' || message.type === 'group_message') {
+                    console.log('Sincronizando mensaje de audio:', message);
+                    await sendToServer(message, '/ws/' + message.session_token);
+                    await store.delete(message.id);
+                } else {
+                    console.log('Sincronizando mensaje genérico:', message);
+                    await sendToServer(message, '/generic');
+                    await store.delete(message.id);
+                }
+                await notifyClient({ ...message, status: 'sent' });
+            } catch (err) {
+                console.error('Error al sincronizar mensaje:', message, err);
+                // Mantener el mensaje para reintentar
+            }
+        }
+        await tx.done;
+
+        self.clients.matchAll().then(clients => {
+            clients.forEach(client => {
+                client.postMessage({ type: 'SYNC_COMPLETE' });
+            });
+        });
+    } catch (err) {
+        console.error('Error en sincronización:', err);
+    }
+}
+
+// Enviar mensaje al servidor con reintentos para WebSocket
+async function sendToServer(message, endpoint) {
+    console.log('Enviando mensaje al servidor:', message, endpoint);
+    if (message.type === 'message' || message.type === 'group_message') {
+        let attempts = 0;
+        const maxAttempts = 3;
+        while (attempts < maxAttempts) {
+            try {
+                const ws = new WebSocket('wss://' + self.location.host + endpoint);
+                return await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        ws.close();
+                        reject(new Error('WebSocket timeout'));
+                    }, 5000); // 5 segundos de espera
+                    ws.onopen = () => {
+                        ws.send(JSON.stringify(message));
+                        clearTimeout(timeout);
+                        ws.close();
+                        resolve();
+                    };
+                    ws.onerror = err => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    };
+                });
+            } catch (err) {
+                attempts++;
+                console.error(`Intento ${attempts} fallido para WebSocket:`, err);
+                if (attempts === maxAttempts) throw err;
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Espera exponencial
+            }
+        }
+    } else {
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message)
+            });
+            if (!response.ok) {
+                throw new Error('Error al enviar mensaje al servidor: ' + response.status);
+            }
+        } catch (err) {
+            console.error('Error al enviar mensaje HTTP:', err);
+            throw err;
+        }
+    }
+}
+
+// Notificar al cliente
+async function notifyClient(message) {
+    console.log('Notificando al cliente:', message);
+    try {
+        const clients = await self.clients.matchAll({ includeUncontrolled: true });
+        if (clients.length === 0) {
+            console.warn('No hay clientes activos para procesar mensaje:', message);
+            return;
+        }
+        for (const client of clients) {
+            client.postMessage({ type: 'SEND_MESSAGE', message });
+        }
+    } catch (err) {
+        console.error('Error al notificar al cliente:', err);
+    }
+}
+
+// Abrir base de datos IndexedDB
+function openDB() {
+    console.log('Abriendo base de datos IndexedDB...');
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('handyhandle-db', 1);
+        request.onupgradeneeded = event => {
+            const db = event.target.result;
+            db.createObjectStore(MESSAGE_QUEUE, { keyPath: 'id', autoIncrement: true });
+        };
+        request.onsuccess = event => {
+            resolve(event.target.result);
+        };
+        request.onerror = event => {
+            console.error('Error al abrir IndexedDB:', event.target.error);
+            reject(event.target.error);
+        };
+    });
+}
+
+// Manejo de notificaciones push
+self.addEventListener('push', event => {
+    console.log('Recibiendo notificación push...');
+    let data;
+    try {
+        data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje o vuelo recibido' };
+    } catch (err) {
+        console.error('Error al parsear datos de push:', err);
+        data = { title: 'Handyhandle', body: 'Nuevo mensaje o vuelo recibido' };
+    }
+    event.waitUntil(
+        self.registration.showNotification(data.title, {
+            body: data.body,
+            icon: '/templates/icon-192x192.png',
+            badge: '/templates/icon-192x192.png',
+            data: { url: '/' }
+        })
+    );
+});
+
+self.addEventListener('notificationclick', event => {
+    console.log('Notificación clickeada');
+    event.notification.close();
+    event.waitUntil(
+        clients.openWindow(event.notification.data.url)
+    );
+});
