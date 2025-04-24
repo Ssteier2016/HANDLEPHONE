@@ -24,7 +24,7 @@ from pydub import AudioSegment
 from pydantic import BaseModel, validator
 from passlib.context import CryptContext
 from cachetools import TTLCache
-from FlightRadar24 import FlightRadar24API  # Añadido para FlightRadar24
+from FlightRadar24 import FlightRadar24API
 
 # Configurar logging
 logging.basicConfig(
@@ -48,18 +48,15 @@ app.add_middleware(
 
 # Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+app.mount("/", StaticFiles(directory="templates", html=True), name="static")
 
 # Configurar hash de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Cargar index.html
-with open("templates/index.html", "r") as f:
-    INDEX_HTML = f.read()
-
 # Crear cachés
-flight_cache = TTLCache(maxsize=100, ttl=15)  # 15 segundos para /opensky
-flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
-flightradar24_cache = TTLCache(maxsize=100, ttl=15)  # 15 segundos para /flightradar24
+flight_cache = TTLCache(maxsize=100, ttl=15)
+flight_details_cache = TTLCache(maxsize=100, ttl=300)
+flightradar24_cache = TTLCache(maxsize=100, ttl=15)
 
 # Inicializar cliente de FlightRadar24
 fr_api = FlightRadar24API()
@@ -124,14 +121,31 @@ class LoginRequest(BaseModel):
         if not v.strip().isdigit() or len(v.strip()) != 5:
             raise ValueError('El legajo debe ser un número de 5 dígitos')
         return v.strip()
-# Ruta específica para sw.js con encabezado personalizado
+
+# Ruta para sw.js
 @app.get("/templates/sw.js")
 async def serve_service_worker():
     file_path = os.path.join("templates", "sw.js")
+    logger.info(f"Sirviendo sw.js desde {file_path}")
+    if not os.path.exists(file_path):
+        logger.error(f"Archivo sw.js no encontrado en {file_path}")
+        raise HTTPException(status_code=404, detail="Service Worker no encontrado")
     return FileResponse(
         file_path,
         headers={"Service-Worker-Allowed": "/"}
-        )
+    )
+
+# Ruta explícita para /
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    file_path = os.path.join("templates", "index.html")
+    logger.info(f"Sirviendo index.html desde {file_path}")
+    if not os.path.exists(file_path):
+        logger.error(f"Archivo index.html no encontrado en {file_path}")
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+    with open(file_path, "r") as f:
+        content = f.read()
+    return HTMLResponse(content=content)
 
 # Diccionario ICAO
 ICAO_ALPHABET = {
@@ -156,16 +170,21 @@ cached_data = None
 
 # Inicializar base de datos
 def init_db():
-    with sqlite3.connect("chat_history.db") as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                     (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                     (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
-                      muted_users TEXT, last_active TIMESTAMP)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS users 
-                     (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
-        conn.commit()
+    try:
+        with sqlite3.connect("chat_history.db") as conn:
+            c = conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS messages 
+                         (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+            c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                         (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                          muted_users TEXT, last_active TIMESTAMP)''')
+            c.execute('''CREATE TABLE IF NOT EXISTS users 
+                         (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
+            conn.commit()
+            logger.info("Base de datos inicializada correctamente")
+    except Exception as e:
+        logger.error(f"Error al inicializar la base de datos: {e}")
+        raise
 
 # Funciones de base de datos
 def save_session(token: str, user_id: str, name: str, function: str, group_id: Optional[str] = None, muted_users: Optional[Set[str]] = None):
@@ -318,9 +337,8 @@ async def get_flightradar24_data():
         return flightradar24_cache[cache_key]
 
     try:
-        # Obtener vuelos en un área (lat, lon, radio en metros)
-        bounds = fr_api.get_bounds_by_point(-34.5597, -58.4116, 250000)  # 250 km
-        flights = fr_api.get_flights(bounds=bounds, airline="ARG")  # Solo Aerolíneas Argentinas
+        bounds = fr_api.get_bounds_by_point(-34.5597, -58.4116, 250000)
+        flights = fr_api.get_flights(bounds=bounds, airline="ARG")
         flight_data = []
         for flight in flights:
             flight_info = {
@@ -432,7 +450,6 @@ async def get_opensky_data():
     flightradar24_data = await get_flightradar24_data()
 
     combined_data = []
-    # Procesar datos de Airplanes.Live
     for plane in airplanes_data:
         flight = plane.get("flight", "").strip()
         registration = plane.get("r", "").strip()
@@ -462,12 +479,10 @@ async def get_opensky_data():
                     break
             combined_data.append(plane_info)
 
-    # Agregar datos de Flightradar24 (evitar duplicados)
     for fr_flight in flightradar24_data:
         if not any(f["registration"] == fr_flight["registration"] for f in combined_data):
             combined_data.append(fr_flight)
 
-    # Agregar datos de TAMS que no estén en Airplanes.Live ni Flightradar24
     for tams_flight in tams_data:
         if not any(f["registration"] == tams_flight["Matricula"] for f in combined_data):
             combined_data.append({
@@ -486,9 +501,7 @@ async def get_opensky_data():
                 "source": "TAMS"
             })
 
-    # Ordenar por flight_number
     combined_data.sort(key=lambda x: x["flight_number"])
-
     flight_cache[cache_key] = combined_data
     logger.info(f"Datos combinados: {len(combined_data)} vuelos")
     return combined_data
@@ -664,7 +677,7 @@ async def broadcast_users():
 # WebSocket
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
-    global global_mute_active  # Declaración global al inicio de la función
+    global global_mute_active
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
