@@ -30,9 +30,9 @@
 </head>
 <body>
     <!-- Pantalla de introducción con video -->
-    <div id="intro-screen" style="display: block;">
-        <video id="intro-video" muted>
-            <source src="/templates/introvideo.mp4" type="video/mp4" onerror="console.error('Video de introducción no encontrado'); alert('No se pudo cargar el video de introducción. Continuando al inicio de sesión.');">
+    <div id="intro-screen" class="screen" style="display: block;">
+        <video id="intro-video" muted autoplay onended="showScreen('login-form')">
+            <source src="/templates/introvideo.mp4" type="video/mp4" onerror="console.error('Video de introducción no encontrado'); showScreen('login-form');">
             Tu navegador no soporta el elemento de video.
         </video>
         <div id="loading-bar-container">
@@ -44,7 +44,7 @@
     </div>
 
     <!-- Formulario de Inicio de Sesión -->
-    <div id="login-form" class="auth-form" style="display: none;">
+    <div id="login-form" class="screen auth-form" style="display: none;">
         <img src="/templates/logo2.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Iniciar Sesión</h2>
         <form id="login-form-form">
@@ -61,7 +61,7 @@
     </div>
 
     <!-- Formulario de Registro -->
-    <div id="register-form" class="auth-form" style="display: none;">
+    <div id="register-form" class="screen auth-form" style="display: none;">
         <img src="/templates/logo2.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Registrarse</h2>
         <form id="register-form-form">
@@ -92,7 +92,7 @@
     </div>
 
     <!-- Interfaz Principal -->
-    <div id="main" style="display: none;">
+    <div id="main" class="screen" style="display: none;">
         <button id="logout-button" class="logout-btn"></button>
         <img src="/templates/logo2.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
@@ -126,7 +126,7 @@
     </div>
 
     <!-- Pantalla de Grupo -->
-    <div id="group-screen" style="display: none;">
+    <div id="group-screen" class="screen" style="display: none;">
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
         </button>
@@ -153,7 +153,7 @@
     </div>
 
     <!-- Pantalla de Radar -->
-    <div id="radar-screen" style="display: none;">
+    <div id="radar-screen" class="screen" style="display: none;">
         <div class="radar-header">
             <h2>Radar</h2>
             <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
@@ -163,7 +163,7 @@
     </div>
 
     <!-- Pantalla de Historial -->
-    <div id="history-screen" style="display: none;">
+    <div id="history-screen" class="screen" style="display: none;">
         <button id="back-to-main" onclick="backToMain()">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
@@ -194,4 +194,4 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="/templates/script.js"></script>
 </body>
-</html>
+            </html>
