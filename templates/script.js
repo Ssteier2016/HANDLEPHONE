@@ -36,14 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const flights = data.flights || [];
       if (flights.length === 0) {
         // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
-        airportName.textContent = "Miami International (MIA)";
+        airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
         flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para MIA.</td></tr>';
         return;
       }
 
       // Actualizar el nombre del aeropuerto basado en los datos
       // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
-      airportName.textContent = "Miami International (MIA)";
+      airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
 
       // Limpiar tabla
       flightsBody.innerHTML = '';
