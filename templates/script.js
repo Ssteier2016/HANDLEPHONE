@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refresh-btn');
   const flightsBody = document.getElementById('flights-body');
+  const airportName = document.getElementById('airport-name');
 
   // Función para obtener y mostrar los vuelos
   async function fetchFlights() {
@@ -15,9 +16,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const flights = data.flights || [];
       if (flights.length === 0) {
-        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para Aeroparque (AEP).</td></tr>';
+        // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
+        airportName.textContent = "Miami International (MIA)";
+        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para MIA.</td></tr>';
         return;
       }
+
+      // Actualizar el nombre del aeropuerto basado en los datos
+      // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
+      airportName.textContent = "Miami International (MIA)";
 
       // Limpiar tabla
       flightsBody.innerHTML = '';
