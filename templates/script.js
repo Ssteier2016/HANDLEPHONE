@@ -35,13 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const flights = data.flights || [];
       if (flights.length === 0) {
-        airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
-        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para Aeroparque (AEP) en las últimas 12 horas.</td></tr>';
+        airportName.textContent = "Aeroparque (AEP) y Ezeiza (EZE)";
+        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos de Aerolíneas Argentinas (AR) para Aeroparque (AEP) o Ezeiza (EZE) en las últimas 12 horas.</td></tr>';
         return;
       }
 
       // Actualizar el nombre del aeropuerto
-      airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
+      airportName.textContent = "Aeroparque (AEP) y Ezeiza (EZE)";
 
       // Limpiar tabla
       flightsBody.innerHTML = '';
