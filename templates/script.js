@@ -35,14 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const flights = data.flights || [];
       if (flights.length === 0) {
-        // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
         airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
-        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para MIA.</td></tr>';
+        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para Aeroparque (AEP) en las últimas 12 horas.</td></tr>';
         return;
       }
 
-      // Actualizar el nombre del aeropuerto basado en los datos
-      // Cambia "MIA" por "AEP" cuando vuelvas a Aeroparque
+      // Actualizar el nombre del aeropuerto
       airportName.textContent = "Aeroparque Jorge Newbery (AEP)";
 
       // Limpiar tabla
