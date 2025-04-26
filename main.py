@@ -30,7 +30,7 @@ API_URL = f"https://www.goflightlabs.com/flights?access_key={API_KEY}"
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Ruta para obtener los vuelos de Aeroparque (AEP)
+# Ruta para obtener los vuelos de Aeroparque (AEP) y Ezeiza (EZE)
 @app.get("/flights")
 async def get_flights():
     async with httpx.AsyncClient() as client:
@@ -48,7 +48,8 @@ async def get_flights():
                 logger.error("La API no devolvió éxito")
                 return {"error": "No se pudo obtener datos de la API"}
 
-            # Filtrar vuelos que llegan o salen de Aeroparque (AEP) y están en las últimas 12 horas
+            # Filtrar vuelos que llegan o salen de Aeroparque (AEP) o Ezeiza (EZE),
+            # que comiencen con "AR", y que estén en las últimas 12 horas
             flights = data.get("data", [])
             logger.info(f"Total de vuelos recibidos: {len(flights)}")
 
@@ -56,17 +57,18 @@ async def get_flights():
             current_time = int(time.time())
             twelve_hours_ago = current_time - (12 * 3600)  # 12 horas en segundos
 
-            aep_flights = [
+            filtered_flights = [
                 flight for flight in flights
-                if (flight.get("dep_iata") == "AEP" or flight.get("arr_iata") == "AEP")
+                if (flight.get("dep_iata") in ["AEP", "EZE"] or flight.get("arr_iata") in ["AEP", "EZE"])
+                and flight.get("flight_iata", "").startswith("AR")
                 and flight.get("updated", 0) >= twelve_hours_ago
             ]
 
-            logger.info(f"Vuelos filtrados para AEP (últimas 12 horas): {len(aep_flights)}")
+            logger.info(f"Vuelos filtrados para AEP/EZE y AR (últimas 12 horas): {len(filtered_flights)}")
 
             # Formatear los datos para el frontend
             formatted_flights = []
-            for flight in aep_flights:
+            for flight in filtered_flights:
                 formatted_flights.append({
                     "flight_iata": flight.get("flight_iata", "N/A"),
                     "airline_iata": flight.get("airline_iata", "N/A"),
