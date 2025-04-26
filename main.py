@@ -49,22 +49,23 @@ async def get_flights():
                 return {"error": "No se pudo obtener datos de la API"}
 
             # Filtrar vuelos que llegan o salen de Aeroparque (AEP) o Ezeiza (EZE),
-            # que comiencen con "AR", y que estén en las últimas 12 horas
+            # que comiencen con "AR" o "ARG", y que estén entre 12 horas en el pasado y 12 horas en el futuro
             flights = data.get("data", [])
             logger.info(f"Total de vuelos recibidos: {len(flights)}")
 
-            # Calcular el timestamp de hace 12 horas
+            # Calcular el rango de tiempo: desde 12 horas en el pasado hasta 12 horas en el futuro
             current_time = int(time.time())
-            twelve_hours_ago = current_time - (12 * 3600)  # 12 horas en segundos
+            twelve_hours_ago = current_time - (12 * 3600)  # 12 horas en el pasado
+            twelve_hours_future = current_time + (12 * 3600)  # 12 horas en el futuro
 
             filtered_flights = [
                 flight for flight in flights
                 if (flight.get("dep_iata") in ["AEP", "EZE"] or flight.get("arr_iata") in ["AEP", "EZE"])
-                and flight.get("flight_iata", "").startswith("AR")
-                and flight.get("updated", 0) >= twelve_hours_ago
+                and (flight.get("flight_iata", "").startswith("AR") or flight.get("flight_iata", "").startswith("ARG"))
+                and twelve_hours_ago <= flight.get("updated", 0) <= twelve_hours_future
             ]
 
-            logger.info(f"Vuelos filtrados para AEP/EZE y AR (últimas 12 horas): {len(filtered_flights)}")
+            logger.info(f"Vuelos filtrados para AEP/EZE y AR/ARG (entre 12h pasado y 12h futuro): {len(filtered_flights)}")
 
             # Formatear los datos para el frontend
             formatted_flights = []
