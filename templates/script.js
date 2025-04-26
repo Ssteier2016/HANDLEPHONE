@@ -1,13 +1,32 @@
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("Script cargado y DOM listo");
+
   const refreshBtn = document.getElementById('refresh-btn');
   const flightsBody = document.getElementById('flights-body');
   const airportName = document.getElementById('airport-name');
 
+  if (!refreshBtn || !flightsBody || !airportName) {
+    console.error("No se encontraron los elementos del DOM:", {
+      refreshBtn: !!refreshBtn,
+      flightsBody: !!flightsBody,
+      airportName: !!airportName
+    });
+    return;
+  }
+
   // Función para obtener y mostrar los vuelos
   async function fetchFlights() {
     try {
+      console.log("Haciendo solicitud a /flights...");
       const response = await fetch('/flights');
+      console.log("Respuesta recibida:", response);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
+      console.log("Datos recibidos:", data);
 
       if (data.error) {
         flightsBody.innerHTML = `<tr><td colspan="6">Error: ${data.error}</td></tr>`;
@@ -43,13 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
         flightsBody.appendChild(row);
       });
     } catch (error) {
+      console.error("Error al cargar los vuelos:", error);
       flightsBody.innerHTML = `<tr><td colspan="6">Error al cargar los vuelos: ${error.message}</td></tr>`;
     }
   }
 
   // Cargar vuelos al iniciar
+  console.log("Cargando vuelos al iniciar...");
   fetchFlights();
 
   // Actualizar vuelos al hacer clic en el botón
-  refreshBtn.addEventListener('click', fetchFlights);
+  refreshBtn.addEventListener('click', () => {
+    console.log("Botón de actualizar clicado");
+    fetchFlights();
+  });
 });
