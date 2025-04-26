@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const flights = data.flights || [];
       if (flights.length === 0) {
         airportName.textContent = "Aeroparque (AEP) y Ezeiza (EZE)";
-        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos de Aerolíneas Argentinas (AR) para Aeroparque (AEP) o Ezeiza (EZE) en las últimas 12 horas.</td></tr>';
+        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos de Aerolíneas Argentinas (AR/ARG) para Aeroparque (AEP) o Ezeiza (EZE) entre 12 horas en el pasado y 12 horas en el futuro.</td></tr>';
         return;
       }
 
