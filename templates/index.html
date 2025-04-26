@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vuelos de Aeroparque</title>
+  <link rel="stylesheet" href="/templates/style.css">
+</head>
+<body>
+  <div class="container">
+    <img src="/templates/logo.png" alt="Logo" class="logo">
+    <h1>Vuelos de Aeroparque Jorge Newbery (AEP)</h1>
+    <button id="refresh-btn">Actualizar vuelos</button>
+    <table id="flights-table">
+      <thead>
+        <tr>
+          <th>Vuelo</th>
+          <th>Aerolínea</th>
+          <th>Salida</th>
+          <th>Llegada</th>
+          <th>Estado</th>
+          <th>Actualizado</th>
+        </tr>
+      </thead>
+      <tbody id="flights-body"></tbody>
+    </table>
+  </div>
+  <script src="/templates/script.js"></script>
+</body>
+</html>
