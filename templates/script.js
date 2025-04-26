@@ -225,19 +225,24 @@ function connectWebSocket(sessionToken, retryCount = 0, maxRetries = 5) {
     };
 }
 
-// Mostrar pantallas
 function showScreen(screenId) {
-    console.log(`Mostrando pantalla: ${screenId}`);
-    const screens = ['intro-screen', 'login-form', 'register-form', 'main', 'group-screen', 'radar-screen', 'history-screen', 'flight-details-modal'];
+    console.log('Mostrando pantalla:', screenId);
+    const screens = [
+        'intro-screen',
+        'login-form',
+        'register-form',
+        'main',
+        'group-screen',
+        'radar-screen',
+        'history-screen'
+    ];
     screens.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.style.display = id === screenId ? 'block' : 'none';
-            console.log(`Pantalla ${id}: ${id === screenId ? 'mostrada' : 'oculta'}`);
-        } else {
-            console.warn(`Elemento #${id} no encontrado en el DOM`);
+        const screen = document.getElementById(id);
+        if (screen) {
+            screen.style.display = id === screenId ? 'block' : 'none';
         }
     });
+}
 
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
@@ -1360,6 +1365,7 @@ function checkNotificationPermission() {
     }
 }
 
+
 function urlBase64ToUint8Array(base64String) {
     try {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1383,28 +1389,15 @@ document.addEventListener('DOMContentLoaded', () => {
     checkNotificationPermission();
 
     // Formulario de registro
+// Manejo del formulario de registro
     const registerForm = document.getElementById('register-form-form');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            console.log("Enviando formulario de registro...");
             const surname = document.getElementById('surname').value;
             const employee_id = document.getElementById('employee_id').value;
             const sector = document.getElementById('sector').value;
             const password = document.getElementById('password').value;
-            const errorElement = document.getElementById('register-error');
-
-            if (!/^\d{5}$/.test(employee_id)) {
-                errorElement.textContent = 'El legajo debe contener 5 números.';
-                console.warn("Validación fallida: legajo inválido");
-                return;
-            }
-            if (password.length < 6) {
-                errorElement.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-                console.warn("Validación fallida: contraseña demasiado corta");
-                return;
-            }
-
             try {
                 const response = await fetch('/register', {
                     method: 'POST',
@@ -1413,39 +1406,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    console.log("Registro exitoso:", data);
-                    alert('Registro exitoso. Inicia sesión.');
+                    console.log('Registro exitoso:', data);
                     showScreen('login-form');
                 } else {
-                    console.error("Error al registrarse:", data.detail);
-                    errorElement.textContent = data.detail || 'Error al registrarse';
+                    document.getElementById('register-error').textContent = data.message || 'Error al registrarse';
                 }
             } catch (error) {
-                console.error("Error al conectar con el servidor:", error);
-                errorElement.textContent = 'Error al conectar con el servidor';
+                console.error('Error en registro:', error);
+                document.getElementById('register-error').textContent = 'Error de conexión';
             }
         });
-    } else {
-        console.warn("Elemento #register-form-form no encontrado en el DOM");
     }
 
-    // Formulario de inicio de sesión
+    // Manejo del formulario de login
     const loginForm = document.getElementById('login-form-form');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            console.log("Enviando formulario de inicio de sesión...");
             const surname = document.getElementById('surname').value;
             const employee_id = document.getElementById('employee_id').value;
             const password = document.getElementById('password').value;
-            const errorElement = document.getElementById('login-error');
-
-            if (!/^\d{5}$/.test(employee_id)) {
-                errorElement.textContent = 'El legajo debe contener 5 números.';
-                console.warn("Validación fallida: legajo inválido");
-                return;
-            }
-
             try {
                 const response = await fetch('/login', {
                     method: 'POST',
@@ -1454,51 +1434,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    console.log("Inicio de sesión exitoso:", data);
-                    const token = data.token;
-                    const [legajo, name, sector] = atob(token).split('_');
-                    userId = `${legajo}_${name}_${sector}`;
-                    localStorage.setItem('token', token);
-                    localStorage.setItem('userName', name);
-                    localStorage.setItem('userFunction', sector);
-                    localStorage.setItem('userLegajo', legajo);
-                    connectWebSocket(token);
+                    console.log('Login exitoso:', data);
                     showScreen('main');
-                    checkGroupStatus();
                 } else {
-                    console.error("Error al iniciar sesión:", data.detail);
-                    errorElement.textContent = data.detail || 'Error al iniciar sesión';
+                    document.getElementById('login-error').textContent = data.message || 'Error al iniciar sesión';
                 }
             } catch (error) {
-                console.error("Error al conectar con el servidor:", error);
-                errorElement.textContent = 'Error al conectar con el servidor';
+                console.error('Error en login:', error);
+                document.getElementById('login-error').textContent = 'Error de conexión';
             }
         });
-    } else {
-        console.warn("Elemento #login-form-form no encontrado en el DOM");
     }
 
     // Event listeners para botones y elementos interactivos
+    // Navegación entre formularios
     const showRegister = document.getElementById('show-register');
+    const showLogin = document.getElementById('show-login');
+
     if (showRegister) {
         showRegister.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log("Mostrando formulario de registro");
+            console.log('Clic en show-register');
             showScreen('register-form');
         });
-    } else {
-        console.warn("Elemento #show-register no encontrado en el DOM");
     }
 
-    const showLogin = document.getElementById('show-login');
     if (showLogin) {
         showLogin.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log("Mostrando formulario de inicio de sesión");
+            console.log('Clic en show-login');
             showScreen('login-form');
         });
-    } else {
-        console.warn("Elemento #show-login no encontrado en el DOM");
     }
 
     const logoutButton = document.getElementById('logout-button');
