@@ -1360,34 +1360,6 @@ function checkNotificationPermission() {
     }
 }
 
-function subscribeToPush() {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY')
-            }).then(subscription => {
-                console.log("Suscripción a push exitosa:", subscription);
-                fetch('/subscribe', {
-                    method: 'POST',
-                    body: JSON.stringify(subscription),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }).catch(err => {
-                    console.error("Error al enviar suscripción al servidor:", err);
-                });
-            }).catch(err => {
-                console.error("Error al suscribirse a push:", err);
-            });
-        }).catch(err => {
-            console.error("Error al obtener el Service Worker:", err);
-        });
-    } else {
-        console.warn('Notificaciones push no soportadas.');
-    }
-}
-
 function urlBase64ToUint8Array(base64String) {
     try {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
