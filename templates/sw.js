@@ -1,11 +1,9 @@
-// sw.js
-// Service Worker para cacheo offline y sincronización
-
-const CACHE_NAME = 'handyhandle-cache-v6'; // Incrementar versión para limpiar caché antiguo
+// /sw.js
+const CACHE_NAME = 'handyhandle-cache-v7';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'handyhandle-sync';
-const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
-const FLIGHT_CACHE_TTL = 10 * 60 * 1000; // 10 minutos para caché de vuelos
+const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas
+const FLIGHT_CACHE_TTL = 10 * 60 * 1000; // 10 minutos
 
 const urlsToCache = [
     '/',
@@ -23,18 +21,14 @@ const urlsToCache = [
     '/templates/icon-512x512.png',
     '/templates/icon-maskable-192x192.png',
     '/templates/introvideo.mp4'
-    // Nota: Eliminé logoutred.png, airplane.png, volver.png, mic.png, mute.png porque podrían no existir
-    // Añade solo los recursos que confirmes que están en /templates/
 ];
 
-// Instalar el Service Worker y cachear los recursos
 self.addEventListener('install', event => {
     console.log('Instalando Service Worker...');
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Cache abierto:', CACHE_NAME);
-                // Cachear recursos uno por uno para evitar fallos totales
                 return Promise.all(
                     urlsToCache.map(url => {
                         return fetch(url, { method: 'GET' })
@@ -58,7 +52,6 @@ self.addEventListener('install', event => {
     self.skipWaiting();
 });
 
-// Activar el Service Worker y eliminar caches antiguos
 self.addEventListener('activate', event => {
     console.log('Activando Service Worker...');
     event.waitUntil(
@@ -76,12 +69,10 @@ self.addEventListener('activate', event => {
     self.clients.claim();
 });
 
-// Interceptar solicitudes y responder con recursos cacheados o de la red
 self.addEventListener('fetch', event => {
     const requestUrl = new URL(event.request.url);
     console.log('Fetch:', requestUrl.pathname);
 
-    // No cachear WebSocket ni rutas dinámicas específicas
     if (
         requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
@@ -100,7 +91,6 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Cachear endpoint /aep_flights con TTL
     if (requestUrl.pathname === '/aep_flights') {
         event.respondWith(
             caches.match(event.request)
@@ -133,7 +123,6 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Cachear tiles de OpenStreetMap dinámicamente con limpieza periódica
     if (requestUrl.hostname.includes('tile.openstreetmap.org')) {
         event.respondWith(
             caches.match(event.request)
@@ -164,7 +153,6 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Estrategia cache-first para recursos estáticos
     event.respondWith(
         caches.match(event.request)
             .then(response => {
@@ -193,7 +181,6 @@ self.addEventListener('fetch', event => {
     );
 });
 
-// Limpiar tiles de OpenStreetMap antiguos
 async function cleanOldTiles() {
     console.log('Limpiando tiles antiguos de OpenStreetMap...');
     const cache = await caches.open(CACHE_NAME);
@@ -203,7 +190,7 @@ async function cleanOldTiles() {
         if (request.url.includes('tile.openstreetmap.org')) {
             const response = await cache.match(request);
             const cachedTime = new Date(response.headers.get('date')).getTime();
-            if (now - cachedTime > 60 * 60 * 1000) { // 1 hora
+            if (now - cachedTime > 60 * 60 * 1000) {
                 await cache.delete(request);
                 console.log('Eliminado tile antiguo de OpenStreetMap:', request.url);
             }
@@ -211,7 +198,6 @@ async function cleanOldTiles() {
     }
 }
 
-// Manejar mensajes desde script.js
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'QUEUE_MESSAGE') {
         console.log('Recibiendo mensaje para encolar:', event.data.message);
@@ -219,7 +205,6 @@ self.addEventListener('message', event => {
     }
 });
 
-// Sincronización en segundo plano
 self.addEventListener('sync', event => {
     if (event.tag === SYNC_TAG) {
         console.log('Iniciando sincronización en segundo plano...');
@@ -227,7 +212,6 @@ self.addEventListener('sync', event => {
     }
 });
 
-// Almacenar mensaje en IndexedDB
 async function queueMessage(message) {
     console.log('Encolando mensaje:', message);
     try {
@@ -246,7 +230,6 @@ async function queueMessage(message) {
     }
 }
 
-// Sincronizar mensajes pendientes
 async function syncMessages() {
     console.log('Sincronizando mensajes pendientes...');
     try {
@@ -284,7 +267,6 @@ async function syncMessages() {
                 await notifyClient({ ...message, status: 'sent' });
             } catch (err) {
                 console.error('Error al sincronizar mensaje:', message, err);
-                // Mantener el mensaje para reintentar
             }
         }
         await tx.done;
@@ -299,7 +281,6 @@ async function syncMessages() {
     }
 }
 
-// Enviar mensaje al servidor con reintentos para WebSocket
 async function sendToServer(message, endpoint) {
     console.log('Enviando mensaje al servidor:', message, endpoint);
     if (message.type === 'message' || message.type === 'group_message') {
@@ -312,7 +293,7 @@ async function sendToServer(message, endpoint) {
                     const timeout = setTimeout(() => {
                         ws.close();
                         reject(new Error('WebSocket timeout'));
-                    }, 5000); // 5 segundos de espera
+                    }, 5000);
                     ws.onopen = () => {
                         ws.send(JSON.stringify(message));
                         clearTimeout(timeout);
@@ -328,7 +309,7 @@ async function sendToServer(message, endpoint) {
                 attempts++;
                 console.error(`Intento ${attempts} fallido para WebSocket:`, err);
                 if (attempts === maxAttempts) throw err;
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Espera exponencial
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
             }
         }
     } else {
@@ -348,7 +329,6 @@ async function sendToServer(message, endpoint) {
     }
 }
 
-// Notificar al cliente
 async function notifyClient(message) {
     console.log('Notificando al cliente:', message);
     try {
@@ -365,7 +345,6 @@ async function notifyClient(message) {
     }
 }
 
-// Abrir base de datos IndexedDB
 function openDB() {
     console.log('Abriendo base de datos IndexedDB...');
     return new Promise((resolve, reject) => {
@@ -384,7 +363,6 @@ function openDB() {
     });
 }
 
-// Manejo de notificaciones push
 self.addEventListener('push', event => {
     console.log('Recibiendo notificación push...');
     let data;
