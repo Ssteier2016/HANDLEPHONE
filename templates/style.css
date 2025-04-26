@@ -40,7 +40,7 @@
 #loading-bar-container {
     width: 300px; /* Tamaño aumentado */
     height: 30px; /* Tamaño aumentado */
-    background-color: #ffffff;
+    background-color: #4682B4;
     border: 2px solid #4682B4;
     border-radius: 10px;
     position: absolute;
@@ -54,12 +54,11 @@
 #loading-bar {
     width: 0%;
     height: 100%;
-    background-color: #0052cc; /*fondo azul*/
+    background-color: #ffffff; /*fondo blanco*/
     border-radius: 8px;
     position: relative;
     transition: width 10s linear; /* Duración de 10 segundos */
-}
-
+    
 #loading-bar.loading {
     width: 100%; /* Llena la barra al añadir la clase */
 }
