@@ -5,6 +5,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.requests import Request
 import httpx
 import uvicorn
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -29,19 +34,34 @@ async def get_flights():
     async with httpx.AsyncClient() as client:
         try:
             # Hacer solicitud a la API de GoFlightLabs
+            logger.info("Consultando la API de GoFlightLabs...")
             response = await client.get(API_URL)
             response.raise_for_status()
             data = response.json()
 
+            # Registrar los datos crudos
+            logger.info(f"Datos recibidos de la API: {data}")
+
             if not data.get("success"):
+                logger.error("La API no devolvió éxito")
                 return {"error": "No se pudo obtener datos de la API"}
 
             # Filtrar vuelos que llegan o salen de Aeroparque (AEP)
             flights = data.get("data", [])
+            logger.info(f"Total de vuelos recibidos: {len(flights)}")
+
+            # Temporalmente, prueba con un aeropuerto más activo (MIA) para depurar
+            # Comenta las siguientes dos líneas y descomenta las de AEP cuando quieras volver a Aeroparque
             aep_flights = [
                 flight for flight in flights
-                if flight.get("dep_iata") == "AEP" or flight.get("arr_iata") == "AEP"
+                if flight.get("dep_iata") == "MIA" or flight.get("arr_iata") == "MIA"
             ]
+            # aep_flights = [
+            #     flight for flight in flights
+            #     if flight.get("dep_iata") == "AEP" or flight.get("arr_iata") == "AEP"
+            # ]
+
+            logger.info(f"Vuelos filtrados para AEP/MIA: {len(aep_flights)}")
 
             # Formatear los datos para el frontend
             formatted_flights = []
@@ -57,8 +77,10 @@ async def get_flights():
 
             return {"flights": formatted_flights}
         except httpx.HTTPStatusError as e:
+            logger.error(f"Error HTTP al consultar la API: {str(e)}")
             return {"error": f"Error al consultar la API: {str(e)}"}
         except Exception as e:
+            logger.error(f"Error inesperado: {str(e)}")
             return {"error": f"Error inesperado: {str(e)}"}
 
 # Iniciar el servidor
