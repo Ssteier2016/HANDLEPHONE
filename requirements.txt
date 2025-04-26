@@ -30,7 +30,7 @@ websockets>=15.0.1,<16.0.0
 psycopg2-binary>=2.9.9,<2.10.0  # Opcional
 
 # Dependencias para APIs de vuelos
-FlightRadarAPI>=1.3.34  # Opcional
+FlightRadarAPI>=1.3.33  # Opcional
 
 # Dependencias opcionales para scraping
 beautifulsoup4>=4.12.2,<5.0.0  # Opcional
