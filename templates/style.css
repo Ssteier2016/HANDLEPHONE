@@ -32,7 +32,7 @@
     left: 50%;
     transform: translateX(-50%);
     height: 48px;
-    width: 48px;
+    width: 40px;
     z-index: 10; /* Asegurar que esté sobre el video */
 }
 
