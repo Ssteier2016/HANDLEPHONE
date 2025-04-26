@@ -7,7 +7,7 @@ import httpx
 import uvicorn
 import logging
 import time
-from flightradar24 import FlightRadar24API
+from flightradarapi import FlightRadar24API
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
