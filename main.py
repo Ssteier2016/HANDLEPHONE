@@ -48,8 +48,7 @@ app.add_middleware(
 
 # Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
-app.mount("/", StaticFiles(directory="templates", html=True), name="static")
-
+app.mount("/", StaticFiles(directory="."), name="static")
 # Configurar hash de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -123,9 +122,9 @@ class LoginRequest(BaseModel):
         return v.strip()
 
 # Ruta para sw.js
-@app.get("/templates/sw.js")
+@app.get("/sw.js")
 async def serve_service_worker():
-    file_path = os.path.join("templates", "sw.js")
+    file_path = os.path.join("sw.js")
     logger.info(f"Sirviendo sw.js desde {file_path}")
     if not os.path.exists(file_path):
         logger.error(f"Archivo sw.js no encontrado en {file_path}")
