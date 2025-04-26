@@ -6,6 +6,8 @@ uvicorn>=0.30.6,<0.31.0
 python-decouple==3.8  # Para manejar variables de entorno
 numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
 asyncio==3.4.3
+httpx
+jinja2
 
 # Dependencias requeridas para el backend y la API
 fastapi>=0.115.0,<0.116.0
