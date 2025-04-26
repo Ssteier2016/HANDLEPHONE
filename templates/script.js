@@ -1287,30 +1287,30 @@ function registerServiceWorker() {
                         .catch(err => {
                             console.error('Error al registrar Service Worker en /:', err);
                             // Fallback a /templates/sw.js
-                            fetch('/templates/sw.js', { method: 'HEAD' })
+                            fetch('/sw.js', { method: 'HEAD' })
                                 .then(response => {
                                     if (response.ok) {
-                                        navigator.serviceWorker.register('/templates/sw.js')
+                                        navigator.serviceWorker.register('/sw.js')
                                             .then(reg => {
-                                                console.log('Service Worker registrado en /templates:', reg);
+                                                console.log('Service Worker registrado en /:', reg);
                                             })
-                                            .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                                            .catch(err => console.error('Error al registrar Service Worker en /:', err));
                                     } else {
-                                        console.warn('Archivo /templates/sw.js no encontrado');
+                                        console.warn('Archivo /sw.js no encontrado');
                                     }
                                 })
-                                .catch(err => console.warn('No se pudo verificar /templates/sw.js:', err));
+                                .catch(err => console.warn('No se pudo verificar /sw.js:', err));
                         });
                 } else {
-                    console.warn('Archivo /sw.js no encontrado, intentando /templates/sw.js');
-                    fetch('/templates/sw.js', { method: 'HEAD' })
+                    console.warn('Archivo /sw.js no encontrado, intentando /sw.js');
+                    fetch('/sw.js', { method: 'HEAD' })
                         .then(response => {
                             if (response.ok) {
-                                navigator.serviceWorker.register('/templates/sw.js')
+                                navigator.serviceWorker.register('/sw.js')
                                     .then(reg => {
-                                        console.log('Service Worker registrado en /templates:', reg);
+                                        console.log('Service Worker registrado en /:', reg);
                                     })
-                                    .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                                    .catch(err => console.error('Error al registrar Service Worker en /:', err));
                             } else {
                                 console.warn('Archivo /templates/sw.js no encontrado');
                             }
@@ -1321,19 +1321,19 @@ function registerServiceWorker() {
             .catch(err => {
                 console.warn('No se pudo verificar /sw.js:', err);
                 // Fallback a /templates/sw.js
-                fetch('/templates/sw.js', { method: 'HEAD' })
+                fetch('/sw.js', { method: 'HEAD' })
                     .then(response => {
                         if (response.ok) {
-                            navigator.serviceWorker.register('/templates/sw.js')
+                            navigator.serviceWorker.register('/sw.js')
                                 .then(reg => {
-                                    console.log('Service Worker registrado en /templates:', reg);
+                                    console.log('Service Worker registrado en /:', reg);
                                 })
-                                .catch(err => console.error('Error al registrar Service Worker en /templates:', err));
+                                .catch(err => console.error('Error al registrar Service Worker en /:', err));
                         } else {
-                            console.warn('Archivo /templates/sw.js no encontrado');
+                            console.warn('Archivo /sw.js no encontrado');
                         }
                     })
-                    .catch(err => console.warn('No se pudo verificar /templates/sw.js:', err));
+                    .catch(err => console.warn('No se pudo verificar /sw.js:', err));
             });
     } else {
         console.warn('Service Worker no soportado.');
