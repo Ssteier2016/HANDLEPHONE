@@ -53,14 +53,14 @@ async def get_flights():
 
             # Temporalmente, prueba con un aeropuerto más activo (MIA) para depurar
             # Comenta las siguientes dos líneas y descomenta las de AEP cuando quieras volver a Aeroparque
-            aep_flights = [
+           ''' aep_flights = [
                 flight for flight in flights
                 if flight.get("dep_iata") == "MIA" or flight.get("arr_iata") == "MIA"
+            ]'''
+            aep_flights = [
+                flight for flight in flights
+                if flight.get("dep_iata") == "AEP" or flight.get("arr_iata") == "AEP"
             ]
-            # aep_flights = [
-            #     flight for flight in flights
-            #     if flight.get("dep_iata") == "AEP" or flight.get("arr_iata") == "AEP"
-            # ]
 
             logger.info(f"Vuelos filtrados para AEP/MIA: {len(aep_flights)}")
 
