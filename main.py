@@ -45,10 +45,6 @@ async def read_root(request: Request):
 async def get_flights():
     all_flights = []
 
-    # Calcular el rango de tiempo: próximas 6 horas
-    current_time = int(time.time())
-    six_hours_future = current_time + (6 * 3600)  # 6 horas en el futuro
-
     # 1. Consultar GoFlightLabs (sin filtros en el backend)
     async with httpx.AsyncClient() as client:
         try:
@@ -96,7 +92,7 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 2. Consultar AviationStack (con filtros: Aerolíneas Argentinas, AEP, próximas 6 horas)
+    # 2. Consultar AviationStack (sin filtros por ahora)
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -114,33 +110,7 @@ async def get_flights():
             else:
                 logger.info("No se recibieron vuelos de AviationStack")
 
-            # Filtrar vuelos de AviationStack
-            filtered_flights = [
-                flight for flight in flights
-                if (
-                    # Solo Aerolíneas Argentinas (código IATA: AR)
-                    flight.get("airline", {}).get("iata", "").upper() == "AR"
-                    # Solo vuelos que lleguen o salgan de AEP
-                    and (flight.get("departure", {}).get("iata", "") == "AEP"
-                         or flight.get("arrival", {}).get("iata", "") == "AEP")
-                    # Solo vuelos en las próximas 6 horas
-                    and flight.get("departure", {}).get("scheduled", None) is not None
-                )
-            ]
-
-            # Filtrar por las próximas 6 horas
-            filtered_flights = [
-                flight for flight in filtered_flights
-                if (
-                    current_time <= parse_aviationstack_time(
-                        flight.get("departure", {}).get("scheduled", "1970-01-01T00:00:00+00:00")
-                    ) <= six_hours_future
-                )
-            ]
-
-            logger.info(f"Vuelos filtrados de AviationStack (AR, AEP, próximas 6 horas): {len(filtered_flights)}")
-
-            for flight in filtered_flights:
+            for flight in flights:
                 departure = flight.get("departure", {}).get("iata", "N/A")
                 arrival = flight.get("arrival", {}).get("iata", "N/A")
                 if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
@@ -180,15 +150,6 @@ async def get_flights():
     logger.info(f"Total de vuelos procesados: {len(unique_flights)}")
 
     return {"flights": unique_flights}
-
-# Función auxiliar para parsear el tiempo de AviationStack
-def parse_aviationstack_time(time_str):
-    try:
-        # Formato esperado: "2025-04-27T14:30:00+00:00"
-        return int(time.mktime(time.strptime(time_str[:19], "%Y-%m-%dT%H:%M:%S")))
-    except Exception as e:
-        logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
-        return 0
 
 # Iniciar el servidor
 if __name__ == "__main__":
