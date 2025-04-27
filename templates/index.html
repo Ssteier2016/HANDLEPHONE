@@ -20,7 +20,11 @@
       <button id="filter-btn">Filtrar</button>
     </div>
     
-    <button id="refresh-btn">Actualizar vuelos</button>
+    <!-- Botón de actualizar y hora de última actualización -->
+    <div class="update-container">
+      <button id="refresh-btn">Actualizar vuelos</button>
+      <span id="last-updated">Última actualización: --</span>
+    </div>
     
     <!-- Mapa -->
     <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
@@ -34,7 +38,6 @@
           <th>Salida</th>
           <th>Llegada</th>
           <th>Estado</th>
-          <th>Actualizado</th>
         </tr>
       </thead>
       <tbody id="flights-body"></tbody>
