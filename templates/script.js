@@ -14,6 +14,38 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Inicializar el mapa con Leaflet
+  const map = L.map('map').setView([-34.6907, -58.4757], 10); // Centro entre AEP y EZE, zoom 10
+
+  // Añadir capa de OpenStreetMap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // Función para actualizar los marcadores en el mapa
+  function updateMapMarkers(flights) {
+    // Limpiar marcadores existentes (excepto la capa base del mapa)
+    map.eachLayer(layer => {
+      if (layer instanceof L.Marker) {
+        map.removeLayer(layer);
+      }
+    });
+
+    // Añadir marcadores para cada vuelo
+    flights.forEach(flight => {
+      if (flight.lat && flight.lon) {
+        const marker = L.marker([flight.lat, flight.lon]).addTo(map);
+        marker.bindPopup(`
+          <b>Vuelo:</b> ${flight.flight_iata}<br>
+          <b>Aerolínea:</b> ${flight.airline_iata}<br>
+          <b>Salida:</b> ${flight.departure}<br>
+          <b>Llegada:</b> ${flight.arrival}<br>
+          <b>Estado:</b> ${flight.status}
+        `);
+      }
+    });
+  }
+
   // Función para obtener y mostrar los vuelos
   async function fetchFlights() {
     try {
@@ -37,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (flights.length === 0) {
         airportName.textContent = "Aeroparque (AEP) y Ezeiza (EZE)";
         flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos de Aerolíneas Argentinas (AR/ARG) para Aeroparque (AEP) o Ezeiza (EZE) entre 12 horas en el pasado y 12 horas en el futuro.</td></tr>';
+        updateMapMarkers([]); // Limpiar el mapa
         return;
       }
 
@@ -59,9 +92,14 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         flightsBody.appendChild(row);
       });
+
+      // Actualizar el mapa con los marcadores
+      updateMapMarkers(flights);
+
     } catch (error) {
       console.error("Error al cargar los vuelos:", error);
       flightsBody.innerHTML = `<tr><td colspan="6">Error al cargar los vuelos: ${error.message}</td></tr>`;
+      updateMapMarkers([]); // Limpiar el mapa en caso de error
     }
   }
 
