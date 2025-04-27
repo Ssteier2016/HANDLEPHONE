@@ -11,7 +11,15 @@
 <body>
   <div class="container">
     <img src="/templates/logo.png" alt="Logo" class="logo">
-    <h1>Vuelos de Aerolíneas Argentinas (AR/ARG) en <span id="airport-name">Aeroparque (AEP) y Ezeiza (EZE)</span></h1>
+    <h1>Vuelos disponibles</h1>
+    
+    <!-- Buscador por aerolínea -->
+    <div class="filter-container">
+      <label for="airline-filter">Filtrar por aerolínea (código IATA, ej. AR):</label>
+      <input type="text" id="airline-filter" placeholder="Ej. AR para Aerolíneas Argentinas">
+      <button id="filter-btn">Filtrar</button>
+    </div>
+    
     <button id="refresh-btn">Actualizar vuelos</button>
     
     <!-- Mapa -->
