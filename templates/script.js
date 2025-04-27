@@ -5,21 +5,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterBtn = document.getElementById('filter-btn');
   const airlineFilter = document.getElementById('airline-filter');
   const flightsBody = document.getElementById('flights-body');
-  const airportName = document.getElementById('airport-name');
+  const lastUpdated = document.getElementById('last-updated');
 
-  if (!refreshBtn || !filterBtn || !airlineFilter || !flightsBody) {
+  if (!refreshBtn || !filterBtn || !airlineFilter || !flightsBody || !lastUpdated) {
     console.error("No se encontraron los elementos del DOM:", {
       refreshBtn: !!refreshBtn,
       filterBtn: !!filterBtn,
       airlineFilter: !!airlineFilter,
       flightsBody: !!flightsBody,
-      airportName: !!airportName
+      lastUpdated: !!lastUpdated
     });
     return;
   }
 
   // Inicializar el mapa con Leaflet (centrado en un punto genérico)
-  const map = L.map('map').setView([-34.6907, -58.4757], 5); // Centro entre AEP y EZE, pero con zoom más amplio
+  const map = L.map('map').setView([-34.6907, -58.4757], 5);
 
   // Añadir capa de OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -31,14 +31,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Función para actualizar los marcadores en el mapa
   function updateMapMarkers(flights) {
-    // Limpiar marcadores existentes (excepto la capa base del mapa)
     map.eachLayer(layer => {
       if (layer instanceof L.Marker) {
         map.removeLayer(layer);
       }
     });
 
-    // Añadir marcadores para cada vuelo
     flights.forEach(flight => {
       if (flight.lat && flight.lon) {
         const marker = L.marker([flight.lat, flight.lon]).addTo(map);
@@ -57,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateTable(flights) {
     flightsBody.innerHTML = '';
     if (flights.length === 0) {
-      flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos para esta aerolínea.</td></tr>';
+      flightsBody.innerHTML = '<tr><td colspan="5">No se encontraron vuelos para esta aerolínea.</td></tr>';
       return;
     }
 
@@ -69,10 +67,15 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${flight.departure}</td>
         <td>${flight.arrival}</td>
         <td>${flight.status}</td>
-        <td>${new Date(flight.updated * 1000).toLocaleString('es-AR')}</td>
       `;
       flightsBody.appendChild(row);
     });
+  }
+
+  // Función para actualizar la hora de la última actualización
+  function updateLastUpdated() {
+    const now = new Date();
+    lastUpdated.textContent = `Última actualización: ${now.toLocaleString('es-AR')}`;
   }
 
   // Función para obtener y mostrar los vuelos
@@ -90,14 +93,14 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Datos recibidos:", data);
 
       if (data.error) {
-        flightsBody.innerHTML = `<tr><td colspan="6">Error: ${data.error}</td></tr>`;
+        flightsBody.innerHTML = `<tr><td colspan="5">Error: ${data.error}</td></tr>`;
         updateMapMarkers([]);
         return;
       }
 
       allFlights = data.flights || [];
       if (allFlights.length === 0) {
-        flightsBody.innerHTML = '<tr><td colspan="6">No se encontraron vuelos.</td></tr>';
+        flightsBody.innerHTML = '<tr><td colspan="5">No se encontraron vuelos.</td></tr>';
         updateMapMarkers([]);
         return;
       }
@@ -105,10 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // Mostrar todos los vuelos inicialmente
       updateTable(allFlights);
       updateMapMarkers(allFlights);
+      updateLastUpdated();
 
     } catch (error) {
       console.error("Error al cargar los vuelos:", error);
-      flightsBody.innerHTML = `<tr><td colspan="6">Error al cargar los vuelos: ${error.message}</td></tr>`;
+      flightsBody.innerHTML = `<tr><td colspan="5">Error al cargar los vuelos: ${error.message}</td></tr>`;
       updateMapMarkers([]);
     }
   }
@@ -117,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function filterFlights() {
     const airline = airlineFilter.value.trim().toUpperCase();
     if (!airline) {
-      // Si el campo está vacío, mostramos todos los vuelos
       updateTable(allFlights);
       updateMapMarkers(allFlights);
       return;
