@@ -27,7 +27,8 @@ API_URL = f"https://www.goflightlabs.com/flights?access_key={API_KEY}"
 # Coordenadas aproximadas de los aeropuertos
 AIRPORT_COORDS = {
     "AEP": {"lat": -34.5592, "lon": -58.4156},
-    "EZE": {"lat": -34.8222, "lon": -58.5358}
+    "EZE": {"lat": -34.8222, "lon": -58.5358},
+    # Añadiremos más aeropuertos si es necesario después de ver los datos de GoFlightLabs
 }
 
 # Ruta para servir la página principal (permitir GET y HEAD)
@@ -36,15 +37,10 @@ AIRPORT_COORDS = {
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Ruta para obtener los vuelos de Aeroparque (AEP) y Ezeiza (EZE)
+# Ruta para obtener todos los vuelos
 @app.get("/flights")
 async def get_flights():
     all_flights = []
-
-    # Calcular el rango de tiempo: desde 12 horas en el pasado hasta 12 horas en el futuro
-    current_time = int(time.time())
-    twelve_hours_ago = current_time - (12 * 3600)  # 12 horas en el pasado
-    twelve_hours_future = current_time + (12 * 3600)  # 12 horas en el futuro
 
     # 1. Consultar GoFlightLabs
     async with httpx.AsyncClient() as client:
@@ -61,17 +57,15 @@ async def get_flights():
             else:
                 flights = data.get("data", [])
                 logger.info(f"Total de vuelos recibidos de GoFlightLabs: {len(flights)}")
+                
+                # Registrar algunos vuelos crudos para depuración
+                if flights:
+                    logger.info(f"Primeros 3 vuelos crudos: {flights[:3]}")
+                else:
+                    logger.info("No se recibieron vuelos de GoFlightLabs")
 
-                # Filtrar vuelos de GoFlightLabs
-                filtered_goflight_flights = [
-                    flight for flight in flights
-                    if (flight.get("dep_iata") in ["AEP", "EZE"] or flight.get("arr_iata") in ["AEP", "EZE"])
-                    and (flight.get("flight_iata", "").startswith("AR") or flight.get("flight_iata", "").startswith("ARG"))
-                    and twelve_hours_ago <= flight.get("updated", 0) <= twelve_hours_future
-                ]
-
-                # Formatear vuelos de GoFlightLabs y añadir coordenadas
-                for flight in filtered_goflight_flights:
+                # Procesar todos los vuelos sin filtrar
+                for flight in flights:
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
                     
@@ -79,7 +73,6 @@ async def get_flights():
                     if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
                         dep_coords = AIRPORT_COORDS[departure]
                         arr_coords = AIRPORT_COORDS[arrival]
-                        # Simulamos una posición intermedia entre salida y llegada
                         lat = (dep_coords["lat"] + arr_coords["lat"]) / 2
                         lon = (dep_coords["lon"] + arr_coords["lon"]) / 2
                     else:
@@ -102,7 +95,7 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 2. Eliminar duplicados basados en flight_iata
+    # Eliminar duplicados basados en flight_iata
     seen_flights = set()
     unique_flights = []
     for flight in all_flights:
@@ -111,7 +104,7 @@ async def get_flights():
             seen_flights.add(flight_iata)
             unique_flights.append(flight)
 
-    logger.info(f"Vuelos combinados y filtrados para AEP/EZE y AR/ARG (entre 12h pasado y 12h futuro): {len(unique_flights)}")
+    logger.info(f"Total de vuelos procesados: {len(unique_flights)}")
 
     return {"flights": unique_flights}
 
