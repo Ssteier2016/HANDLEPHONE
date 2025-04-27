@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Actualizando tabla con", flights.length, "vuelos");
     flightsBody.innerHTML = '';
     if (flights.length === 0) {
-      flightsBody.innerHTML = '<tr><td colspan="5">No se encontraron vuelos para esta aerolínea.</td></tr>';
+      flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos para esta aerolínea.</td></tr>';
       return;
     }
 
@@ -70,7 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
       row.innerHTML = `
         <td>${flight.flight_iata || 'N/A'}</td>
         <td>${flight.airline_iata || 'N/A'}</td>
+        <td>${flight.estimated_departure || 'N/A'}</td>
         <td>${flight.departure || 'N/A'}</td>
+        <td>${flight.estimated_arrival || 'N/A'}</td>
         <td>${flight.arrival || 'N/A'}</td>
         <td>${flight.status || 'N/A'}</td>
       `;
@@ -100,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (data.error) {
         console.error("Error en los datos:", data.error);
-        flightsBody.innerHTML = `<tr><td colspan="5">Error: ${data.error}</td></tr>`;
+        flightsBody.innerHTML = `<tr><td colspan="7">Error: ${data.error}</td></tr>`;
         updateMapMarkers([]);
         return;
       }
@@ -109,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Vuelos procesados:", allFlights);
 
       if (allFlights.length === 0) {
-        flightsBody.innerHTML = '<tr><td colspan="5">No se encontraron vuelos.</td></tr>';
+        flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos.</td></tr>';
         updateMapMarkers([]);
         return;
       }
@@ -121,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     } catch (error) {
       console.error("Error al cargar los vuelos:", error);
-      flightsBody.innerHTML = `<tr><td colspan="5">Error al cargar los vuelos: ${error.message}</td></tr>`;
+      flightsBody.innerHTML = `<tr><td colspan="7">Error al cargar los vuelos: ${error.message}</td></tr>`;
       updateMapMarkers([]);
     }
   }
