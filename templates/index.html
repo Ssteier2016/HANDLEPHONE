@@ -5,12 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vuelos</title>
   <link rel="stylesheet" href="/templates/style.css">
+  <!-- Incluir Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
   <div class="container">
-    <img src="/templates/logo2.png" alt="Logo" class="logo">
+    <img src="/templates/logo.png" alt="Logo" class="logo">
     <h1>Vuelos de Aerolíneas Argentinas (AR/ARG) en <span id="airport-name">Aeroparque (AEP) y Ezeiza (EZE)</span></h1>
     <button id="refresh-btn">Actualizar vuelos</button>
+    
+    <!-- Mapa -->
+    <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
+    
+    <!-- Tabla de vuelos -->
     <table id="flights-table">
       <thead>
         <tr>
@@ -25,6 +32,9 @@
       <tbody id="flights-body"></tbody>
     </table>
   </div>
+  
+  <!-- Incluir Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/templates/script.js"></script>
 </body>
 </html>
