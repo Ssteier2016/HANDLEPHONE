@@ -8,7 +8,12 @@ import uvicorn
 import logging
 import time
 
-# Intentar importar FlightRadarAPI, pero continuar si falla
+# Configurar logging primero
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Comentamos el intento de importar FlightRadarAPI por ahora
+"""
 try:
     from flightradarapi import FlightRadar24API
     fr_api = FlightRadar24API()
@@ -16,10 +21,8 @@ try:
 except ImportError as e:
     logger.warning(f"No se pudo importar FlightRadarAPI: {str(e)}. Continuando solo con GoFlightLabs.")
     fr_api = None
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+"""
+fr_api = None  # Deshabilitamos FlightRadarAPI temporalmente
 
 app = FastAPI()
 
@@ -88,7 +91,8 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 2. Consultar FlightRadarAPI (si está disponible)
+    # 2. Consultar FlightRadarAPI (deshabilitado temporalmente)
+    """
     if fr_api:
         try:
             logger.info("Consultando la API de FlightRadar24...")
@@ -132,6 +136,7 @@ async def get_flights():
             logger.error(f"Error inesperado al consultar FlightRadar24: {str(e)}")
     else:
         logger.info("FlightRadarAPI no está disponible, omitiendo esta fuente.")
+    """
 
     # 3. Eliminar duplicados basados en flight_iata
     seen_flights = set()
