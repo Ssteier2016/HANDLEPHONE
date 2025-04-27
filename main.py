@@ -44,10 +44,15 @@ AIRPORT_COORDS = {
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--no-sandbox0
     chrome_options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+        logger.info("Driver de Selenium inicializado correctamente")
+        return driver
+    except Exception as e:
+        logger.error(f"Error al inicializar el driver de Selenium: {str(e)}")
+        raise
 
 # Función para parsear la fecha y hora del formato de AA2000 (ejemplo: "27 Abr 15:30")
 def parse_aa2000_datetime(date_str, time_str):
@@ -65,13 +70,14 @@ def parse_aa2000_datetime(date_str, time_str):
 
 # Scraper para AA2000
 def scrape_aa2000_flights():
-    driver = setup_driver()
+    driver = None
     flights = []
     current_time = int(time.time())
     six_hours_future = current_time + (6 * 3600)
 
     try:
         logger.info("Scrapeando datos de AA2000...")
+        driver = setup_driver()
         url = "https://www.aa2000.com.ar/arribos-y-partidas?airport=AEP"
         driver.get(url)
         time.sleep(5)  # Esperar a que la página cargue
@@ -89,7 +95,7 @@ def scrape_aa2000_flights():
                 airline = cells[1].text.strip()
                 origin = cells[2].text.strip()
                 scheduled_time = cells[3].text.strip()
-                date = "27 Apr"  # Ajustar según la fecha actual o scrapeada
+                date = datetime.now().strftime("%d %b")  # Usar fecha actual
                 status = cells[4].text.strip()
 
                 # Filtrar solo vuelos de Aerolíneas Argentinas
@@ -114,7 +120,7 @@ def scrape_aa2000_flights():
                 airline = cells[1].text.strip()
                 destination = cells[2].text.strip()
                 scheduled_time = cells[3].text.strip()
-                date = "27 Apr"  # Ajustar según la fecha actual o scrapeada
+                date = datetime.now().strftime("%d %b")  # Usar fecha actual
                 status = cells[4].text.strip()
 
                 # Filtrar solo vuelos de Aerolíneas Argentinas
@@ -138,7 +144,8 @@ def scrape_aa2000_flights():
     except Exception as e:
         logger.error(f"Error al scrapear AA2000: {str(e)}")
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
 
     return flights
 
