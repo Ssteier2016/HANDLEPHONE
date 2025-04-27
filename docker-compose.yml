@@ -1,0 +1,185 @@
+version: '3.7'
+
+services:
+  connector:
+    image: "ghcr.io/flightaware/firestarter/firestarter_connector:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: connector/Dockerfile
+    init: true
+    networks:
+      - internal
+    ports:
+      - "${STREAMING_PORT:-127.0.0.1:1601}:1601"
+    environment:
+      - FH_USERNAME=${FH_USERNAME:?FH_USERNAME variable must be set}
+      - FH_APIKEY=${FH_APIKEY:?FH_APIKEY variable must be set}
+      - SERVER=${SERVER:-firehose.flightaware.com}
+      - INIT_CMD_ARGS=${INIT_CMD_ARGS}
+      - KAFKA_TOPIC_NAME=events
+      - PYTHONUNBUFFERED=1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - kafka
+
+  db-updater:
+    image: "ghcr.io/flightaware/firestarter/firestarter_db-updater:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: db-updater/Dockerfile
+    init: true
+    networks:
+      - internal
+    environment:
+      - DB_URL=${FLIGHTS_DB_URL:-sqlite:///db/flights.db}
+      - PYTHONUNBUFFERED=1
+      - KAFKA_TOPIC_NAME=events
+      - KAFKA_GROUP_NAME=group1
+      - TABLE=flights
+    volumes:
+      - data:/home/firestarter/app/db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - kafka
+
+  position-db-updater:
+    image: "ghcr.io/flightaware/firestarter/firestarter_db-updater:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: db-updater/Dockerfile
+    init: true
+    networks:
+      - internal
+    environment:
+      - DB_URL=${POSITIONS_DB_URL:-postgresql://postgres:positions@timescaledb:5432}
+      - PYTHONUNBUFFERED=1
+      - KAFKA_TOPIC_NAME=events
+      - KAFKA_GROUP_NAME=position_group1
+      - TABLE=positions
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - kafka
+      - timescaledb
+
+  fids-backend:
+    image: "ghcr.io/flightaware/firestarter/firestarter_fids:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: fids/Dockerfile
+    init: true
+    networks:
+      internal:
+        aliases:
+          - fids-backend
+    environment:
+      - FLIGHTS_DB_URL=${FLIGHTS_DB_URL:-sqlite:///db/flights.db}
+      - POSITIONS_DB_URL=${POSITIONS_DB_URL:-postgresql://postgres:positions@timescaledb:5432}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - data:/home/firestarter/app/db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+
+  fids:
+    image: "ghcr.io/flightaware/firestarter/firestarter_fids_frontend:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: fids/frontend/Dockerfile
+    init: true
+    networks:
+      - internal
+    ports:
+      - "8080:8080"
+    environment:
+      - FIDS_BACKEND_URL=http://fids-backend:5000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - fids-backend
+
+  map:
+    image: "ghcr.io/flightaware/firestarter/firestarter_map:${FS_VERSION:-latest}"
+    build:
+      context: .
+      dockerfile: map/Dockerfile
+    init: true
+    networks:
+      - internal
+    ports:
+      - "5001:5001"
+    environment:
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - kafka
+
+  kafka:
+    image: "confluentinc/cp-kafka:7.0.1"
+    networks:
+      - internal
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: "confluentinc/cp-zookeeper:7.0.1"
+    networks:
+      - internal
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+
+  timescaledb:
+    image: "timescale/timescaledb:latest-pg14"
+    networks:
+      - internal
+    environment:
+      - POSTGRES_PASSWORD=positions
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "5"
+
+networks:
+  internal:
+
+volumes:
+  data:
