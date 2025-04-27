@@ -22,7 +22,24 @@ h1 {
   margin-bottom: 20px;
 }
 
-#refresh-btn {
+.filter-container {
+  margin-bottom: 20px;
+}
+
+.filter-container label {
+  font-size: 16px;
+  margin-right: 10px;
+}
+
+#airline-filter {
+  padding: 8px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  width: 200px;
+}
+
+#filter-btn, #refresh-btn {
   background-color: #4682B4;
   color: #FFFFFF;
   border: none;
@@ -30,11 +47,11 @@ h1 {
   padding: 10px 20px;
   cursor: pointer;
   font-size: 16px;
-  margin-bottom: 20px;
+  margin: 0 10px;
   transition: background-color 0.3s;
 }
 
-#refresh-btn:hover {
+#filter-btn:hover, #refresh-btn:hover {
   background-color: #FF4500;
 }
 
@@ -87,7 +104,16 @@ h1 {
     font-size: 20px;
   }
 
-  #refresh-btn {
+  .filter-container label {
+    font-size: 14px;
+  }
+
+  #airline-filter {
+    width: 150px;
+    font-size: 14px;
+  }
+
+  #filter-btn, #refresh-btn {
     padding: 8px 16px;
     font-size: 14px;
   }
