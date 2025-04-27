@@ -21,14 +21,17 @@ app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 templates = Jinja2Templates(directory="templates")
 
 # Clave de API de GoFlightLabs
-API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiZjkzOWJiZmM2ZWY3Y2QxMzcyY2I2NjJjZjI0NzI0ZTAwY2I0M2RmZTcyMmY2NDZiNTQwNjJiMTk0NGM4NGEwZDc3MjU1NWY1ZDA3YWRlZDkiLCJpYXQiOjE3NDQ5MjU3NjYsIm5iZiI6MTc0NDkyNTc2NiwiZXhwIjoxNzc2NDYxNzY1LCJzdWIiOiIyNDcxNyIsInNjb3BlcyI6W119.Ln6gpY3DDOUHesjuqbIeVYh86GLvggRaPaP8oGh-mGy8hQxMlqX7ie_U0zXfowKKFInnDdsHAg8PuZB2yt31qQ"
-API_URL = f"https://www.goflightlabs.com/flights?access_key={API_KEY}"
+GOFLIGHTLABS_API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiZjkzOWJiZmM2ZWY3Y2QxMzcyY2I2NjJjZjI0NzI0ZTAwY2I0M2RmZTcyMmY2NDZiNTQwNjJiMTk0NGM4NGEwZDc3MjU1NWY1ZDA3YWRlZDkiLCJpYXQiOjE3NDQ5MjU3NjYsIm5iZiI6MTc0NDkyNTc2NiwiZXhwIjoxNzc2NDYxNzY1LCJzdWIiOiIyNDcxNyIsInNjb3BlcyI6W119.Ln6gpY3DDOUHesjuqbIeVYh86GLvggRaPaP8oGh-mGy8hQxMlqX7ie_U0zXfowKKFInnDdsHAg8PuZB2yt31qQ"
+GOFLIGHTLABS_API_URL = f"https://www.goflightlabs.com/flights?access_key={GOFLIGHTLABS_API_KEY}"
+
+# Clave de API de AviationStack
+AVIATIONSTACK_API_KEY = "e2ffa37f30b26c5ab57dfbf77982a25b"
+AVIATIONSTACK_API_URL = f"http://api.aviationstack.com/v1/flights?access_key={AVIATIONSTACK_API_KEY}"
 
 # Coordenadas aproximadas de los aeropuertos
 AIRPORT_COORDS = {
     "AEP": {"lat": -34.5592, "lon": -58.4156},
     "EZE": {"lat": -34.8222, "lon": -58.5358},
-    # Añadiremos más aeropuertos si es necesario después de ver los datos de GoFlightLabs
 }
 
 # Ruta para servir la página principal (permitir GET y HEAD)
@@ -42,11 +45,15 @@ async def read_root(request: Request):
 async def get_flights():
     all_flights = []
 
-    # 1. Consultar GoFlightLabs
+    # Calcular el rango de tiempo: próximas 6 horas
+    current_time = int(time.time())
+    six_hours_future = current_time + (6 * 3600)  # 6 horas en el futuro
+
+    # 1. Consultar GoFlightLabs (sin filtros en el backend)
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de GoFlightLabs...")
-            response = await client.get(API_URL)
+            response = await client.get(GOFLIGHTLABS_API_URL)
             response.raise_for_status()
             data = response.json()
 
@@ -58,25 +65,20 @@ async def get_flights():
                 flights = data.get("data", [])
                 logger.info(f"Total de vuelos recibidos de GoFlightLabs: {len(flights)}")
                 
-                # Registrar algunos vuelos crudos para depuración
                 if flights:
-                    logger.info(f"Primeros 3 vuelos crudos: {flights[:3]}")
+                    logger.info(f"Primeros 3 vuelos crudos de GoFlightLabs: {flights[:3]}")
                 else:
                     logger.info("No se recibieron vuelos de GoFlightLabs")
 
-                # Procesar todos los vuelos sin filtrar
                 for flight in flights:
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
-                    
-                    # Asignar coordenadas aproximadas (simulamos posición intermedia)
                     if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
                         dep_coords = AIRPORT_COORDS[departure]
                         arr_coords = AIRPORT_COORDS[arrival]
                         lat = (dep_coords["lat"] + arr_coords["lat"]) / 2
                         lon = (dep_coords["lon"] + arr_coords["lon"]) / 2
                     else:
-                        # Si no conocemos las coordenadas, usamos un valor por defecto (centro entre AEP y EZE)
                         lat = (-34.5592 + -34.8222) / 2
                         lon = (-58.4156 + -58.5358) / 2
 
@@ -86,7 +88,6 @@ async def get_flights():
                         "departure": departure,
                         "arrival": arrival,
                         "status": flight.get("status", "N/A"),
-                        "updated": flight.get("updated", 0),
                         "lat": lat,
                         "lon": lon
                     })
@@ -95,7 +96,79 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # Eliminar duplicados basados en flight_iata
+    # 2. Consultar AviationStack (con filtros: Aerolíneas Argentinas, AEP, próximas 6 horas)
+    async with httpx.AsyncClient() as client:
+        try:
+            logger.info("Consultando la API de AviationStack...")
+            response = await client.get(AVIATIONSTACK_API_URL)
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Datos recibidos de AviationStack: {data}")
+
+            flights = data.get("data", [])
+            logger.info(f"Total de vuelos recibidos de AviationStack: {len(flights)}")
+            
+            if flights:
+                logger.info(f"Primeros 3 vuelos crudos de AviationStack: {flights[:3]}")
+            else:
+                logger.info("No se recibieron vuelos de AviationStack")
+
+            # Filtrar vuelos de AviationStack
+            filtered_flights = [
+                flight for flight in flights
+                if (
+                    # Solo Aerolíneas Argentinas (código IATA: AR)
+                    flight.get("airline", {}).get("iata", "").upper() == "AR"
+                    # Solo vuelos que lleguen o salgan de AEP
+                    and (flight.get("departure", {}).get("iata", "") == "AEP"
+                         or flight.get("arrival", {}).get("iata", "") == "AEP")
+                    # Solo vuelos en las próximas 6 horas
+                    and flight.get("departure", {}).get("scheduled", None) is not None
+                )
+            ]
+
+            # Filtrar por las próximas 6 horas
+            filtered_flights = [
+                flight for flight in filtered_flights
+                if (
+                    current_time <= parse_aviationstack_time(
+                        flight.get("departure", {}).get("scheduled", "1970-01-01T00:00:00+00:00")
+                    ) <= six_hours_future
+                )
+            ]
+
+            logger.info(f"Vuelos filtrados de AviationStack (AR, AEP, próximas 6 horas): {len(filtered_flights)}")
+
+            for flight in filtered_flights:
+                departure = flight.get("departure", {}).get("iata", "N/A")
+                arrival = flight.get("arrival", {}).get("iata", "N/A")
+                if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
+                    dep_coords = AIRPORT_COORDS[departure]
+                    arr_coords = AIRPORT_COORDS[arrival]
+                    lat = (dep_coords["lat"] + arr_coords["lat"]) / 2
+                    lon = (dep_coords["lon"] + arr_coords["lon"]) / 2
+                else:
+                    lat = (-34.5592 + -34.8222) / 2
+                    lon = (-58.4156 + -58.5358) / 2
+
+                status = flight.get("flight_status", "N/A")
+
+                all_flights.append({
+                    "flight_iata": flight.get("flight", {}).get("iata", "N/A"),
+                    "airline_iata": flight.get("airline", {}).get("iata", "N/A"),
+                    "departure": departure,
+                    "arrival": arrival,
+                    "status": status,
+                    "lat": lat,
+                    "lon": lon
+                })
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Error HTTP al consultar AviationStack: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error inesperado al consultar AviationStack: {str(e)}")
+
+    # 3. Eliminar duplicados basados en flight_iata
     seen_flights = set()
     unique_flights = []
     for flight in all_flights:
@@ -107,6 +180,15 @@ async def get_flights():
     logger.info(f"Total de vuelos procesados: {len(unique_flights)}")
 
     return {"flights": unique_flights}
+
+# Función auxiliar para parsear el tiempo de AviationStack
+def parse_aviationstack_time(time_str):
+    try:
+        # Formato esperado: "2025-04-27T14:30:00+00:00"
+        return int(time.mktime(time.strptime(time_str[:19], "%Y-%m-%dT%H:%M:%S")))
+    except Exception as e:
+        logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
+        return 0
 
 # Iniciar el servidor
 if __name__ == "__main__":
