@@ -7,22 +7,11 @@ import httpx
 import uvicorn
 import logging
 import time
+from confluent_kafka import Consumer, KafkaError
 
-# Configurar logging primero
+# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Comentamos el intento de importar FlightRadarAPI por ahora
-"""
-try:
-    from flightradarapi import FlightRadar24API
-    fr_api = FlightRadar24API()
-    logger.info("FlightRadarAPI importado correctamente")
-except ImportError as e:
-    logger.warning(f"No se pudo importar FlightRadarAPI: {str(e)}. Continuando solo con GoFlightLabs.")
-    fr_api = None
-"""
-fr_api = None  # Deshabilitamos FlightRadarAPI temporalmente
 
 app = FastAPI()
 
@@ -35,6 +24,55 @@ templates = Jinja2Templates(directory="templates")
 # Clave de API de GoFlightLabs
 API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiZjkzOWJiZmM2ZWY3Y2QxMzcyY2I2NjJjZjI0NzI0ZTAwY2I0M2RmZTcyMmY2NDZiNTQwNjJiMTk0NGM4NGEwZDc3MjU1NWY1ZDA3YWRlZDkiLCJpYXQiOjE3NDQ5MjU3NjYsIm5iZiI6MTc0NDkyNTc2NiwiZXhwIjoxNzc2NDYxNzY1LCJzdWIiOiIyNDcxNyIsInNjb3BlcyI6W119.Ln6gpY3DDOUHesjuqbIeVYh86GLvggRaPaP8oGh-mGy8hQxMlqX7ie_U0zXfowKKFInnDdsHAg8PuZB2yt31qQ"
 API_URL = f"https://www.goflightlabs.com/flights?access_key={API_KEY}"
+
+# Configurar el consumidor de Kafka para Firehose
+kafka_config = {
+    'bootstrap.servers': 'localhost:9092',  # Asegúrate de que Kafka esté accesible (puede necesitar ajustes según tu configuración de red)
+    'group.id': 'flightaware-consumer-group',
+    'auto.offset.reset': 'earliest'
+}
+kafka_consumer = Consumer(kafka_config)
+kafka_consumer.subscribe(['events'])  # El tópico 'events' es el que usa Firestarter
+
+# Función para consumir mensajes de Kafka
+def consume_firehose_messages():
+    firehose_flights = []
+    try:
+        logger.info("Iniciando consumo de mensajes de Firehose a través de Kafka...")
+        while len(firehose_flights) < 10:  # Limitamos a 10 mensajes para este ejemplo
+            msg = kafka_consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    logger.error(f"Error de Kafka: {msg.error()}")
+                    break
+            # Procesar el mensaje de Firehose
+            message_value = msg.value().decode('utf-8')
+            logger.info(f"Mensaje de Firehose recibido: {message_value}")
+            # Parsear el mensaje (esto depende del formato exacto de los datos de Firehose)
+            # Para este ejemplo, asumimos que es un JSON con campos similares a GoFlightLabs
+            import json
+            try:
+                flight_data = json.loads(message_value)
+                if flight_data.get('type') in ['flifo', 'departure', 'arrival', 'cancellation', 'position']:
+                    firehose_flights.append({
+                        "flight_iata": flight_data.get('ident', 'N/A'),
+                        "airline_iata": flight_data.get('operator', 'N/A'),
+                        "departure": flight_data.get('origin', {}).get('code_iata', 'N/A'),
+                        "arrival": flight_data.get('destination', {}).get('code_iata', 'N/A'),
+                        "status": flight_data.get('status', 'N/A'),
+                        "updated": int(time.time())  # Ajusta según el formato de los datos
+                    })
+            except json.JSONDecodeError as e:
+                logger.error(f"Error al parsear mensaje de Firehose: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error al consumir mensajes de Firehose: {str(e)}")
+    finally:
+        kafka_consumer.close()
+    return firehose_flights
 
 # Ruta para servir la página principal (permitir GET y HEAD)
 @app.get("/", response_class=HTMLResponse)
@@ -91,52 +129,28 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 2. Consultar FlightRadarAPI (deshabilitado temporalmente)
-    """
-    if fr_api:
-        try:
-            logger.info("Consultando la API de FlightRadar24...")
-            flights = fr_api.get_flights()
+    # 2. Consultar Firehose a través de Kafka
+    firehose_flights = consume_firehose_messages()
+    logger.info(f"Total de vuelos recibidos de Firehose: {len(firehose_flights)}")
 
-            # Convertir los vuelos a una lista de diccionarios
-            fr_flights_data = []
-            for flight in flights:
-                flight_details = fr_api.get_flight_details(flight.id)
-                flight_data = {
-                    "flight_iata": flight.iata or "N/A",
-                    "airline_iata": flight.airline_iata or "N/A",
-                    "departure": flight.origin_airport_iata or "N/A",
-                    "arrival": flight.destination_airport_iata or "N/A",
-                    "status": flight.status_text or "N/A",
-                    "updated": int(flight.time["scheduled"]["departure"] or time.time())
-                }
-                fr_flights_data.append(flight_data)
+    # Filtrar vuelos de Firehose
+    filtered_firehose_flights = [
+        flight for flight in firehose_flights
+        if (flight.get("departure") in ["AEP", "EZE"] or flight.get("arrival") in ["AEP", "EZE"])
+        and (flight.get("flight_iata", "").startswith("AR") or flight.get("flight_iata", "").startswith("ARG"))
+        and twelve_hours_ago <= flight.get("updated", 0) <= twelve_hours_future
+    ]
 
-            logger.info(f"Total de vuelos recibidos de FlightRadar24: {len(fr_flights_data)}")
-
-            # Filtrar vuelos de FlightRadarAPI
-            filtered_fr_flights = [
-                flight for flight in fr_flights_data
-                if (flight.get("departure") in ["AEP", "EZE"] or flight.get("arrival") in ["AEP", "EZE"])
-                and (flight.get("flight_iata", "").startswith("AR") or flight.get("flight_iata", "").startswith("ARG"))
-                and twelve_hours_ago <= flight.get("updated", 0) <= twelve_hours_future
-            ]
-
-            # Agregar vuelos de FlightRadarAPI a la lista combinada
-            for flight in filtered_fr_flights:
-                all_flights.append({
-                    "flight_iata": flight.get("flight_iata", "N/A"),
-                    "airline_iata": flight.get("airline_iata", "N/A"),
-                    "departure": flight.get("departure", "N/A"),
-                    "arrival": flight.get("arrival", "N/A"),
-                    "status": flight.get("status", "N/A"),
-                    "updated": flight.get("updated", 0)
-                })
-        except Exception as e:
-            logger.error(f"Error inesperado al consultar FlightRadar24: {str(e)}")
-    else:
-        logger.info("FlightRadarAPI no está disponible, omitiendo esta fuente.")
-    """
+    # Agregar vuelos de Firehose a la lista combinada
+    for flight in filtered_firehose_flights:
+        all_flights.append({
+            "flight_iata": flight.get("flight_iata", "N/A"),
+            "airline_iata": flight.get("airline_iata", "N/A"),
+            "departure": flight.get("departure", "N/A"),
+            "arrival": flight.get("arrival", "N/A"),
+            "status": flight.get("status", "N/A"),
+            "updated": flight.get("updated", 0)
+        })
 
     # 3. Eliminar duplicados basados en flight_iata
     seen_flights = set()
