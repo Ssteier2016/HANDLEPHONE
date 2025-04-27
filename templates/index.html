@@ -1,51 +1,45 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vuelos</title>
-  <link rel="stylesheet" href="/templates/style.css">
-  <!-- Incluir Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguimiento de Vuelos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="/templates/style.css">
 </head>
 <body>
-  <div class="container">
-    <img src="/templates/logo.png" alt="Logo" class="logo">
-    <h1>Vuelos disponibles</h1>
-    
-    <!-- Buscador por aerolínea -->
-    <div class="filter-container">
-      <label for="airline-filter">Filtrar por aerolínea (código IATA, ej. AR):</label>
-      <input type="text" id="airline-filter" placeholder="Ej. AR para Aerolíneas Argentinas">
-      <button id="filter-btn">Filtrar</button>
+    <div class="container">
+        <div class="header">
+            <img src="/templates/logo.png" alt="Logo" class="logo">
+            <h1>Seguimiento de Vuelos</h1>
+        </div>
+        <div class="controls">
+            <input type="text" id="airline-filter" placeholder="Filtrar por aerolínea (ej. AR)">
+            <button id="filter-btn">Filtrar</button>
+            <button id="refresh-btn">Actualizar vuelos</button>
+        </div>
+        <p id="last-updated">Última actualización: --</p>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Vuelo</th>
+                        <th>Aerolínea</th>
+                        <th>Hora estimada de salida</th>
+                        <th>Salida</th>
+                        <th>Hora estimada de llegada</th>
+                        <th>Llegada</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="flights-body">
+                    <tr><td colspan="7">Cargando vuelos...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="map" style="height: 400px;"></div>
     </div>
-    
-    <!-- Botón de actualizar y hora de última actualización -->
-    <div class="update-container">
-      <button id="refresh-btn">Actualizar vuelos</button>
-      <span id="last-updated">Última actualización: --</span>
-    </div>
-    
-    <!-- Mapa -->
-    <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
-    
-    <!-- Tabla de vuelos -->
-    <table id="flights-table">
-      <thead>
-        <tr>
-          <th>Vuelo</th>
-          <th>Aerolínea</th>
-          <th>Salida</th>
-          <th>Llegada</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody id="flights-body"></tbody>
-    </table>
-  </div>
-  
-  <!-- Incluir Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/templates/script.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="/templates/script.js"></script>
 </body>
 </html>
