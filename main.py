@@ -44,10 +44,12 @@ AIRPORT_COORDS = {
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox0
+    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     try:
-        driver = webdriver.Chrome(options=chrome_options)
+        # Especificar la ruta de ChromeDriver manualmente
+        service = Service('/usr/local/bin/chromedriver')
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         logger.info("Driver de Selenium inicializado correctamente")
         return driver
     except Exception as e:
@@ -63,10 +65,10 @@ def parse_aa2000_datetime(date_str, time_str):
         # Ajustar a la zona horaria de Buenos Aires (-03:00)
         tz = pytz.timezone("America/Argentina/Buenos_Aires")
         dt = tz.localize(dt)
-        return int(dt.timestamp())
+        return int(dt.timestamp()), dt.strftime("%H:%M")
     except Exception as e:
         logger.error(f"Error al parsear fecha de AA2000: {date_str} {time_str}, error: {str(e)}")
-        return 0
+        return 0, "N/A"
 
 # Scraper para AA2000
 def scrape_aa2000_flights():
@@ -100,13 +102,15 @@ def scrape_aa2000_flights():
 
                 # Filtrar solo vuelos de Aerolíneas Argentinas
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
-                    scheduled_timestamp = parse_aa2000_datetime(date, scheduled_time)
+                    scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
                         flights.append({
                             "flight_iata": flight_number,
                             "airline_iata": "AR",
                             "departure": origin,
                             "arrival": "AEP",
+                            "estimated_departure": "N/A",  # AA2000 no proporciona esta info en el ejemplo
+                            "estimated_arrival": formatted_time,
                             "status": status,
                             "lat": AIRPORT_COORDS["AEP"]["lat"],
                             "lon": AIRPORT_COORDS["AEP"]["lon"]
@@ -125,13 +129,15 @@ def scrape_aa2000_flights():
 
                 # Filtrar solo vuelos de Aerolíneas Argentinas
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
-                    scheduled_timestamp = parse_aa2000_datetime(date, scheduled_time)
+                    scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
                         flights.append({
                             "flight_iata": flight_number,
                             "airline_iata": "AR",
                             "departure": "AEP",
                             "arrival": destination,
+                            "estimated_departure": formatted_time,
+                            "estimated_arrival": "N/A",  # AA2000 no proporciona esta info en el ejemplo
                             "status": status,
                             "lat": AIRPORT_COORDS["AEP"]["lat"],
                             "lon": AIRPORT_COORDS["AEP"]["lon"]
@@ -202,11 +208,21 @@ async def get_flights():
                         lat = (-34.5592 + -34.8222) / 2
                         lon = (-58.4156 + -58.5358) / 2
 
+                    # Extraer horas estimadas de salida y llegada
+                    estimated_departure = flight.get("dep_estimated", "N/A")
+                    estimated_arrival = flight.get("arr_estimated", "N/A")
+                    if estimated_departure != "N/A":
+                        estimated_departure = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                    if estimated_arrival != "N/A":
+                        estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+
                     all_flights.append({
                         "flight_iata": flight.get("flight_iata", "N/A"),
                         "airline_iata": flight.get("airline_iata", "N/A"),
                         "departure": departure,
                         "arrival": arrival,
+                        "estimated_departure": estimated_departure,
+                        "estimated_arrival": estimated_arrival,
                         "status": flight.get("status", "N/A"),
                         "lat": lat,
                         "lon": lon
@@ -271,11 +287,21 @@ async def get_flights():
 
                 status = flight.get("flight_status", "N/A")
 
+                # Extraer horas estimadas de salida y llegada
+                estimated_departure = flight.get("departure", {}).get("estimated", "N/A")
+                estimated_arrival = flight.get("arrival", {}).get("estimated", "N/A")
+                if estimated_departure != "N/A":
+                    estimated_departure = datetime.strptime(estimated_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                if estimated_arrival != "N/A":
+                    estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+
                 all_flights.append({
                     "flight_iata": flight.get("flight", {}).get("iata", "N/A"),
                     "airline_iata": flight.get("airline", {}).get("iata", "N/A"),
                     "departure": departure,
                     "arrival": arrival,
+                    "estimated_departure": estimated_departure,
+                    "estimated_arrival": estimated_arrival,
                     "status": status,
                     "lat": lat,
                     "lon": lon
