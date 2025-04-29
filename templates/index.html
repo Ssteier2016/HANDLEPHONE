@@ -40,11 +40,32 @@
     .container {
       padding: 20px;
     }
+    #map-container {
+      position: relative;
+      margin-bottom: 20px;
+    }
     #map {
       height: 400px;
-      margin-bottom: 20px;
       border: 1px solid #ccc;
       border-radius: 4px;
+      transition: height 0.3s ease;
+    }
+    #map.minimized {
+      height: 100px;
+    }
+    #map-toggle {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #map-toggle:hover {
+      background-color: #0056b3;
     }
     #flights-table-container {
       margin-top: 20px;
@@ -94,9 +115,8 @@
     #chat-container {
       position: fixed;
       bottom: 20px;
-      right: 20px;
+      left: 20px;
       width: 300px;
-      height: 400px;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 8px;
@@ -104,6 +124,10 @@
       display: flex;
       flex-direction: column;
       z-index: 1000;
+      transition: height 0.3s ease;
+    }
+    #chat-container.minimized {
+      height: 40px;
     }
     #chat-container h3 {
       margin: 0;
@@ -112,12 +136,38 @@
       color: white;
       border-top-left-radius: 8px;
       border-top-right-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+    }
+    #chat-toggle {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #unread-count {
+      position: absolute;
+      top: 5px;
+      right: 30px;
+      background-color: red;
+      color: white;
+      border-radius: 50%;
+      padding: 2px 6px;
+      font-size: 12px;
+      display: none;
     }
     #chat-messages {
       flex: 1;
       padding: 10px;
       overflow-y: auto;
       border-bottom: 1px solid #ccc;
+      display: none;
+    }
+    #chat-container:not(.minimized) #chat-messages {
+      display: block;
     }
     .chat-message {
       margin-bottom: 10px;
@@ -131,6 +181,10 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
+      display: none;
+    }
+    #chat-container:not(.minimized) #chat-input {
+      display: flex;
     }
     #chat-input input {
       padding: 5px;
@@ -153,24 +207,82 @@
       color: red;
       font-size: 0.9em;
     }
+    #filters {
+      margin-bottom: 20px;
+    }
+    #filters input {
+      padding: 5px;
+      margin-right: 10px;
+      width: 200px;
+    }
+    #filters button {
+      padding: 5px 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #filters button:hover {
+      background-color: #0056b3;
+    }
+    .update-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    #update-btn {
+      padding: 5px 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #update-btn:hover {
+      background-color: #218838;
+    }
+    .details-row {
+      display: none;
+    }
+    .details-row.visible {
+      display: table-row;
+    }
+    #users-connected {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>Bienvenido, {{ user.apellido }} ({{ user.legajo }})</h1>
+    <h1>Bienvenido, {{ user.apellido }} ({{ user.position }})</h1>
     <button class="logout-btn" onclick="window.location.href='/logout'">Cerrar Sesión</button>
   </div>
 
   <div class="container">
     <img src="/templates/logo.png" alt="Logo" style="max-width: 200px; margin-bottom: 20px;">
-    <div id="map"></div>
 
-    <!-- Filtros (puedes mantenerlos si los tienes implementados) -->
-    <div id="filters">
-      <!-- Aquí puedes añadir filtros si es necesario -->
+    <div id="map-container">
+      <button id="map-toggle">Minimizar Mapa</button>
+      <div id="map"></div>
     </div>
 
-    <!-- Tabla de vuelos -->
+    <div id="filters">
+      <label>Vuelos disponibles</label>
+      <br>
+      <input type="text" id="search-input" placeholder="Ej. AR AEP EZE">
+      <button onclick="filterFlights()">Filtrar</button>
+    </div>
+
+    <div class="update-info">
+      <span>Última actualización: <span id="last-update">Cargando...</span></span>
+      <button id="update-btn" onclick="updateFlightsTable()">Actualizar vuelos</button>
+      <span>Habilitar voz para llegadas: <input type="checkbox" id="voice-notifications"></span>
+      <span>Usuarios conectados: <span id="users-count">0</span></span>
+      <div id="users-connected"></div>
+    </div>
+
     <div id="flights-table-container">
       <table id="flights-table">
         <thead>
@@ -190,6 +302,7 @@
             <th>Avión</th>
             <th>Estado</th>
             <th>Observaciones</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody id="flights-tbody"></tbody>
@@ -201,9 +314,12 @@
       </div>
     </div>
 
-    <!-- Chat global -->
     <div id="chat-container">
-      <h3>Chat Global</h3>
+      <h3>
+        Chat Global
+        <span id="unread-count">0</span>
+        <button id="chat-toggle">−</button>
+      </h3>
       <div id="chat-messages"></div>
       <div id="chat-input">
         <input type="text" id="chat-message-input" placeholder="Escribe un mensaje...">
@@ -218,18 +334,16 @@
     // Inicializar el mapa
     const map = L.map("map").setView([-34.5592, -58.4156], 15);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     let markers = [];
 
     // Función para actualizar el mapa
     function updateMap(flights) {
-      // Limpiar marcadores existentes
       markers.forEach(marker => map.removeLayer(marker));
       markers = [];
 
-      // Agregar nuevos marcadores
       flights.forEach(flight => {
         if (flight.lat && flight.lon) {
           const marker = L.marker([flight.lat, flight.lon]).addTo(map);
@@ -249,66 +363,133 @@
 
     let currentPage = 1;
     let totalPages = 1;
+    let allFlights = [];
+    let filteredFlights = [];
+
+    // Función para filtrar vuelos
+    function filterFlights() {
+      const searchInput = document.getElementById("search-input").value.toUpperCase().trim();
+      const terms = searchInput.split(" ");
+
+      filteredFlights = allFlights.filter(flight => {
+        const airlineMatch = terms.includes("AR") ? flight.airline_iata === "AR" : true;
+        const departureMatch = terms.some(term => flight.departure === term || flight.departure_airport.includes(term));
+        const arrivalMatch = terms.some(term => flight.arrival === term || flight.arrival_airport.includes(term));
+        return airlineMatch && (departureMatch || arrivalMatch);
+      });
+
+      totalPages = Math.ceil(filteredFlights.length / 25);
+      currentPage = 1;
+      renderFlights();
+    }
+
+    // Función para renderizar los vuelos
+    function renderFlights() {
+      const flightsPerPage = 25;
+      const startIdx = (currentPage - 1) * flightsPerPage;
+      const endIdx = startIdx + flightsPerPage;
+      const paginatedFlights = filteredFlights.slice(startIdx, endIdx);
+
+      const tbody = document.getElementById("flights-tbody");
+      tbody.innerHTML = "";
+
+      if (paginatedFlights.length > 0) {
+        paginatedFlights.forEach((flight, index) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${flight.flight_iata}</td>
+            <td>${flight.airline_name}</td>
+            <td>${flight.departure_airport} (${flight.departure})</td>
+            <td>${flight.arrival_airport} (${flight.arrival})</td>
+            <td>${flight.estimated_departure}</td>
+            <td>${flight.estimated_arrival}</td>
+            <td>${flight.departure_delay}</td>
+            <td>${flight.arrival_delay}</td>
+            <td>${flight.departure_gate}</td>
+            <td>${flight.arrival_gate}</td>
+            <td>${flight.departure_terminal}</td>
+            <td>${flight.arrival_terminal}</td>
+            <td>${flight.aircraft}</td>
+            <td>${flight.status}</td>
+            <td>${flight.observations}</td>
+            <td><button onclick="toggleDetails(${startIdx + index})">Ver más</button></td>
+          `;
+          tbody.appendChild(row);
+
+          const detailsRow = document.createElement("tr");
+          detailsRow.classList.add("details-row");
+          detailsRow.id = `details-${startIdx + index}`;
+          detailsRow.innerHTML = `
+            <td colspan="16">
+              Nombre completo del aeropuerto de salida: ${flight.departure_airport}<br>
+              Nombre completo del aeropuerto de llegada: ${flight.arrival_airport}<br>
+              Hora programada de salida: ${flight.scheduled_departure}<br>
+              Retraso de salida: ${flight.departure_delay} minutos<br>
+              Terminal de salida: ${flight.departure_terminal}<br>
+              Puerta de salida: ${flight.departure_gate}<br>
+              Hora programada de llegada: ${flight.scheduled_arrival}<br>
+              Retraso de llegada: ${flight.arrival_delay} minutos<br>
+              Terminal de llegada: ${flight.arrival_terminal}<br>
+              Puerta de llegada: ${flight.arrival_gate}<br>
+              Tipo de avión: ${flight.aircraft}<br>
+              Observaciones: ${flight.observations}
+            </td>
+          `;
+          tbody.appendChild(detailsRow);
+        });
+
+        updateMap(paginatedFlights);
+        document.getElementById("page-info").textContent = `Página ${currentPage} de ${totalPages}`;
+        document.getElementById("prev-page").disabled = currentPage === 1;
+        document.getElementById("next-page").disabled = currentPage === totalPages;
+      } else {
+        tbody.innerHTML = `<tr><td colspan="16">No se encontraron vuelos.</td></tr>`;
+        updateMap([]);
+        document.getElementById("page-info").textContent = `Página 1 de 1`;
+        document.getElementById("prev-page").disabled = true;
+        document.getElementById("next-page").disabled = true;
+      }
+    }
+
+    // Función para toggle de detalles
+    function toggleDetails(index) {
+      const detailsRow = document.getElementById(`details-${index}`);
+      detailsRow.classList.toggle("visible");
+    }
 
     // Función para actualizar la tabla de vuelos
-    async function updateFlightsTable(page = 1) {
-      currentPage = page;
+    async function updateFlightsTable() {
       try {
-        const response = await fetch(`/flights?page=${page}`);
+        const response = await fetch(`/flights?page=${currentPage}`);
         const data = await response.json();
 
-        const tbody = document.getElementById("flights-tbody");
-        tbody.innerHTML = ""; // Limpiar la tabla
+        allFlights = data.flights || [];
+        filteredFlights = [...allFlights];
+        totalPages = data.total_pages || 1;
+        renderFlights();
 
-        if (data.flights && data.flights.length > 0) {
-          data.flights.forEach(flight => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${flight.flight_iata}</td>
-              <td>${flight.airline_name}</td>
-              <td>${flight.departure_airport} (${flight.departure})</td>
-              <td>${flight.arrival_airport} (${flight.arrival})</td>
-              <td>${flight.estimated_departure}</td>
-              <td>${flight.estimated_arrival}</td>
-              <td>${flight.departure_delay}</td>
-              <td>${flight.arrival_delay}</td>
-              <td>${flight.departure_gate}</td>
-              <td>${flight.arrival_gate}</td>
-              <td>${flight.departure_terminal}</td>
-              <td>${flight.arrival_terminal}</td>
-              <td>${flight.aircraft}</td>
-              <td>${flight.status}</td>
-              <td>${flight.observations}</td>
-            `;
-            tbody.appendChild(row);
-          });
-
-          // Actualizar el mapa con los vuelos de la página actual
-          updateMap(data.flights);
-
-          // Actualizar información de paginación
-          totalPages = data.total_pages || 1;
-          document.getElementById("page-info").textContent = `Página ${data.current_page} de ${totalPages}`;
-
-          // Habilitar/deshabilitar botones de paginación
-          document.getElementById("prev-page").disabled = currentPage === 1;
-          document.getElementById("next-page").disabled = currentPage === totalPages;
-        } else {
-          tbody.innerHTML = `<tr><td colspan="15">No se encontraron vuelos.</td></tr>`;
-          updateMap([]);
-          document.getElementById("page-info").textContent = `Página 1 de 1`;
-          document.getElementById("prev-page").disabled = true;
-          document.getElementById("next-page").disabled = true;
-        }
-
-        // Mostrar fuentes fallidas
         if (data.failed_sources && data.failed_sources.length > 0) {
           alert(`No se pudieron obtener datos de las siguientes fuentes: ${data.failed_sources.join(", ")}`);
+        }
+
+        const now = new Date();
+        document.getElementById("last-update").textContent = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+
+        // Notificaciones de voz para llegadas
+        const voiceEnabled = document.getElementById("voice-notifications").checked;
+        if (voiceEnabled) {
+          data.flights.forEach(flight => {
+            if (flight.status === "landed" && flight.arrival === "AEP") {
+              const msg = new SpeechSynthesisUtterance(`El vuelo ${flight.flight_iata} de ${flight.airline_name} con origen ${flight.departure_airport} ha llegado a Aeroparque.`);
+              msg.lang = "es-ES";
+              window.speechSynthesis.speak(msg);
+            }
+          });
         }
       } catch (error) {
         console.error("Error al obtener los vuelos:", error);
         const tbody = document.getElementById("flights-tbody");
-        tbody.innerHTML = `<tr><td colspan="15">Error al cargar los vuelos.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="16">Error al cargar los vuelos.</td></tr>`;
         updateMap([]);
       }
     }
@@ -316,24 +497,46 @@
     // Event listeners para los botones de paginación
     document.getElementById("prev-page").addEventListener("click", () => {
       if (currentPage > 1) {
-        updateFlightsTable(currentPage - 1);
+        currentPage--;
+        renderFlights();
       }
     });
 
     document.getElementById("next-page").addEventListener("click", () => {
       if (currentPage < totalPages) {
-        updateFlightsTable(currentPage + 1);
+        currentPage++;
+        renderFlights();
       }
     });
 
     // Actualizar la tabla al cargar la página
     updateFlightsTable();
 
+    // WebSocket para usuarios conectados
+    const ws = new WebSocket(`wss://${window.location.host}/ws`);
+    ws.onmessage = (event) => {
+      const count = event.data;
+      document.getElementById("users-count").textContent = count;
+
+      // Obtener lista de usuarios conectados
+      fetch("/users").then(res => res.json()).then(data => {
+        const usersDiv = document.getElementById("users-connected");
+        usersDiv.innerHTML = "";
+        data.users.forEach(user => {
+          const userItem = document.createElement("div");
+          userItem.textContent = `${user.apellido} (${user.legajo}) - ${user.position}`;
+          usersDiv.appendChild(userItem);
+        });
+      });
+    };
+
     // WebSocket para el chat global
     const chatSocket = new WebSocket(`wss://${window.location.host}/chat`);
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
+    let unreadMessages = 0;
+    let isChatMinimized = false;
 
     chatSocket.onopen = () => {
       console.log("Conexión de chat establecida");
@@ -353,7 +556,14 @@
       }
 
       chatMessages.appendChild(messageElement);
-      chatMessages.scrollTop = chatMessages.scrollHeight; // Desplazar al final
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      if (isChatMinimized) {
+        unreadMessages++;
+        const unreadCount = document.getElementById("unread-count");
+        unreadCount.textContent = unreadMessages;
+        unreadCount.style.display = "block";
+      }
     };
 
     chatSocket.onclose = () => {
@@ -380,7 +590,6 @@
       const status = document.getElementById("recording-status");
 
       if (!isRecording) {
-        // Comenzar grabación
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(stream);
@@ -413,7 +622,6 @@
           status.textContent = "Error al grabar audio.";
         }
       } else {
-        // Parar grabación
         mediaRecorder.stop();
         isRecording = false;
         recordButton.textContent = "Grabar Audio";
@@ -425,8 +633,31 @@
     document.getElementById("chat-message-input").addEventListener("keypress", (event) => {
       if (event.key === "Enter") {
         document.getElementById("send-message").click();
+        }
+    });
+
+    // Minimizar/expandir chat
+    document.getElementById("chat-toggle").addEventListener("click", () => {
+      const chatContainer = document.getElementById("chat-container");
+      const toggleButton = document.getElementById("chat-toggle");
+      isChatMinimized = !isChatMinimized;
+      chatContainer.classList.toggle("minimized", isChatMinimized);
+      toggleButton.textContent = isChatMinimized ? "+" : "−";
+      if (!isChatMinimized) {
+        unreadMessages = 0;
+        document.getElementById("unread-count").style.display = "none";
       }
+    });
+
+    // Minimizar/expandir mapa
+    document.getElementById("map-toggle").addEventListener("click", () => {
+      const mapDiv = document.getElementById("map");
+      const toggleButton = document.getElementById("map-toggle");
+      const isMinimized = mapDiv.classList.toggle("minimized");
+      toggleButton.textContent = isMinimized ? "Expandir Mapa" : "Minimizar Mapa";
+      map.invalidateSize();
     });
   </script>
 </body>
 </html>
+ 
