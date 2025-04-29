@@ -12,17 +12,23 @@
     <img src="/templates/logo.png" alt="Logo" class="logo">
     <h1>Vuelos disponibles</h1>
     
-    <!-- Buscador por aerolínea -->
+    <!-- Buscador por aerolínea, origen y destino -->
     <div class="filter-container">
-      <label for="airline-filter">Filtrar por aerolínea  (ej. AR):</label>
+      <label for="airline-filter">Filtrar por aerolínea (código IATA, ej. AR):</label>
       <input type="text" id="airline-filter" placeholder="Ej. AR para Aerolíneas Argentinas">
+      <label for="origin-filter">Origen (código IATA, ej. AEP):</label>
+      <input type="text" id="origin-filter" placeholder="Ej. AEP">
+      <label for="destination-filter">Destino (código IATA, ej. EZE):</label>
+      <input type="text" id="destination-filter" placeholder="Ej. EZE">
       <button id="filter-btn">Filtrar</button>
     </div>
     
-    <!-- Botón de actualizar y hora de última actualización -->
+    <!-- Botón de actualizar, hora de última actualización y opción de voz -->
     <div class="update-container">
       <button id="refresh-btn">Actualizar vuelos</button>
       <span id="last-updated">Última actualización: --</span>
+      <label for="voice-toggle" style="margin-left: 15px;">Habilitar voz para llegadas:</label>
+      <input type="checkbox" id="voice-toggle">
     </div>
     
     <!-- Mapa -->
