@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime, timedelta
 import pytz
+import asyncio
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,9 @@ AIRPORT_COORDS = {
     "EZE": {"lat": -34.8222, "lon": -58.5358},
 }
 
+# Lista para rastrear conexiones WebSocket activas
+connected_clients = set()
+
 # Configurar Selenium para el scraper
 def setup_driver():
     chrome_options = Options()
@@ -48,7 +52,6 @@ def setup_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     try:
         logger.info("Intentando inicializar el driver de Selenium...")
-        # Especificar la ruta de ChromeDriver manualmente
         service = Service('/usr/local/bin/chromedriver')
         logger.info("Ruta de ChromeDriver especificada: /usr/local/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -56,15 +59,13 @@ def setup_driver():
         return driver
     except Exception as e:
         logger.error(f"Error al inicializar el driver de Selenium: {str(e)}")
-        return None  # Devolver None en lugar de lanzar una excepción
+        return None
 
-# Función para parsear la fecha y hora del formato de AA2000 (ejemplo: "27 Abr 15:30")
+# Función para parsear la fecha y hora del formato de AA2000
 def parse_aa2000_datetime(date_str, time_str):
     try:
-        # Combinar fecha y hora (ejemplo: "27 Abr 15:30")
         datetime_str = f"{date_str} {time_str} 2025"
         dt = datetime.strptime(datetime_str, "%d %b %H:%M %Y")
-        # Ajustar a la zona horaria de Buenos Aires (-03:00)
         tz = pytz.timezone("America/Argentina/Buenos_Aires")
         dt = tz.localize(dt)
         return int(dt.timestamp()), dt.strftime("%H:%M")
@@ -88,14 +89,11 @@ def scrape_aa2000_flights():
 
         url = "https://www.aa2000.com.ar/arribos-y-partidas?airport=AEP"
         driver.get(url)
-        time.sleep(5)  # Esperar a que la página cargue
+        time.sleep(5)
 
-        # Encontrar las tablas de arribos y partidas
-        # Nota: Los selectores deben ajustarse según la estructura real del sitio
         arrivals = driver.find_elements(By.CSS_SELECTOR, "div.arrivals table tbody tr")
         departures = driver.find_elements(By.CSS_SELECTOR, "div.departures table tbody tr")
 
-        # Procesar arribos
         for row in arrivals:
             cells = row.find_elements(By.TAG_NAME, "td")
             if len(cells) >= 5:
@@ -103,10 +101,9 @@ def scrape_aa2000_flights():
                 airline = cells[1].text.strip()
                 origin = cells[2].text.strip()
                 scheduled_time = cells[3].text.strip()
-                date = datetime.now().strftime("%d %b")  # Usar fecha actual
+                date = datetime.now().strftime("%d %b")
                 status = cells[4].text.strip()
 
-                # Filtrar solo vuelos de Aerolíneas Argentinas
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
                     scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
@@ -115,14 +112,13 @@ def scrape_aa2000_flights():
                             "airline_iata": "AR",
                             "departure": origin,
                             "arrival": "AEP",
-                            "estimated_departure": "N/A",  # AA2000 no proporciona esta info en el ejemplo
+                            "estimated_departure": "N/A",
                             "estimated_arrival": formatted_time,
                             "status": status,
                             "lat": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lat"],
                             "lon": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lon"]
                         })
 
-        # Procesar partidas
         for row in departures:
             cells = row.find_elements(By.TAG_NAME, "td")
             if len(cells) >= 5:
@@ -130,10 +126,9 @@ def scrape_aa2000_flights():
                 airline = cells[1].text.strip()
                 destination = cells[2].text.strip()
                 scheduled_time = cells[3].text.strip()
-                date = datetime.now().strftime("%d %b")  # Usar fecha actual
+                date = datetime.now().strftime("%d %b")
                 status = cells[4].text.strip()
 
-                # Filtrar solo vuelos de Aerolíneas Argentinas
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
                     scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
@@ -143,7 +138,7 @@ def scrape_aa2000_flights():
                             "departure": "AEP",
                             "arrival": destination,
                             "estimated_departure": formatted_time,
-                            "estimated_arrival": "N/A",  # AA2000 no proporciona esta info en el ejemplo
+                            "estimated_arrival": "N/A",
                             "status": status,
                             "lat": AIRPORT_COORDS.get("AEP", {"lat": -34.5592})["lat"],
                             "lon": AIRPORT_COORDS.get("AEP", {"lon": -58.4156})["lon"]
@@ -161,7 +156,7 @@ def scrape_aa2000_flights():
 
     return flights
 
-# Ruta para servir la página principal (permitir GET y HEAD)
+# Ruta para servir la página principal
 @app.get("/", response_class=HTMLResponse)
 @app.head("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -181,7 +176,7 @@ async def get_flights():
     except Exception as e:
         logger.error(f"Error al obtener vuelos de AA2000: {str(e)}")
 
-    # 2. Consultar GoFlightLabs (sin filtros en el backend)
+    # 2. Consultar GoFlightLabs
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de GoFlightLabs...")
@@ -205,11 +200,9 @@ async def get_flights():
                 for flight in flights:
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
-                    # Usar las coordenadas del aeropuerto de salida si está disponible, si no, usar AEP como fallback
                     lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
                     lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
-                    # Extraer horas estimadas de salida y llegada
                     estimated_departure = flight.get("dep_estimated", "N/A")
                     estimated_arrival = flight.get("arr_estimated", "N/A")
                     if estimated_departure != "N/A":
@@ -233,7 +226,7 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 3. Consultar AviationStack (con filtros: Aerolíneas Argentinas, AEP, próximas 6 horas)
+    # 3. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -251,7 +244,6 @@ async def get_flights():
             else:
                 logger.info("No se recibieron vuelos de AviationStack")
 
-            # Filtrar vuelos de AviationStack
             filtered_flights = [
                 flight for flight in flights
                 if (
@@ -262,7 +254,6 @@ async def get_flights():
                 )
             ]
 
-            # Filtrar por las próximas 6 horas
             filtered_flights = [
                 flight for flight in filtered_flights
                 if (
@@ -277,13 +268,11 @@ async def get_flights():
             for flight in filtered_flights:
                 departure = flight.get("departure", {}).get("iata", "N/A")
                 arrival = flight.get("arrival", {}).get("iata", "N/A")
-                # Usar las coordenadas del aeropuerto de salida si está disponible, si no, usar AEP como fallback
                 lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
                 lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
                 status = flight.get("flight_status", "N/A")
 
-                # Extraer horas estimadas de salida y llegada
                 estimated_departure = flight.get("departure", {}).get("estimated", "N/A")
                 estimated_arrival = flight.get("arrival", {}).get("estimated", "N/A")
                 if estimated_departure != "N/A":
@@ -327,6 +316,31 @@ def parse_aviationstack_time(time_str):
     except Exception as e:
         logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
         return 0
+
+# WebSocket para rastrear usuarios conectados
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    connected_clients.add(websocket)
+    try:
+        # Enviar el número inicial de usuarios conectados
+        await websocket.send_text(str(len(connected_clients)))
+        # Notificar a todos los clientes del nuevo número de usuarios conectados
+        for client in connected_clients:
+            if client != websocket:  # No enviar al cliente que se acaba de conectar
+                await client.send_text(str(len(connected_clients)))
+        while True:
+            await websocket.receive_text()  # Mantener la conexión viva
+    except WebSocketDisconnect:
+        connected_clients.remove(websocket)
+        # Notificar a los clientes restantes del nuevo número de usuarios conectados
+        for client in connected_clients:
+            await client.send_text(str(len(connected_clients)))
+    except Exception as e:
+        logger.error(f"Error en WebSocket: {str(e)}")
+        connected_clients.remove(websocket)
+        for client in connected_clients:
+            await client.send_text(str(len(connected_clients)))
 
 # Iniciar el servidor
 if __name__ == "__main__":
