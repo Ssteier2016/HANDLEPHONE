@@ -3,90 +3,430 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vuelos</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <title>HandyHandle - Gestión de Vuelos</title>
   <link rel="stylesheet" href="/templates/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    /* Estilos adicionales para los nuevos elementos */
-    .user-container {
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f0f0f0;
+    }
+    .header {
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
     }
-    .user-info {
-      font-size: 16px;
-      font-weight: bold;
-      color: #333;
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
     }
     .logout-btn {
-      padding: 8px 16px;
       background-color: #dc3545;
       color: white;
       border: none;
+      padding: 8px 16px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 14px;
     }
     .logout-btn:hover {
       background-color: #c82333;
     }
+    .container {
+      padding: 20px;
+    }
+    #map {
+      height: 400px;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #flights-table-container {
+      margin-top: 20px;
+    }
+    #flights-table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    #flights-table th,
+    #flights-table td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    #flights-table th {
+      background-color: #007bff;
+      color: white;
+    }
+    #flights-table tbody tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    #flights-table tbody tr:hover {
+      background-color: #e9ecef;
+    }
+    #pagination {
+      margin-top: 10px;
+      text-align: center;
+    }
+    #pagination button {
+      padding: 5px 10px;
+      margin: 0 5px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #pagination button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #pagination span {
+      margin: 0 10px;
+    }
+    #chat-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      height: 400px;
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+    }
+    #chat-container h3 {
+      margin: 0;
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+    #chat-messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      border-bottom: 1px solid #ccc;
+    }
+    .chat-message {
+      margin-bottom: 10px;
+      word-wrap: break-word;
+    }
+    .chat-message audio {
+      width: 100%;
+    }
+    #chat-input {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    #chat-input input {
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 100%;
+    }
+    #chat-input button {
+      padding: 5px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #chat-input button:hover {
+      background-color: #0056b3;
+    }
+    #recording-status {
+      color: red;
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
+  <div class="header">
+    <h1>Bienvenido, {{ user.apellido }} ({{ user.legajo }})</h1>
+    <button class="logout-btn" onclick="window.location.href='/logout'">Cerrar Sesión</button>
+  </div>
+
   <div class="container">
-    <!-- Información del usuario y botón de cerrar sesión -->
-    <div class="user-container">
-      <div class="user-info">
-        Bienvenido, {{ user.apellido }} ({{ user.position }})
-      </div>
-      <button class="logout-btn" onclick="window.location.href='/logout'">Cerrar Sesión</button>
+    <img src="/templates/logo.png" alt="Logo" style="max-width: 200px; margin-bottom: 20px;">
+    <div id="map"></div>
+
+    <!-- Filtros (puedes mantenerlos si los tienes implementados) -->
+    <div id="filters">
+      <!-- Aquí puedes añadir filtros si es necesario -->
     </div>
 
-    <img src="/templates/logo.png" alt="Logo" class="logo">
-    <h1>Vuelos disponibles</h1>
-    
-    <!-- Buscador unificado -->
-    <div class="filter-container">
-      <label for="search-filter">Buscar (ej. "AR AEP EZE"):</label>
-      <input type="text" id="search-filter" placeholder="Ej. AR AEP EZE">
-      <button id="filter-btn">Filtrar</button>
-    </div>
-    
-    <!-- Botón de actualizar, hora de última actualización, opción de voz y usuarios conectados -->
-    <div class="update-container">
-      <button id="refresh-btn">Actualizar vuelos</button>
-      <span id="last-updated">Última actualización: --</span>
-      <label for="voice-toggle" style="margin-left: 15px;">Habilitar voz para llegadas:</label>
-      <input type="checkbox" id="voice-toggle">
-      <span id="connected-users" style="margin-left: 15px;">Usuarios conectados: 0</span>
-    </div>
-    
-    <!-- Mapa -->
-    <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
-    
     <!-- Tabla de vuelos -->
-    <table id="flights-table">
-      <thead>
-        <tr>
-          <th>Vuelo</th>
-          <th>Aerolínea</th>
-          <th>Hora estimada de salida</th>
-          <th>Salida</th>
-          <th>Hora estimada de llegada</th>
-          <th>Llegada</th>
-          <th>Estado</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody id="flights-body">
-        <tr><td colspan="8">Cargando vuelos...</td></tr>
-      </tbody>
-    </table>
+    <div id="flights-table-container">
+      <table id="flights-table">
+        <thead>
+          <tr>
+            <th>Vuelo</th>
+            <th>Aerolínea</th>
+            <th>Salida</th>
+            <th>Arribo</th>
+            <th>Hora Est. Salida</th>
+            <th>Hora Est. Arribo</th>
+            <th>Demora Salida</th>
+            <th>Demora Arribo</th>
+            <th>Puerta Salida</th>
+            <th>Puerta Arribo</th>
+            <th>Terminal Salida</th>
+            <th>Terminal Arribo</th>
+            <th>Avión</th>
+            <th>Estado</th>
+            <th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody id="flights-tbody"></tbody>
+      </table>
+      <div id="pagination">
+        <button id="prev-page" disabled>Anterior</button>
+        <span id="page-info">Página 1 de 1</span>
+        <button id="next-page" disabled>Siguiente</button>
+      </div>
+    </div>
+
+    <!-- Chat global -->
+    <div id="chat-container">
+      <h3>Chat Global</h3>
+      <div id="chat-messages"></div>
+      <div id="chat-input">
+        <input type="text" id="chat-message-input" placeholder="Escribe un mensaje...">
+        <button id="send-message">Enviar</button>
+        <button id="record-audio">Grabar Audio</button>
+        <span id="recording-status"></span>
+      </div>
+    </div>
   </div>
-  
-  <!-- Incluir Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/templates/script.js"></script>
+
+  <script>
+    // Inicializar el mapa
+    const map = L.map("map").setView([-34.5592, -58.4156], 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let markers = [];
+
+    // Función para actualizar el mapa
+    function updateMap(flights) {
+      // Limpiar marcadores existentes
+      markers.forEach(marker => map.removeLayer(marker));
+      markers = [];
+
+      // Agregar nuevos marcadores
+      flights.forEach(flight => {
+        if (flight.lat && flight.lon) {
+          const marker = L.marker([flight.lat, flight.lon]).addTo(map);
+          marker.bindPopup(`
+            <b>Vuelo:</b> ${flight.flight_iata}<br>
+            <b>Aerolínea:</b> ${flight.airline_name}<br>
+            <b>Salida:</b> ${flight.departure_airport} (${flight.departure})<br>
+            <b>Arribo:</b> ${flight.arrival_airport} (${flight.arrival})<br>
+            <b>Hora Est. Salida:</b> ${flight.estimated_departure}<br>
+            <b>Hora Est. Arribo:</b> ${flight.estimated_arrival}<br>
+            <b>Estado:</b> ${flight.status}
+          `);
+          markers.push(marker);
+        }
+      });
+    }
+
+    let currentPage = 1;
+    let totalPages = 1;
+
+    // Función para actualizar la tabla de vuelos
+    async function updateFlightsTable(page = 1) {
+      currentPage = page;
+      try {
+        const response = await fetch(`/flights?page=${page}`);
+        const data = await response.json();
+
+        const tbody = document.getElementById("flights-tbody");
+        tbody.innerHTML = ""; // Limpiar la tabla
+
+        if (data.flights && data.flights.length > 0) {
+          data.flights.forEach(flight => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${flight.flight_iata}</td>
+              <td>${flight.airline_name}</td>
+              <td>${flight.departure_airport} (${flight.departure})</td>
+              <td>${flight.arrival_airport} (${flight.arrival})</td>
+              <td>${flight.estimated_departure}</td>
+              <td>${flight.estimated_arrival}</td>
+              <td>${flight.departure_delay}</td>
+              <td>${flight.arrival_delay}</td>
+              <td>${flight.departure_gate}</td>
+              <td>${flight.arrival_gate}</td>
+              <td>${flight.departure_terminal}</td>
+              <td>${flight.arrival_terminal}</td>
+              <td>${flight.aircraft}</td>
+              <td>${flight.status}</td>
+              <td>${flight.observations}</td>
+            `;
+            tbody.appendChild(row);
+          });
+
+          // Actualizar el mapa con los vuelos de la página actual
+          updateMap(data.flights);
+
+          // Actualizar información de paginación
+          totalPages = data.total_pages || 1;
+          document.getElementById("page-info").textContent = `Página ${data.current_page} de ${totalPages}`;
+
+          // Habilitar/deshabilitar botones de paginación
+          document.getElementById("prev-page").disabled = currentPage === 1;
+          document.getElementById("next-page").disabled = currentPage === totalPages;
+        } else {
+          tbody.innerHTML = `<tr><td colspan="15">No se encontraron vuelos.</td></tr>`;
+          updateMap([]);
+          document.getElementById("page-info").textContent = `Página 1 de 1`;
+          document.getElementById("prev-page").disabled = true;
+          document.getElementById("next-page").disabled = true;
+        }
+
+        // Mostrar fuentes fallidas
+        if (data.failed_sources && data.failed_sources.length > 0) {
+          alert(`No se pudieron obtener datos de las siguientes fuentes: ${data.failed_sources.join(", ")}`);
+        }
+      } catch (error) {
+        console.error("Error al obtener los vuelos:", error);
+        const tbody = document.getElementById("flights-tbody");
+        tbody.innerHTML = `<tr><td colspan="15">Error al cargar los vuelos.</td></tr>`;
+        updateMap([]);
+      }
+    }
+
+    // Event listeners para los botones de paginación
+    document.getElementById("prev-page").addEventListener("click", () => {
+      if (currentPage > 1) {
+        updateFlightsTable(currentPage - 1);
+      }
+    });
+
+    document.getElementById("next-page").addEventListener("click", () => {
+      if (currentPage < totalPages) {
+        updateFlightsTable(currentPage + 1);
+      }
+    });
+
+    // Actualizar la tabla al cargar la página
+    updateFlightsTable();
+
+    // WebSocket para el chat global
+    const chatSocket = new WebSocket(`wss://${window.location.host}/chat`);
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+
+    chatSocket.onopen = () => {
+      console.log("Conexión de chat establecida");
+    };
+
+    chatSocket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      const chatMessages = document.getElementById("chat-messages");
+
+      const messageElement = document.createElement("div");
+      messageElement.classList.add("chat-message");
+
+      if (message.type === "text") {
+        messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): ${message.content}`;
+      } else if (message.type === "audio") {
+        messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): <audio controls src="${message.content}"></audio>`;
+      }
+
+      chatMessages.appendChild(messageElement);
+      chatMessages.scrollTop = chatMessages.scrollHeight; // Desplazar al final
+    };
+
+    chatSocket.onclose = () => {
+      console.log("Conexión de chat cerrada");
+    };
+
+    // Enviar mensaje de texto
+    document.getElementById("send-message").addEventListener("click", () => {
+      const input = document.getElementById("chat-message-input");
+      const message = input.value.trim();
+      if (message) {
+        chatSocket.send(JSON.stringify({
+          type: "text",
+          sender: "{{ user.apellido }} ({{ user.position }})",
+          content: message
+        }));
+        input.value = "";
+      }
+    });
+
+    // Manejar grabación de audio
+    document.getElementById("record-audio").addEventListener("click", async () => {
+      const recordButton = document.getElementById("record-audio");
+      const status = document.getElementById("recording-status");
+
+      if (!isRecording) {
+        // Comenzar grabación
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+          };
+
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+              const base64Audio = reader.result;
+              chatSocket.send(JSON.stringify({
+                type: "audio",
+                sender: "{{ user.apellido }} ({{ user.position }})",
+                content: base64Audio
+              }));
+            };
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordButton.textContent = "Parar Grabación";
+          status.textContent = "Grabando...";
+        } catch (error) {
+          console.error("Error al acceder al micrófono:", error);
+          status.textContent = "Error al grabar audio.";
+        }
+      } else {
+        // Parar grabación
+        mediaRecorder.stop();
+        isRecording = false;
+        recordButton.textContent = "Grabar Audio";
+        status.textContent = "";
+      }
+    });
+
+    // Permitir enviar mensaje con Enter
+    document.getElementById("chat-message-input").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        document.getElementById("send-message").click();
+      }
+    });
+  </script>
 </body>
 </html>
