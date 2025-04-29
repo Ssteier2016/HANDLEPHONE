@@ -1,8 +1,7 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, Request, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-from fastapi.requests import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 import httpx
 import uvicorn
 import logging
@@ -10,6 +9,9 @@ import time
 from datetime import datetime
 import pytz
 import asyncio
+import sqlite3
+import bcrypt
+import re
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -44,15 +46,258 @@ AIRPORT_COORDS = {
 # Lista para rastrear conexiones WebSocket activas
 connected_clients = set()
 
-# Ruta para servir la página principal
+# Lista predefinida de usuarios permitidos (legajo: apellido)
+ALLOWED_USERS = {
+    "35127": "Souto",
+    "35145": "Gimenez",
+    "35128": "Gomez",
+    "33366": "Benitez",
+    "38818": "Contartese",
+    "38880": "Leites",
+    "36000": "Duartero",
+    "35596": "Arena",
+    "35417": "Brandariz",
+    "35152": "Fossati",
+    "12345": "Test",
+    "00000": "Bot",
+    "39157": "Galofalo",
+    "33753": "Mamani",
+    "38546": "Leto",
+}
+
+# Lista de posiciones permitidas
+ALLOWED_POSITIONS = [
+    "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
+    "Jefatura", "Administración", "Movilero", "Micros", "Pañolero", "Señalero"
+]
+
+# Inicializar la base de datos SQLite
+def init_db():
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        legajo TEXT PRIMARY KEY,
+        apellido TEXT NOT NULL,
+        position TEXT NOT NULL,
+        password TEXT NOT NULL
+    )''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# Simulación de autenticación (para manejar sesiones)
+class Session:
+    def __init__(self):
+        self.logged_in = False
+        self.user = None
+
+session = Session()
+
+# Dependencia para verificar si el usuario está logueado
+def get_current_user(request: Request):
+    if not session.logged_in:
+        raise HTTPException(status_code=401, detail="No has iniciado sesión")
+    return session.user
+
+# Ruta para la página de registro
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request, "positions": ALLOWED_POSITIONS})
+
+# Ruta para procesar el registro
+@app.post("/register", response_class=HTMLResponse)
+async def register(
+    request: Request,
+    legajo: str = Form(...),
+    apellido: str = Form(...),
+    position: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...)
+):
+    # Validar que el legajo y el apellido coincidan con la lista predefinida
+    if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "Legajo y apellido no coinciden con los registros permitidos."
+        })
+
+    # Validar formato del legajo (5 números)
+    if not re.match(r'^\d{5}$', legajo):
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "El legajo debe contener exactamente 5 números."
+        })
+
+    # Validar formato del apellido (solo letras)
+    if not re.match(r'^[A-Za-z]+$', apellido):
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "El apellido debe contener solo letras."
+        })
+
+    # Validar posición
+    if position not in ALLOWED_POSITIONS:
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "Posición no válida."
+        })
+
+    # Validar que las contraseñas coincidan
+    if password != confirm_password:
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "Las contraseñas no coinciden."
+        })
+
+    # Hashear la contraseña
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    # Guardar el usuario en la base de datos
+    try:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("INSERT INTO users (legajo, apellido, position, password) VALUES (?, ?, ?, ?)",
+                  (legajo, apellido, position, hashed_password))
+        conn.commit()
+        conn.close()
+    except sqlite3.IntegrityError:
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "positions": ALLOWED_POSITIONS,
+            "error": "El legajo ya está registrado."
+        })
+
+    return RedirectResponse(url="/login", status_code=303)
+
+# Ruta para la página de inicio de sesión
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+# Ruta para procesar el inicio de sesión
+@app.post("/login", response_class=HTMLResponse)
+async def login(
+    request: Request,
+    legajo: str = Form(...),
+    apellido: str = Form(...),
+    password: str = Form(...),
+    fingerprint: str = Form(...),
+    facial_recognition: str = Form(...)
+):
+    # Validar que el legajo y el apellido coincidan con la lista predefinida
+    if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Legajo y apellido no coinciden con los registros permitidos."
+        })
+
+    # Verificar si el usuario está registrado
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE legajo = ?", (legajo,))
+    user = c.fetchone()
+    conn.close()
+
+    if not user:
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Usuario no registrado. Por favor, regístrate primero."
+        })
+
+    # Verificar la contraseña
+    stored_password = user[3]  # La contraseña hasheada está en la columna 4
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_password):
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Contraseña incorrecta."
+        })
+
+    # Simular verificación biométrica (huella y reconocimiento facial)
+    if fingerprint.lower() != "ok" or facial_recognition.lower() != "ok":
+        return templates.TemplateResponse("login.html", {
+            "request": request,
+            "error": "Verificación biométrica fallida. Ingresa 'OK' en ambos campos."
+        })
+
+    # Iniciar sesión
+    session.logged_in = True
+    session.user = {"legajo": legajo, "apellido": apellido, "position": user[2]}
+    return RedirectResponse(url="/", status_code=303)
+
+# Ruta para cerrar sesión
+@app.get("/logout", response_class=HTMLResponse)
+async def logout():
+    session.logged_in = False
+    session.user = None
+    return RedirectResponse(url="/login", status_code=303)
+
+# Ruta para la página de restablecimiento de contraseña
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request):
+    return templates.TemplateResponse("reset_password.html", {"request": request})
+
+# Ruta para procesar el restablecimiento de contraseña
+@app.post("/reset-password", response_class=HTMLResponse)
+async def reset_password(
+    request: Request,
+    legajo: str = Form(...),
+    apellido: str = Form(...),
+    new_password: str = Form(...),
+    confirm_new_password: str = Form(...)
+):
+    # Validar que el legajo y el apellido coincidan con la lista predefinida
+    if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
+        return templates.TemplateResponse("reset_password.html", {
+            "request": request,
+            "error": "Legajo y apellido no coinciden con los registros permitidos."
+        })
+
+    # Verificar si el usuario está registrado
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE legajo = ?", (legajo,))
+    user = c.fetchone()
+
+    if not user:
+        conn.close()
+        return templates.TemplateResponse("reset_password.html", {
+            "request": request,
+            "error": "Usuario no registrado."
+        })
+
+    # Validar que las contraseñas coincidan
+    if new_password != confirm_new_password:
+        conn.close()
+        return templates.TemplateResponse("reset_password.html", {
+            "request": request,
+            "error": "Las contraseñas no coinciden."
+        })
+
+    # Actualizar la contraseña
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+    c.execute("UPDATE users SET password = ? WHERE legajo = ?", (hashed_password, legajo))
+    conn.commit()
+    conn.close()
+
+    return RedirectResponse(url="/login", status_code=303)
+
+# Ruta para servir la página principal (protegida)
 @app.get("/", response_class=HTMLResponse)
-@app.head("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def read_root(request: Request, user: dict = Depends(get_current_user)):
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "user": user
+    })
 
 # Ruta para obtener todos los vuelos
 @app.get("/flights")
-async def get_flights():
+async def get_flights(user: dict = Depends(get_current_user)):
     all_flights = []
     current_time = int(time.time())
     six_hours_future = current_time + (6 * 3600)
@@ -62,15 +307,14 @@ async def get_flights():
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de SerpApi (Google Flights)...")
-            # Consulta para vuelos saliendo o llegando a AEP
             response = await client.get(
                 SERPAPI_FLIGHTS_URL,
                 params={
                     "departure_id": "AEP",
-                    "arrival_id": "",  # Dejar vacío para buscar todos los destinos desde AEP
-                    "hl": "es",  # Idioma español
-                    "currency": "ARS",  # Moneda argentina
-                    "outbound_date": datetime.now().strftime("%Y-%m-%d"),  # Fecha de hoy
+                    "arrival_id": "",
+                    "hl": "es",
+                    "currency": "ARS",
+                    "outbound_date": datetime.now().strftime("%Y-%m-%d"),
                 }
             )
             response.raise_for_status()
@@ -87,7 +331,6 @@ async def get_flights():
                 logger.info("No se recibieron vuelos de SerpApi")
 
             for flight in flights:
-                # Filtrar solo vuelos de Aerolíneas Argentinas (AR)
                 airline = flight.get("flights", [{}])[0].get("airline", "")
                 if "Aerolíneas Argentinas" not in airline:
                     continue
@@ -95,7 +338,6 @@ async def get_flights():
                 departure = flight.get("flights", [{}])[0].get("departure_airport", {}).get("id", "N/A")
                 arrival = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("id", "N/A")
 
-                # Asegurarse de que el vuelo involucre AEP
                 if departure != "AEP" and arrival != "AEP":
                     continue
 
@@ -105,7 +347,6 @@ async def get_flights():
                 estimated_departure = flight.get("flights", [{}])[0].get("departure_airport", {}).get("time", "N/A")
                 estimated_arrival = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("time", "N/A")
                 if estimated_departure != "N/A":
-                    # Formato: "2025-04-29 08:00"
                     estimated_departure = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M").strftime("%H:%M")
                 if estimated_arrival != "N/A":
                     estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M").strftime("%H:%M")
@@ -125,16 +366,16 @@ async def get_flights():
                     "arrival_airport": arrival_airport,
                     "estimated_departure": estimated_departure,
                     "estimated_arrival": estimated_arrival,
-                    "scheduled_departure": estimated_departure,  # No disponible en SerpApi, usamos el estimado
-                    "scheduled_arrival": estimated_arrival,  # No disponible en SerpApi, usamos el estimado
-                    "departure_delay": "0",  # No disponible en SerpApi
-                    "arrival_delay": "0",  # No disponible en SerpApi
-                    "departure_gate": "N/A",  # No disponible en SerpApi
-                    "arrival_gate": "N/A",  # No disponible en SerpApi
-                    "departure_terminal": "N/A",  # No disponible en SerpApi
-                    "arrival_terminal": "N/A",  # No disponible en SerpApi
-                    "aircraft": "N/A",  # No disponible en SerpApi
-                    "status": "scheduled",  # No disponible en SerpApi, asumimos programado
+                    "scheduled_departure": estimated_departure,
+                    "scheduled_arrival": estimated_arrival,
+                    "departure_delay": "0",
+                    "arrival_delay": "0",
+                    "departure_gate": "N/A",
+                    "arrival_gate": "N/A",
+                    "departure_terminal": "N/A",
+                    "arrival_terminal": "N/A",
+                    "aircraft": "N/A",
+                    "status": "scheduled",
                     "observations": "Datos obtenidos de Google Flights vía SerpApi",
                     "lat": lat,
                     "lon": lon
@@ -248,7 +489,6 @@ async def get_flights():
             else:
                 logger.info("No se recibieron vuelos de AviationStack")
 
-            # Filtrar vuelos, manejando valores None
             filtered_flights = []
             for flight in flights:
                 airline_iata = flight.get("airline", {}).get("iata", "") or ""
