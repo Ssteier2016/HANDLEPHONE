@@ -31,12 +31,12 @@ h1 {
   margin-right: 10px;
 }
 
-#airline-filter, #origin-filter, #destination-filter {
+#search-filter {
   padding: 8px;
   font-size: 16px;
   border: 1px solid #ddd;
   border-radius: 5px;
-  width: 200px;
+  width: 300px;
   margin-right: 10px;
 }
 
@@ -63,7 +63,7 @@ h1 {
   align-items: center;
 }
 
-#last-updated {
+#last-updated, #connected-users {
   font-size: 16px;
   color: #333;
   margin-left: 15px;
@@ -128,7 +128,7 @@ h1 {
     margin-bottom: 5px;
   }
 
-  #airline-filter, #origin-filter, #destination-filter {
+  #search-filter {
     width: 100%;
     font-size: 14px;
     margin-bottom: 10px;
@@ -139,7 +139,7 @@ h1 {
     font-size: 14px;
   }
 
-  #last-updated {
+  #last-updated, #connected-users {
     font-size: 14px;
     padding: 6px 10px;
   }
