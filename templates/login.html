@@ -79,7 +79,7 @@
     {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
-    <form id="login-form" action="/login" method="post" onsubmit="return handleSubmit()">
+    <form id="login-form" action="/login" method="post">
       <div class="form-group">
         <label for="legajo">Legajo:</label>
         <input type="text" id="legajo" name="legajo" required pattern="\d{5}" title="El legajo debe contener exactamente 5 números">
@@ -105,12 +105,6 @@
     if (window.history.replaceState) {
       window.history.replaceState(null, null, window.location.href);
     }
-
-    // Función para manejar el envío del formulario
-    function handleSubmit() {
-      // Permitir que el formulario se envíe normalmente
-      return true;
-    }
   </script>
 </body>
-</html>
+  </html>
