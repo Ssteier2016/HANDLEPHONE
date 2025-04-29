@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Variable para almacenar todos los vuelos
-  let all Flights = [];
+  let allFlights = [];
 
   // Configurar WebSocket para rastrear usuarios conectados
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
