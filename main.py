@@ -118,8 +118,8 @@ def scrape_aa2000_flights():
                             "estimated_departure": "N/A",  # AA2000 no proporciona esta info en el ejemplo
                             "estimated_arrival": formatted_time,
                             "status": status,
-                            "lat": AIRPORT_COORDS["AEP"]["lat"],
-                            "lon": AIRPORT_COORDS["AEP"]["lon"]
+                            "lat": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lat"],
+                            "lon": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lon"]
                         })
 
         # Procesar partidas
@@ -145,8 +145,8 @@ def scrape_aa2000_flights():
                             "estimated_departure": formatted_time,
                             "estimated_arrival": "N/A",  # AA2000 no proporciona esta info en el ejemplo
                             "status": status,
-                            "lat": AIRPORT_COORDS["AEP"]["lat"],
-                            "lon": AIRPORT_COORDS["AEP"]["lon"]
+                            "lat": AIRPORT_COORDS.get("AEP", {"lat": -34.5592})["lat"],
+                            "lon": AIRPORT_COORDS.get("AEP", {"lon": -58.4156})["lon"]
                         })
 
         logger.info(f"Vuelos scrapeados de AA2000 (AR, AEP, próximas 6 horas): {len(flights)}")
@@ -205,14 +205,9 @@ async def get_flights():
                 for flight in flights:
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
-                    if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
-                        dep_coords = AIRPORT_COORDS[departure]
-                        arr_coords = AIRPORT_COORDS[arrival]
-                        lat = (dep_coords["lat"] + arr_coords["lat"]) / 2
-                        lon = (dep_coords["lon"] + arr_coords["lon"]) / 2
-                    else:
-                        lat = (-34.5592 + -34.8222) / 2
-                        lon = (-58.4156 + -58.5358) / 2
+                    # Usar las coordenadas del aeropuerto de salida si está disponible, si no, usar AEP como fallback
+                    lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
+                    lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
                     # Extraer horas estimadas de salida y llegada
                     estimated_departure = flight.get("dep_estimated", "N/A")
@@ -282,14 +277,9 @@ async def get_flights():
             for flight in filtered_flights:
                 departure = flight.get("departure", {}).get("iata", "N/A")
                 arrival = flight.get("arrival", {}).get("iata", "N/A")
-                if departure in AIRPORT_COORDS and arrival in AIRPORT_COORDS:
-                    dep_coords = AIRPORT_COORDS[departure]
-                    arr_coords = AIRPORT_COORDS[arrival]
-                    lat = (dep_coords["lat"] + arr_coords["lat"]) / 2
-                    lon = (dep_coords["lon"] + arr_coords["lon"]) / 2
-                else:
-                    lat = (-34.5592 + -34.8222) / 2
-                    lon = (-58.4156 + -58.5358) / 2
+                # Usar las coordenadas del aeropuerto de salida si está disponible, si no, usar AEP como fallback
+                lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
+                lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
                 status = flight.get("flight_status", "N/A")
 
