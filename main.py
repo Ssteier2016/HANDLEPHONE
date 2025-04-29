@@ -121,6 +121,9 @@ def get_current_user(request: Request):
 
     return {"legajo": user[0], "apellido": user[1], "position": user[2]}
 
+# Lista para almacenar usuarios conectados con sus detalles
+connected_users = {}
+
 # Ruta para la página de registro
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
@@ -271,6 +274,15 @@ async def logout(request: Request):
         conn.commit()
         conn.close()
 
+        # Remover usuario de la lista de conectados
+        user_to_remove = None
+        for ws, user in connected_users.items():
+            if user["token"] == token:
+                user_to_remove = ws
+                break
+        if user_to_remove:
+            del connected_users[user_to_remove]
+
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(key="session_token")
     return response
@@ -360,11 +372,13 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                 SERPAPI_FLIGHTS_URL,
                 params={
                     "departure_id": "AEP",
-                    "arrival_id": "",
+                    "arrival_id": "",  # Dejar vacío para buscar todos los destinos
                     "hl": "es",
                     "currency": "ARS",
                     "outbound_date": datetime.now().strftime("%Y-%m-%d"),
-                    "sort": "3"  # Ordenar por hora de salida (Departure time)
+                    "type": "2",  # Tipo 2 para vuelos de ida
+                    "sort": "3",  # Ordenar por hora de salida
+                    "deep_search": "true"  # Habilitar búsqueda profunda para más resultados
                 }
             )
             response.raise_for_status()
@@ -396,10 +410,18 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
 
                 estimated_departure = flight.get("flights", [{}])[0].get("departure_airport", {}).get("time", "N/A")
                 estimated_arrival = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("time", "N/A")
+                departure_datetime = None
                 if estimated_departure != "N/A":
-                    estimated_departure = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M").strftime("%H:%M")
+                    try:
+                        departure_datetime = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M")
+                        estimated_departure = departure_datetime.strftime("%H:%M")
+                    except ValueError:
+                        estimated_departure = "N/A"
                 if estimated_arrival != "N/A":
-                    estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M").strftime("%H:%M")
+                    try:
+                        estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M").strftime("%H:%M")
+                    except ValueError:
+                        estimated_arrival = "N/A"
 
                 flight_number = flight.get("flights", [{}])[0].get("flight_number", "N/A")
                 airline_name = flight.get("flights", [{}])[0].get("airline", "N/A")
@@ -428,7 +450,8 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "status": "scheduled",
                     "observations": "Datos obtenidos de Google Flights vía SerpApi",
                     "lat": lat,
-                    "lon": lon
+                    "lon": lon,
+                    "departure_datetime": departure_datetime  # Para ordenar
                 })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar SerpApi: {str(e)}")
@@ -467,17 +490,31 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
 
                     estimated_departure = flight.get("dep_estimated", "N/A")
                     estimated_arrival = flight.get("arr_estimated", "N/A")
+                    departure_datetime = None
                     if estimated_departure != "N/A":
-                        estimated_departure = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        try:
+                            departure_datetime = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M:%S")
+                            estimated_departure = departure_datetime.strftime("%H:%M")
+                        except ValueError:
+                            estimated_departure = "N/A"
                     if estimated_arrival != "N/A":
-                        estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        try:
+                            estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        except ValueError:
+                            estimated_arrival = "N/A"
 
                     scheduled_departure = flight.get("dep_scheduled", "N/A")
                     scheduled_arrival = flight.get("arr_scheduled", "N/A")
                     if scheduled_departure != "N/A":
-                        scheduled_departure = datetime.strptime(scheduled_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        try:
+                            scheduled_departure = datetime.strptime(scheduled_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        except ValueError:
+                            scheduled_departure = "N/A"
                     if scheduled_arrival != "N/A":
-                        scheduled_arrival = datetime.strptime(scheduled_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        try:
+                            scheduled_arrival = datetime.strptime(scheduled_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                        except ValueError:
+                            scheduled_arrival = "N/A"
 
                     departure_delay = str(flight.get("dep_delayed", "0"))
                     arrival_delay = str(flight.get("arr_delayed", "0"))
@@ -512,7 +549,8 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                         "status": flight.get("status", "N/A"),
                         "observations": "N/A",
                         "lat": lat,
-                        "lon": lon
+                        "lon": lon,
+                        "departure_datetime": departure_datetime
                     })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar GoFlightLabs: {str(e)}")
@@ -574,17 +612,31 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
 
                 estimated_departure = flight.get("departure", {}).get("estimated", "N/A")
                 estimated_arrival = flight.get("arrival", {}).get("estimated", "N/A")
+                departure_datetime = None
                 if estimated_departure != "N/A":
-                    estimated_departure = datetime.strptime(estimated_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    try:
+                        departure_datetime = datetime.strptime(estimated_departure[:19], "%Y-%m-%dT%H:%M:%S")
+                        estimated_departure = departure_datetime.strftime("%H:%M")
+                    except ValueError:
+                        estimated_departure = "N/A"
                 if estimated_arrival != "N/A":
-                    estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    try:
+                        estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    except ValueError:
+                        estimated_arrival = "N/A"
 
                 scheduled_departure = flight.get("departure", {}).get("scheduled", "N/A")
                 scheduled_arrival = flight.get("arrival", {}).get("scheduled", "N/A")
                 if scheduled_departure != "N/A":
-                    scheduled_departure = datetime.strptime(scheduled_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    try:
+                        scheduled_departure = datetime.strptime(scheduled_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    except ValueError:
+                        scheduled_departure = "N/A"
                 if scheduled_arrival != "N/A":
-                    scheduled_arrival = datetime.strptime(scheduled_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    try:
+                        scheduled_arrival = datetime.strptime(scheduled_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                    except ValueError:
+                        scheduled_arrival = "N/A"
 
                 departure_delay = str(flight.get("departure", {}).get("delay", "0"))
                 arrival_delay = str(flight.get("arrival", {}).get("delay", "0"))
@@ -619,7 +671,8 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "status": status,
                     "observations": "N/A",
                     "lat": lat,
-                    "lon": lon
+                    "lon": lon,
+                    "departure_datetime": departure_datetime
                 })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar AviationStack: {str(e)}")
@@ -637,8 +690,11 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             seen_flights.add(flight_iata)
             unique_flights.append(flight)
 
-    # 5. Ordenar por hora de salida (estimated_departure)
-    unique_flights.sort(key=lambda x: x["estimated_departure"] if x["estimated_departure"] != "N/A" else "24:00")
+    # 5. Ordenar por hora de salida (departure_datetime)
+    unique_flights.sort(
+        key=lambda x: x["departure_datetime"] if x["departure_datetime"] else datetime.max,
+        reverse=False
+    )
 
     # 6. Paginación: 25 vuelos por página
     flights_per_page = 25
@@ -647,6 +703,10 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     start_idx = (page - 1) * flights_per_page
     end_idx = start_idx + flights_per_page
     paginated_flights = unique_flights[start_idx:end_idx]
+
+    # Eliminar el campo departure_datetime de los datos devueltos
+    for flight in paginated_flights:
+        flight.pop("departure_datetime", None)
 
     logger.info(f"Total de vuelos procesados: {total_flights}")
 
@@ -665,6 +725,53 @@ def parse_aviationstack_time(time_str):
     except Exception as e:
         logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
         return 0
+
+# WebSocket para rastrear usuarios conectados
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, token: str = None):
+    await websocket.accept()
+    connected_clients.add(websocket)
+
+    # Obtener detalles del usuario
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT legajo FROM sessions WHERE token = ?", (token,))
+    session_data = c.fetchone()
+    user = None
+    if session_data:
+        legajo = session_data[0]
+        c.execute("SELECT legajo, apellido, position FROM users WHERE legajo = ?", (legajo,))
+        user = c.fetchone()
+    conn.close()
+
+    if user:
+        connected_users[websocket] = {
+            "token": token,
+            "legajo": user[0],
+            "apellido": user[1],
+            "position": user[2]
+        }
+
+    try:
+        await websocket.send_text(str(len(connected_clients)))
+        for client in connected_clients:
+            if client != websocket:
+                await client.send_text(str(len(connected_clients)))
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        connected_clients.remove(websocket)
+        if websocket in connected_users:
+            del connected_users[websocket]
+        for client in connected_clients:
+            await client.send_text(str(len(connected_clients)))
+    except Exception as e:
+        logger.error(f"Error en WebSocket: {str(e)}")
+        connected_clients.remove(websocket)
+        if websocket in connected_users:
+            del connected_users[websocket]
+        for client in connected_clients:
+            await client.send_text(str(len(connected_clients)))
 
 # WebSocket para el chat global
 @app.websocket("/chat")
@@ -695,7 +802,7 @@ async def chat_endpoint(websocket: WebSocket):
                 if len(chat_messages) > 100:
                     chat_messages.pop(0)
 
-    # Transmitir el mensaje a todos los clientes conectados
+                # Transmitir el mensaje a todos los clientes conectados
                 for client in connected_clients:
                     await client.send_json(message)
 
@@ -717,9 +824,26 @@ async def chat_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
+        if websocket in connected_users:
+            del connected_users[websocket]
     except Exception as e:
         logger.error(f"Error en WebSocket de chat: {str(e)}")
         connected_clients.remove(websocket)
+        if websocket in connected_users:
+            del connected_users[websocket]
+
+# Ruta para obtener la lista de usuarios conectados
+@app.get("/users")
+async def get_connected_users():
+    users = [
+        {
+            "legajo": user["legajo"],
+            "apellido": user["apellido"],
+            "position": user["position"]
+        }
+        for user in connected_users.values()
+    ]
+    return {"users": users}
 
 # Iniciar el servidor
 if __name__ == "__main__":
