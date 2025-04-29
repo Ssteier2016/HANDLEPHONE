@@ -5,7 +5,7 @@ echo "Iniciando instalación de dependencias para Chrome y ChromeDriver..."
 
 # Instalar dependencias del sistema necesarias para Chrome y ChromeDriver
 apt-get update
-apt-get install -y libglib2.0-0 libnss3 libgconf-2-4 libfontconfig1 libxss1 libappindicator3-1 libindicator3-7
+apt-get install -y libglib2.0-0 libnss3 libgconf-2-4 libfontconfig1 libxss1 libappindicator3-1
 
 echo "Dependencias del sistema instaladas."
 
