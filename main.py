@@ -97,7 +97,8 @@ session = Session()
 # Dependencia para verificar si el usuario está logueado
 def get_current_user(request: Request):
     if not session.logged_in:
-        raise HTTPException(status_code=401, detail="No has iniciado sesión")
+        # Redirigir a /login en lugar de lanzar una excepción
+        return RedirectResponse(url="/login", status_code=303)
     return session.user
 
 # Ruta para la página de registro
@@ -266,7 +267,7 @@ async def reset_password(
 
     if not user:
         conn.close()
-        return templates.TemplateResponse("reset_password.html", {
+        return templates TemplateResponse("reset_password.html", {
             "request": request,
             "error": "Usuario no registrado."
         })
@@ -289,15 +290,20 @@ async def reset_password(
 
 # Ruta para servir la página principal (protegida)
 @app.get("/", response_class=HTMLResponse)
+@app.head("/", response_class=HTMLResponse)
 async def read_root(request: Request, user: dict = Depends(get_current_user)):
+    if isinstance(user, RedirectResponse):
+        return user  # Si get_current_user devuelve una redirección, retornarla
     return templates.TemplateResponse("index.html", {
         "request": request,
         "user": user
     })
 
-# Ruta para obtener todos los vuelos
+# Ruta para obtener todos los vuelos (protegida)
 @app.get("/flights")
 async def get_flights(user: dict = Depends(get_current_user)):
+    if isinstance(user, RedirectResponse):
+        return user  # Si get_current_user devuelve una redirección, retornarla
     all_flights = []
     current_time = int(time.time())
     six_hours_future = current_time + (6 * 3600)
@@ -470,8 +476,7 @@ async def get_flights(user: dict = Depends(get_current_user)):
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
             failed_sources.append("GoFlightLabs")
-
-    # 3. Consultar AviationStack
+# 3. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -627,3 +632,6 @@ async def websocket_endpoint(websocket: WebSocket):
 # Iniciar el servidor
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    # 3. Consultar AviationStack
+    async with httpx.AsyncClient() as client:
+        
