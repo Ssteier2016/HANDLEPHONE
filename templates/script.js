@@ -33,9 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Definir ícono personalizado para los marcadores
   const planeIcon = L.icon({
     iconUrl: '/templates/aero.png',
-    iconSize: [32, 32], // Tamaño del ícono
-    iconAnchor: [16, 16], // Punto del ícono que se alinea con la coordenada
-    popupAnchor: [0, -16] // Punto donde se abre el popup respecto al ícono
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
   });
 
   // Variable para almacenar todos los vuelos
@@ -82,9 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const marker = L.marker([flight.lat, flight.lon], { icon: planeIcon }).addTo(map);
         marker.bindPopup(`
           <b>Vuelo:</b> ${flight.flight_iata || 'N/A'}<br>
-          <b>Aerolínea:</b> ${flight.airline_iata || 'N/A'}<br>
-          <b>Salida:</b> ${flight.departure || 'N/A'}<br>
-          <b>Llegada:</b> ${flight.arrival || 'N/A'}<br>
+          <b>Aerolínea:</b> ${flight.airline_name || flight.airline_iata || 'N/A'}<br>
+          <b>Salida:</b> ${flight.departure_airport || flight.departure || 'N/A'} (Terminal: ${flight.departure_terminal || 'N/A'}, Puerta: ${flight.departure_gate || 'N/A'})<br>
+          <b>Llegada:</b> ${flight.arrival_airport || flight.arrival || 'N/A'} (Terminal: ${flight.arrival_terminal || 'N/A'}, Puerta: ${flight.arrival_gate || 'N/A'})<br>
+          <b>Retraso salida:</b> ${flight.departure_delay || '0'} minutos<br>
+          <b>Retraso llegada:</b> ${flight.arrival_delay || '0'} minutos<br>
+          <b>Tipo de avión:</b> ${flight.aircraft || 'N/A'}<br>
           <b>Estado:</b> ${flight.status || 'N/A'}
         `);
       } else {
@@ -98,23 +101,63 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Actualizando tabla con", flights.length, "vuelos");
     flightsBody.innerHTML = '';
     if (flights.length === 0) {
-      flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos para los filtros aplicados.</td></tr>';
+      flightsBody.innerHTML = '<tr><td colspan="8">No se encontraron vuelos para los filtros aplicados.</td></tr>';
       return;
     }
 
-    flights.forEach(flight => {
+    flights.forEach((flight, index) => {
       console.log("Añadiendo fila para vuelo:", flight);
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${flight.flight_iata || 'N/A'}</td>
-        <td>${flight.airline_iata || 'N/A'}</td>
+        <td>${flight.airline_name || flight.airline_iata || 'N/A'}</td>
         <td>${flight.estimated_departure || 'N/A'}</td>
         <td>${flight.departure || 'N/A'}</td>
         <td>${flight.estimated_arrival || 'N/A'}</td>
         <td>${flight.arrival || 'N/A'}</td>
         <td>${flight.status || 'N/A'}</td>
+        <td><button class="toggle-details" data-index="${index}">Ver más</button></td>
       `;
       flightsBody.appendChild(row);
+
+      // Añadir fila oculta para los detalles adicionales
+      const detailsRow = document.createElement('tr');
+      detailsRow.classList.add('details-row');
+      detailsRow.id = `details-${index}`;
+      detailsRow.style.display = 'none';
+      detailsRow.innerHTML = `
+        <td colspan="8">
+          <div class="details-content">
+            <p><strong>Nombre completo del aeropuerto de salida:</strong> ${flight.departure_airport || 'N/A'}</p>
+            <p><strong>Nombre completo del aeropuerto de llegada:</strong> ${flight.arrival_airport || 'N/A'}</p>
+            <p><strong>Hora programada de salida:</strong> ${flight.scheduled_departure || 'N/A'}</p>
+            <p><strong>Retraso de salida:</strong> ${flight.departure_delay || '0'} minutos</p>
+            <p><strong>Terminal de salida:</strong> ${flight.departure_terminal || 'N/A'}</p>
+            <p><strong>Puerta de salida:</strong> ${flight.departure_gate || 'N/A'}</p>
+            <p><strong>Hora programada de llegada:</strong> ${flight.scheduled_arrival || 'N/A'}</p>
+            <p><strong>Retraso de llegada:</strong> ${flight.arrival_delay || '0'} minutos</p>
+            <p><strong>Terminal de llegada:</strong> ${flight.arrival_terminal || 'N/A'}</p>
+            <p><strong>Puerta de llegada:</strong> ${flight.arrival_gate || 'N/A'}</p>
+            <p><strong>Tipo de avión:</strong> ${flight.aircraft || 'N/A'}</p>
+          </div>
+        </td>
+      `;
+      flightsBody.appendChild(detailsRow);
+    });
+
+    // Añadir evento a los botones "Ver más"
+    document.querySelectorAll('.toggle-details').forEach(button => {
+      button.addEventListener('click', () => {
+        const index = button.getAttribute('data-index');
+        const detailsRow = document.getElementById(`details-${index}`);
+        if (detailsRow.style.display === 'none') {
+          detailsRow.style.display = 'table-row';
+          button.textContent = 'Ver menos';
+        } else {
+          detailsRow.style.display = 'none';
+          button.textContent = 'Ver más';
+        }
+      });
     });
 
     if (voiceToggle.checked) {
@@ -136,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       arrivals.forEach(flight => {
-        const text = `Vuelo ${flight.flight_iata || 'desconocido'} de ${flight.airline_iata || 'aerolínea desconocida'}, procedente de ${flight.departure || 'origen desconocido'}, llegando a ${flight.arrival || 'destino desconocido'} a las ${flight.estimated_arrival || 'hora desconocida'}. Estado: ${flight.status || 'desconocido'}.`;
+        const text = `Vuelo ${flight.flight_iata || 'desconocido'} de ${flight.airline_name || flight.airline_iata || 'aerolínea desconocida'}, procedente de ${flight.departure_airport || flight.departure || 'origen desconocido'}, llegando a ${flight.arrival_airport || flight.arrival || 'destino desconocido'} a las ${flight.estimated_arrival || 'hora desconocida'}. Estado: ${flight.status || 'desconocido'}.`;
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'es-ES';
         window.speechSynthesis.speak(utterance);
@@ -169,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (data.error) {
         console.error("Error en los datos:", data.error);
-        flightsBody.innerHTML = `<tr><td colspan="7">Error: ${data.error}</td></tr>`;
+        flightsBody.innerHTML = `<tr><td colspan="8">Error: ${data.error}</td></tr>`;
         updateMapMarkers([]);
         return;
       }
@@ -178,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("Vuelos procesados:", allFlights);
 
       if (allFlights.length === 0) {
-        flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos.</td></tr>';
+        flightsBody.innerHTML = '<tr><td colspan="8">No se encontraron vuelos.</td></tr>';
         updateMapMarkers([]);
         return;
       }
@@ -189,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     } catch (error) {
       console.error("Error al cargar los vuelos:", error);
-      flightsBody.innerHTML = `<tr><td colspan="7">Error al cargar los vuelos: ${error.message}</td></tr>`;
+      flightsBody.innerHTML = `<tr><td colspan="8">Error al cargar los vuelos: ${error.message}</td></tr>`;
       updateMapMarkers([]);
     }
   }
@@ -205,17 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
       filteredFlights = filteredFlights.filter(flight => {
         const airlineMatch = searchTerms.some(term => 
           (flight.airline_iata || '').toUpperCase() === term || 
-          (flight.flight_iata || '').toUpperCase().startsWith(term)
+          (flight.flight_iata || '').toUpperCase().startsWith(term) ||
+          (flight.airline_name || '').toUpperCase().includes(term)
         );
         const originMatch = searchTerms.some(term => 
-          (flight.departure || '').toUpperCase() === term
+          (flight.departure || '').toUpperCase() === term ||
+          (flight.departure_airport || '').toUpperCase().includes(term)
         );
         const destinationMatch = searchTerms.some(term => 
-          (flight.arrival || '').toUpperCase() === term
+          (flight.arrival || '').toUpperCase() === term ||
+          (flight.arrival_airport || '').toUpperCase().includes(term)
         );
 
-        // Si no hay términos de búsqueda, mostrar todos los vuelos
-        // Si hay términos, un vuelo debe coincidir con al menos uno de los criterios
         return searchTerms.length === 0 || airlineMatch || originMatch || destinationMatch;
       });
     }
