@@ -267,7 +267,7 @@ async def reset_password(
 
     if not user:
         conn.close()
-        return templates TemplateResponse("reset_password.html", {
+        return templates.TemplateResponse("reset_password.html", {
             "request": request,
             "error": "Usuario no registrado."
         })
@@ -476,7 +476,8 @@ async def get_flights(user: dict = Depends(get_current_user)):
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
             failed_sources.append("GoFlightLabs")
-# 3. Consultar AviationStack
+
+    # 3. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -632,6 +633,3 @@ async def websocket_endpoint(websocket: WebSocket):
 # Iniciar el servidor
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    # 3. Consultar AviationStack
-    async with httpx.AsyncClient() as client:
-        
