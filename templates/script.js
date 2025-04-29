@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <b>Retraso salida:</b> ${flight.departure_delay || '0'} minutos<br>
           <b>Retraso llegada:</b> ${flight.arrival_delay || '0'} minutos<br>
           <b>Tipo de avión:</b> ${flight.aircraft || 'N/A'}<br>
+          <b>Observaciones:</b> ${flight.observations || 'N/A'}<br>
           <b>Estado:</b> ${flight.status || 'N/A'}
         `);
       } else {
@@ -139,6 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p><strong>Terminal de llegada:</strong> ${flight.arrival_terminal || 'N/A'}</p>
             <p><strong>Puerta de llegada:</strong> ${flight.arrival_gate || 'N/A'}</p>
             <p><strong>Tipo de avión:</strong> ${flight.aircraft || 'N/A'}</p>
+            <p><strong>Observaciones:</strong> ${flight.observations || 'N/A'}</p>
           </div>
         </td>
       `;
@@ -179,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       arrivals.forEach(flight => {
-        const text = `Vuelo ${flight.flight_iata || 'desconocido'} de ${flight.airline_name || flight.airline_iata || 'aerolínea desconocida'}, procedente de ${flight.departure_airport || flight.departure || 'origen desconocido'}, llegando a ${flight.arrival_airport || flight.arrival || 'destino desconocido'} a las ${flight.estimated_arrival || 'hora desconocida'}. Estado: ${flight.status || 'desconocido'}.`;
+        const text = `Vuelo ${flight.flight_iata || 'desconocido'} de ${flight.airline_name || flight.airline_iata || 'aerolínea desconocida'}, procedente de ${flight.departure_airport || flight.departure || 'origen desconocido'}, llegando a ${flight.arrival_airport || flight.arrival || 'destino desconocido'} a las ${flight.estimated_arrival || 'hora desconocida'}. Estado: ${flight.status || 'desconocido'}. Observaciones: ${flight.observations || 'sin observaciones'}.`;
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'es-ES';
         window.speechSynthesis.speak(utterance);
