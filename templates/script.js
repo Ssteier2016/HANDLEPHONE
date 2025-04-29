@@ -4,14 +4,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refresh-btn');
   const filterBtn = document.getElementById('filter-btn');
   const airlineFilter = document.getElementById('airline-filter');
+  const originFilter = document.getElementById('origin-filter');
+  const destinationFilter = document.getElementById('destination-filter');
+  const voiceToggle = document.getElementById('voice-toggle');
   const flightsBody = document.getElementById('flights-body');
   const lastUpdated = document.getElementById('last-updated');
 
-  if (!refreshBtn || !filterBtn || !airlineFilter || !flightsBody || !lastUpdated) {
+  if (!refreshBtn || !filterBtn || !airlineFilter || !originFilter || !destinationFilter || !voiceToggle || !flightsBody || !lastUpdated) {
     console.error("No se encontraron los elementos del DOM:", {
       refreshBtn: !!refreshBtn,
       filterBtn: !!filterBtn,
       airlineFilter: !!airlineFilter,
+      originFilter: !!originFilter,
+      destinationFilter: !!destinationFilter,
+      voiceToggle: !!voiceToggle,
       flightsBody: !!flightsBody,
       lastUpdated: !!lastUpdated
     });
@@ -32,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Función para actualizar los marcadores en el mapa
   function updateMapMarkers(flights) {
     console.log("Actualizando marcadores en el mapa con", flights.length, "vuelos");
+    // Limpiar marcadores existentes
     map.eachLayer(layer => {
       if (layer instanceof L.Marker) {
         map.removeLayer(layer);
@@ -39,7 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     flights.forEach(flight => {
-      if (flight.lat && flight.lon) {
+      // Verificar que las coordenadas existan y sean válidas
+      if (flight.lat && flight.lon && !isNaN(flight.lat) && !isNaN(flight.lon)) {
         console.log("Añadiendo marcador para vuelo:", flight.flight_iata, "en", flight.lat, flight.lon);
         const marker = L.marker([flight.lat, flight.lon]).addTo(map);
         marker.bindPopup(`
@@ -50,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <b>Estado:</b> ${flight.status || 'N/A'}
         `);
       } else {
-        console.warn("Vuelo sin coordenadas:", flight);
+        console.warn("Vuelo con coordenadas inválidas:", flight);
       }
     });
   }
@@ -60,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Actualizando tabla con", flights.length, "vuelos");
     flightsBody.innerHTML = '';
     if (flights.length === 0) {
-      flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos para esta aerolínea.</td></tr>';
+      flightsBody.innerHTML = '<tr><td colspan="7">No se encontraron vuelos para los filtros aplicados.</td></tr>';
       return;
     }
 
@@ -78,6 +86,36 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       flightsBody.appendChild(row);
     });
+
+    // Si la opción de voz está habilitada, leer las llegadas
+    if (voiceToggle.checked) {
+      speakArrivals(flights);
+    }
+  }
+
+  // Función para leer las llegadas (y opcionalmente salidas) usando Web Speech Synthesis
+  function speakArrivals(flights) {
+    if ('speechSynthesis' in window) {
+      console.log("Leyendo llegadas con voz...");
+      const arrivals = flights.filter(flight => flight.estimated_arrival !== 'N/A' && flight.arrival === 'AEP');
+      
+      if (arrivals.length === 0) {
+        const utterance = new SpeechSynthesisUtterance("No hay llegadas disponibles para leer.");
+        utterance.lang = 'es-ES';
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      arrivals.forEach(flight => {
+        const text = `Vuelo ${flight.flight_iata || 'desconocido'} de ${flight.airline_iata || 'aerolínea desconocida'}, procedente de ${flight.departure || 'origen desconocido'}, llegando a ${flight.arrival || 'destino desconocido'} a las ${flight.estimated_arrival || 'hora desconocida'}. Estado: ${flight.status || 'desconocido'}.`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'es-ES';
+        window.speechSynthesis.speak(utterance);
+      });
+    } else {
+      console.warn("La API de Web Speech Synthesis no está soportada en este navegador.");
+      alert("Lo siento, tu navegador no soporta la función de voz.");
+    }
   }
 
   // Función para actualizar la hora de la última actualización
@@ -128,22 +166,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Función para filtrar vuelos por aerolínea
+  // Función para filtrar vuelos por aerolínea, origen y destino
   function filterFlights() {
     const airline = airlineFilter.value.trim().toUpperCase();
-    console.log("Filtrando vuelos por aerolínea:", airline);
-    if (!airline) {
-      updateTable(allFlights);
-      updateMapMarkers(allFlights);
-      return;
+    const origin = originFilter.value.trim().toUpperCase();
+    const destination = destinationFilter.value.trim().toUpperCase();
+    console.log("Filtrando vuelos por:", { airline, origin, destination });
+
+    let filteredFlights = allFlights;
+
+    if (airline) {
+      filteredFlights = filteredFlights.filter(flight => 
+        (flight.airline_iata || '').toUpperCase() === airline || 
+        (flight.flight_iata || '').toUpperCase().startsWith(airline)
+      );
     }
 
-    const filteredFlights = allFlights.filter(flight => 
-      (flight.airline_iata || '').toUpperCase() === airline || 
-      (flight.flight_iata || '').toUpperCase().startsWith(airline)
-    );
-    console.log("Vuelos filtrados:", filteredFlights);
+    if (origin) {
+      filteredFlights = filteredFlights.filter(flight => 
+        (flight.departure || '').toUpperCase() === origin
+      );
+    }
 
+    if (destination) {
+      filteredFlights = filteredFlights.filter(flight => 
+        (flight.arrival || '').toUpperCase() === destination
+      );
+    }
+
+    console.log("Vuelos filtrados:", filteredFlights);
     updateTable(filteredFlights);
     updateMapMarkers(filteredFlights);
   }
@@ -170,11 +221,13 @@ document.addEventListener('DOMContentLoaded', () => {
     filterFlights();
   });
 
-  // Filtrar vuelos al presionar Enter en el campo de texto
-  airlineFilter.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') {
-      console.log("Enter presionado en el campo de filtro");
-      filterFlights();
-    }
+  // Filtrar vuelos al presionar Enter en los campos de texto
+  [airlineFilter, originFilter, destinationFilter].forEach(input => {
+    input.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') {
+        console.log("Enter presionado en el campo de filtro");
+        filterFlights();
+      }
+    });
   });
 });
