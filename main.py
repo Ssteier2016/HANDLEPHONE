@@ -56,7 +56,7 @@ def setup_driver():
         return driver
     except Exception as e:
         logger.error(f"Error al inicializar el driver de Selenium: {str(e)}")
-        raise
+        return None  # Devolver None en lugar de lanzar una excepción
 
 # Función para parsear la fecha y hora del formato de AA2000 (ejemplo: "27 Abr 15:30")
 def parse_aa2000_datetime(date_str, time_str):
@@ -82,6 +82,10 @@ def scrape_aa2000_flights():
     try:
         logger.info("Scrapeando datos de AA2000...")
         driver = setup_driver()
+        if driver is None:
+            logger.error("No se pudo inicializar el driver de Selenium. Saltando el scraper de AA2000.")
+            return flights
+
         url = "https://www.aa2000.com.ar/arribos-y-partidas?airport=AEP"
         driver.get(url)
         time.sleep(5)  # Esperar a que la página cargue
