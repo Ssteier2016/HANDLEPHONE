@@ -411,7 +411,7 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "airline_iata": "AR",
                     "airline_name": airline_name,
                     "departure": departure,
-                    "departure_airport": departure_airmo_airport": departure_airport,
+                    "departure_airport": departure_airport,
                     "arrival": arrival,
                     "arrival_airport": arrival_airport,
                     "estimated_departure": estimated_departure,
