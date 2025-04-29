@@ -97,13 +97,14 @@ session = Session()
 # Dependencia para verificar si el usuario está logueado
 def get_current_user(request: Request):
     if not session.logged_in:
-        # Redirigir a /login en lugar de lanzar una excepción
         return RedirectResponse(url="/login", status_code=303)
     return session.user
 
 # Ruta para la página de registro
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("register.html", {"request": request, "positions": ALLOWED_POSITIONS})
 
 # Ruta para procesar el registro
@@ -116,6 +117,9 @@ async def register(
     password: str = Form(...),
     confirm_password: str = Form(...)
 ):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
+
     # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("register.html", {
@@ -179,6 +183,8 @@ async def register(
 # Ruta para la página de inicio de sesión
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request})
 
 # Ruta para procesar el inicio de sesión
@@ -191,6 +197,9 @@ async def login(
     fingerprint: str = Form(...),
     facial_recognition: str = Form(...)
 ):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
+
     # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("login.html", {
@@ -241,6 +250,8 @@ async def logout():
 # Ruta para la página de restablecimiento de contraseña
 @app.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("reset_password.html", {"request": request})
 
 # Ruta para procesar el restablecimiento de contraseña
@@ -252,6 +263,9 @@ async def reset_password(
     new_password: str = Form(...),
     confirm_new_password: str = Form(...)
 ):
+    if session.logged_in:
+        return RedirectResponse(url="/", status_code=303)
+
     # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("reset_password.html", {
