@@ -17,13 +17,21 @@ apt-get install -y ./google-chrome-stable_current_amd64.deb
 rm google-chrome-stable_current_amd64.deb
 
 # Verificar la versión de Chrome instalada
-CHROME_VERSION=$(google-chrome --version || true)
+CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+' || true)
 echo "Versión de Chrome instalada: $CHROME_VERSION"
 
-# Instalar una versión específica de ChromeDriver compatible con Chrome
-# Nota: Ajustamos la versión según la versión de Chrome instalada
-echo "Descargando ChromeDriver..."
-wget -N https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip
+# Obtener la versión compatible de ChromeDriver
+echo "Obteniendo la versión compatible de ChromeDriver..."
+CHROMEDRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION%%.*}")
+if [ -z "$CHROMEDRIVER_VERSION" ]; then
+    echo "No se pudo obtener la versión de ChromeDriver. Usando una versión reciente conocida..."
+    CHROMEDRIVER_VERSION="114.0.5735.90"  # Fallback a una versión conocida
+fi
+echo "Versión de ChromeDriver a instalar: $CHROMEDRIVER_VERSION"
+
+# Descargar e instalar ChromeDriver
+echo "Descargando ChromeDriver $CHROMEDRIVER_VERSION..."
+wget -N "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
 echo "Descomprimiendo ChromeDriver..."
 unzip chromedriver_linux64.zip
 echo "Moviendo ChromeDriver a /usr/local/bin..."
