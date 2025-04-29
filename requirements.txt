@@ -17,6 +17,7 @@ aiohttp>=3.10.5,<4.0.0
 python-dotenv>=1.0.1,<2.0.0
 cachetools>=5.5.0,<6.0.0
 bcrypt
+python-multipart
 
 # Dependencias para manejo de audio
 speechrecognition>=3.10.0,<4.0.0
