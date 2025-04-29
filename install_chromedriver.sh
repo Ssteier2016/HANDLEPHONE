@@ -27,8 +27,12 @@ CHROMEDRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LAT
 
 # Verificar si se obtuvo una versión válida
 if [ -z "$CHROMEDRIVER_VERSION" ] || echo "$CHROMEDRIVER_VERSION" | grep -q "Error"; then
-    echo "No se pudo obtener la versión de ChromeDriver para Chrome $CHROME_MAJOR_VERSION. Usando una versión reciente conocida..."
-    CHROMEDRIVER_VERSION="126.0.6478.126"  # Fallback a una versión conocida compatible con Chrome 126
+    echo "No se pudo obtener la versión de ChromeDriver para Chrome $CHROME_MAJOR_VERSION. Intentando con una versión más reciente conocida..."
+    CHROMEDRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_126" || true)
+    if [ -z "$CHROMEDRIVER_VERSION" ] || echo "$CHROMEDRIVER_VERSION" | grep -q "Error"; then
+        echo "No se pudo obtener la versión de ChromeDriver para Chrome 126. Usando una versión conocida como fallback..."
+        CHROMEDRIVER_VERSION="114.0.5735.90"  # Fallback a una versión conocida
+    fi
 fi
 echo "Versión de ChromeDriver a instalar: $CHROMEDRIVER_VERSION"
 
