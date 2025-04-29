@@ -51,10 +51,29 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   ws.onmessage = (event) => {
-    const userCount = event.data;
-    console.log("Usuarios conectados:", userCount);
-    connectedUsers.textContent = `Usuarios conectados: ${userCount}`;
-  };
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === "user_count") {
+      document.getElementById("users-count").textContent = data.count;
+      fetch("/users")
+        .then(res => res.json())
+        .then(userData => {
+          const usersDiv = document.getElementById("users-connected");
+          usersDiv.innerHTML = "";
+          userData.users.forEach(user => {
+            const userItem = document.createElement("div");
+            userItem.textContent = `${user.apellido} (${user.legajo})`;
+            usersDiv.appendChild(userItem);
+          });
+        })
+        .catch(error => {
+          console.error("Error al obtener la lista de usuarios:", error);
+        });
+    }
+  } catch (error) {
+    console.error("Error al parsear mensaje de WebSocket:", error);
+  }
+};
 
   ws.onclose = () => {
     console.log("Conexión WebSocket cerrada. Intentando reconectar...");
