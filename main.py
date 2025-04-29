@@ -47,6 +47,9 @@ AIRPORT_COORDS = {
 # Lista para rastrear conexiones WebSocket activas
 connected_clients = set()
 
+# Lista para almacenar los mensajes del chat (temporal, se pierde al reiniciar el servidor)
+chat_messages = []
+
 # Lista predefinida de usuarios permitidos (legajo: apellido)
 ALLOWED_USERS = {
     "35127": "Souto",
@@ -340,9 +343,10 @@ async def read_root(request: Request, user: dict = Depends(get_current_user)):
 
 # Ruta para obtener todos los vuelos (protegida)
 @app.get("/flights")
-async def get_flights(user: dict = Depends(get_current_user)):
+async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
         return user
+    
     all_flights = []
     current_time = int(time.time())
     six_hours_future = current_time + (6 * 3600)
@@ -360,6 +364,7 @@ async def get_flights(user: dict = Depends(get_current_user)):
                     "hl": "es",
                     "currency": "ARS",
                     "outbound_date": datetime.now().strftime("%Y-%m-%d"),
+                    "sort": "3"  # Ordenar por hora de salida (Departure time)
                 }
             )
             response.raise_for_status()
@@ -406,7 +411,7 @@ async def get_flights(user: dict = Depends(get_current_user)):
                     "airline_iata": "AR",
                     "airline_name": airline_name,
                     "departure": departure,
-                    "departure_airport": departure_airport,
+                    "departure_airport": departure_airmo_airport": departure_airport,
                     "arrival": arrival,
                     "arrival_airport": arrival_airport,
                     "estimated_departure": estimated_departure,
@@ -632,11 +637,25 @@ async def get_flights(user: dict = Depends(get_current_user)):
             seen_flights.add(flight_iata)
             unique_flights.append(flight)
 
-    logger.info(f"Total de vuelos procesados: {len(unique_flights)}")
+    # 5. Ordenar por hora de salida (estimated_departure)
+    unique_flights.sort(key=lambda x: x["estimated_departure"] if x["estimated_departure"] != "N/A" else "24:00")
+
+    # 6. Paginación: 25 vuelos por página
+    flights_per_page = 25
+    total_flights = len(unique_flights)
+    total_pages = (total_flights + flights_per_page - 1) // flights_per_page
+    start_idx = (page - 1) * flights_per_page
+    end_idx = start_idx + flights_per_page
+    paginated_flights = unique_flights[start_idx:end_idx]
+
+    logger.info(f"Total de vuelos procesados: {total_flights}")
 
     return {
-        "flights": unique_flights,
-        "failed_sources": failed_sources
+        "flights": paginated_flights,
+        "failed_sources": failed_sources,
+        "total_flights": total_flights,
+        "total_pages": total_pages,
+        "current_page": page
     }
 
 # Función auxiliar para parsear el tiempo de AviationStack
@@ -647,27 +666,60 @@ def parse_aviationstack_time(time_str):
         logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
         return 0
 
-# WebSocket para rastrear usuarios conectados
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+# WebSocket para el chat global
+@app.websocket("/chat")
+async def chat_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.add(websocket)
     try:
-        await websocket.send_text(str(len(connected_clients)))
-        for client in connected_clients:
-            if client != websocket:
-                await client.send_text(str(len(connected_clients)))
+        # Enviar mensajes previos al usuario que se conecta
+        for message in chat_messages:
+            await websocket.send_json(message)
+
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_json()
+            message_type = data.get("type")
+            sender = data.get("sender", "Anónimo")
+            content = data.get("content")
+
+            if message_type == "text":
+                # Mensaje de texto
+                message = {
+                    "type": "text",
+                    "sender": sender,
+                    "content": content,
+                    "timestamp": datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).strftime("%Y-%m-%d %H:%M:%S")
+                }
+                chat_messages.append(message)
+                # Mantener solo los últimos 100 mensajes para evitar que crezca indefinidamente
+                if len(chat_messages) > 100:
+                    chat_messages.pop(0)
+
+    # Transmitir el mensaje a todos los clientes conectados
+                for client in connected_clients:
+                    await client.send_json(message)
+
+            elif message_type == "audio":
+                # Mensaje de audio (base64)
+                message = {
+                    "type": "audio",
+                    "sender": sender,
+                    "content": content,  # URL de datos en base64
+                    "timestamp": datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).strftime("%Y-%m-%d %H:%M:%S")
+                }
+                chat_messages.append(message)
+                if len(chat_messages) > 100:
+                    chat_messages.pop(0)
+
+                # Transmitir el audio a todos los clientes conectados
+                for client in connected_clients:
+                    await client.send_json(message)
+
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
-        for client in connected_clients:
-            await client.send_text(str(len(connected_clients)))
     except Exception as e:
-        logger.error(f"Error en WebSocket: {str(e)}")
+        logger.error(f"Error en WebSocket de chat: {str(e)}")
         connected_clients.remove(websocket)
-        for client in connected_clients:
-            await client.send_text(str(len(connected_clients)))
 
 # Iniciar el servidor
 if __name__ == "__main__":
