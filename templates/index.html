@@ -13,7 +13,6 @@
       margin: 0;
       padding: 0;
       background-color: #f0f0f0;
-      /* Fondo de pantalla */
       background-image: url('/templates/fondoaero.png');
       background-size: cover;
       background-position: center;
@@ -110,7 +109,7 @@
     #flights-table td {
       padding: 10px;
       border: 1px solid #ddd;
-      text-align: center; /* Centrar el texto en las celdas */
+      text-align: center;
     }
     #flights-table th {
       background-color: #007bff;
@@ -547,19 +546,31 @@
     // WebSocket para usuarios conectados
     const ws = new WebSocket(`wss://${window.location.host}/ws`);
     ws.onmessage = (event) => {
-      const count = event.data;
-      document.getElementById("users-count").textContent = count;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "user_count") {
+          // Actualizar solo el conteo de usuarios
+          document.getElementById("users-count").textContent = data.count;
 
-      // Obtener lista de usuarios conectados
-      fetch("/users").then(res => res.json()).then(data => {
-        const usersDiv = document.getElementById("users-connected");
-        usersDiv.innerHTML = "";
-        data.users.forEach(user => {
-          const userItem = document.createElement("div");
-          userItem.textContent = `${user.apellido} (${user.legajo}) - ${user.position}`;
-          usersDiv.appendChild(userItem);
-        });
-      });
+          // Obtener lista de usuarios conectados
+          fetch("/users")
+            .then(res => res.json())
+            .then(userData => {
+              const usersDiv = document.getElementById("users-connected");
+              usersDiv.innerHTML = "";
+              userData.users.forEach(user => {
+                const userItem = document.createElement("div");
+                userItem.textContent = `${user.apellido} (${user.legajo})`;
+                usersDiv.appendChild(userItem);
+              });
+            })
+            .catch(error => {
+              console.error("Error al obtener la lista de usuarios:", error);
+            });
+        }
+      } catch (error) {
+        console.error("Error al parsear mensaje de WebSocket:", error);
+      }
     };
 
     // WebSocket para el chat global
