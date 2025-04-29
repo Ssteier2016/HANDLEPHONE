@@ -3,23 +3,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const refreshBtn = document.getElementById('refresh-btn');
   const filterBtn = document.getElementById('filter-btn');
-  const airlineFilter = document.getElementById('airline-filter');
-  const originFilter = document.getElementById('origin-filter');
-  const destinationFilter = document.getElementById('destination-filter');
+  const searchFilter = document.getElementById('search-filter');
   const voiceToggle = document.getElementById('voice-toggle');
   const flightsBody = document.getElementById('flights-body');
   const lastUpdated = document.getElementById('last-updated');
+  const connectedUsers = document.getElementById('connected-users');
 
-  if (!refreshBtn || !filterBtn || !airlineFilter || !originFilter || !destinationFilter || !voiceToggle || !flightsBody || !lastUpdated) {
+  if (!refreshBtn || !filterBtn || !searchFilter || !voiceToggle || !flightsBody || !lastUpdated || !connectedUsers) {
     console.error("No se encontraron los elementos del DOM:", {
       refreshBtn: !!refreshBtn,
       filterBtn: !!filterBtn,
-      airlineFilter: !!airlineFilter,
-      originFilter: !!originFilter,
-      destinationFilter: !!destinationFilter,
+      searchFilter: !!searchFilter,
       voiceToggle: !!voiceToggle,
       flightsBody: !!flightsBody,
-      lastUpdated: !!lastUpdated
+      lastUpdated: !!lastUpdated,
+      connectedUsers: !!connectedUsers
     });
     return;
   }
@@ -32,13 +30,46 @@ document.addEventListener('DOMContentLoaded', () => {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
+  // Definir ícono personalizado para los marcadores
+  const planeIcon = L.icon({
+    iconUrl: '/templates/aero.png',
+    iconSize: [32, 32], // Tamaño del ícono
+    iconAnchor: [16, 16], // Punto del ícono que se alinea con la coordenada
+    popupAnchor: [0, -16] // Punto donde se abre el popup respecto al ícono
+  });
+
   // Variable para almacenar todos los vuelos
   let allFlights = [];
+
+  // Configurar WebSocket para rastrear usuarios conectados
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+  let ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    console.log("Conexión WebSocket establecida");
+  };
+
+  ws.onmessage = (event) => {
+    const userCount = event.data;
+    console.log("Usuarios conectados:", userCount);
+    connectedUsers.textContent = `Usuarios conectados: ${userCount}`;
+  };
+
+  ws.onclose = () => {
+    console.log("Conexión WebSocket cerrada. Intentando reconectar...");
+    setTimeout(() => {
+      ws = new WebSocket(wsUrl);
+    }, 5000);
+  };
+
+  ws.onerror = (error) => {
+    console.error("Error en WebSocket:", error);
+  };
 
   // Función para actualizar los marcadores en el mapa
   function updateMapMarkers(flights) {
     console.log("Actualizando marcadores en el mapa con", flights.length, "vuelos");
-    // Limpiar marcadores existentes
     map.eachLayer(layer => {
       if (layer instanceof L.Marker) {
         map.removeLayer(layer);
@@ -46,10 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     flights.forEach(flight => {
-      // Verificar que las coordenadas existan y sean válidas
       if (flight.lat && flight.lon && !isNaN(flight.lat) && !isNaN(flight.lon)) {
         console.log("Añadiendo marcador para vuelo:", flight.flight_iata, "en", flight.lat, flight.lon);
-        const marker = L.marker([flight.lat, flight.lon]).addTo(map);
+        const marker = L.marker([flight.lat, flight.lon], { icon: planeIcon }).addTo(map);
         marker.bindPopup(`
           <b>Vuelo:</b> ${flight.flight_iata || 'N/A'}<br>
           <b>Aerolínea:</b> ${flight.airline_iata || 'N/A'}<br>
@@ -87,13 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
       flightsBody.appendChild(row);
     });
 
-    // Si la opción de voz está habilitada, leer las llegadas
     if (voiceToggle.checked) {
       speakArrivals(flights);
     }
   }
 
-  // Función para leer las llegadas (y opcionalmente salidas) usando Web Speech Synthesis
+  // Función para leer las llegadas usando Web Speech Synthesis
   function speakArrivals(flights) {
     if ('speechSynthesis' in window) {
       console.log("Leyendo llegadas con voz...");
@@ -154,7 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Mostrar todos los vuelos inicialmente
       updateTable(allFlights);
       updateMapMarkers(allFlights);
       updateLastUpdated();
@@ -166,32 +194,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Función para filtrar vuelos por aerolínea, origen y destino
+  // Función para filtrar vuelos por términos de búsqueda
   function filterFlights() {
-    const airline = airlineFilter.value.trim().toUpperCase();
-    const origin = originFilter.value.trim().toUpperCase();
-    const destination = destinationFilter.value.trim().toUpperCase();
-    console.log("Filtrando vuelos por:", { airline, origin, destination });
+    const searchTerms = searchFilter.value.trim().toUpperCase().split(/\s+/);
+    console.log("Filtrando vuelos por términos:", searchTerms);
 
     let filteredFlights = allFlights;
 
-    if (airline) {
-      filteredFlights = filteredFlights.filter(flight => 
-        (flight.airline_iata || '').toUpperCase() === airline || 
-        (flight.flight_iata || '').toUpperCase().startsWith(airline)
-      );
-    }
+    if (searchTerms.length > 0) {
+      filteredFlights = filteredFlights.filter(flight => {
+        const airlineMatch = searchTerms.some(term => 
+          (flight.airline_iata || '').toUpperCase() === term || 
+          (flight.flight_iata || '').toUpperCase().startsWith(term)
+        );
+        const originMatch = searchTerms.some(term => 
+          (flight.departure || '').toUpperCase() === term
+        );
+        const destinationMatch = searchTerms.some(term => 
+          (flight.arrival || '').toUpperCase() === term
+        );
 
-    if (origin) {
-      filteredFlights = filteredFlights.filter(flight => 
-        (flight.departure || '').toUpperCase() === origin
-      );
-    }
-
-    if (destination) {
-      filteredFlights = filteredFlights.filter(flight => 
-        (flight.arrival || '').toUpperCase() === destination
-      );
+        // Si no hay términos de búsqueda, mostrar todos los vuelos
+        // Si hay términos, un vuelo debe coincidir con al menos uno de los criterios
+        return searchTerms.length === 0 || airlineMatch || originMatch || destinationMatch;
+      });
     }
 
     console.log("Vuelos filtrados:", filteredFlights);
@@ -203,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log("Cargando vuelos al iniciar...");
   fetchFlights();
 
-  // Actualizar vuelos automáticamente cada hora (3600000 ms = 1 hora)
+  // Actualizar vuelos automáticamente cada hora
   setInterval(() => {
     console.log("Actualización automática de vuelos...");
     fetchFlights();
@@ -221,13 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
     filterFlights();
   });
 
-  // Filtrar vuelos al presionar Enter en los campos de texto
-  [airlineFilter, originFilter, destinationFilter].forEach(input => {
-    input.addEventListener('keypress', (event) => {
-      if (event.key === 'Enter') {
-        console.log("Enter presionado en el campo de filtro");
-        filterFlights();
-      }
-    });
+  // Filtrar vuelos al presionar Enter en el campo de búsqueda
+  searchFilter.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+      console.log("Enter presionado en el campo de búsqueda");
+      filterFlights();
+    }
   });
 });
