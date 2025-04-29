@@ -110,10 +110,22 @@ def scrape_aa2000_flights():
                         flights.append({
                             "flight_iata": flight_number,
                             "airline_iata": "AR",
+                            "airline_name": "Aerolíneas Argentinas",
                             "departure": origin,
+                            "departure_airport": origin,  # No tenemos nombre completo
                             "arrival": "AEP",
+                            "arrival_airport": "Aeroparque Jorge Newbery",
                             "estimated_departure": "N/A",
                             "estimated_arrival": formatted_time,
+                            "scheduled_departure": "N/A",
+                            "scheduled_arrival": formatted_time,
+                            "departure_delay": "0",
+                            "arrival_delay": "0",
+                            "departure_gate": "N/A",
+                            "arrival_gate": "N/A",
+                            "departure_terminal": "N/A",
+                            "arrival_terminal": "N/A",
+                            "aircraft": "N/A",
                             "status": status,
                             "lat": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lat"],
                             "lon": AIRPORT_COORDS.get(origin, AIRPORT_COORDS["AEP"])["lon"]
@@ -135,10 +147,22 @@ def scrape_aa2000_flights():
                         flights.append({
                             "flight_iata": flight_number,
                             "airline_iata": "AR",
+                            "airline_name": "Aerolíneas Argentinas",
                             "departure": "AEP",
+                            "departure_airport": "Aeroparque Jorge Newbery",
                             "arrival": destination,
+                            "arrival_airport": destination,  # No tenemos nombre completo
                             "estimated_departure": formatted_time,
                             "estimated_arrival": "N/A",
+                            "scheduled_departure": formatted_time,
+                            "scheduled_arrival": "N/A",
+                            "departure_delay": "0",
+                            "arrival_delay": "0",
+                            "departure_gate": "N/A",
+                            "arrival_gate": "N/A",
+                            "departure_terminal": "N/A",
+                            "arrival_terminal": "N/A",
+                            "aircraft": "N/A",
                             "status": status,
                             "lat": AIRPORT_COORDS.get("AEP", {"lat": -34.5592})["lat"],
                             "lon": AIRPORT_COORDS.get("AEP", {"lon": -58.4156})["lon"]
@@ -210,13 +234,44 @@ async def get_flights():
                     if estimated_arrival != "N/A":
                         estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
 
+                    # Datos adicionales
+                    scheduled_departure = flight.get("dep_scheduled", "N/A")
+                    scheduled_arrival = flight.get("arr_scheduled", "N/A")
+                    if scheduled_departure != "N/A":
+                        scheduled_departure = datetime.strptime(scheduled_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                    if scheduled_arrival != "N/A":
+                        scheduled_arrival = datetime.strptime(scheduled_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+
+                    departure_delay = str(flight.get("dep_delayed", "0"))
+                    arrival_delay = str(flight.get("arr_delayed", "0"))
+                    departure_gate = flight.get("dep_gate", "N/A")
+                    arrival_gate = flight.get("arr_gate", "N/A")
+                    departure_terminal = flight.get("dep_terminal", "N/A")
+                    arrival_terminal = flight.get("arr_terminal", "N/A")
+                    aircraft = flight.get("aircraft_iata", "N/A")
+                    airline_name = flight.get("airline_name", "N/A")
+                    departure_airport = flight.get("dep_airport", departure)  # Fallback al código IATA
+                    arrival_airport = flight.get("arr_airport", arrival)
+
                     all_flights.append({
                         "flight_iata": flight.get("flight_iata", "N/A"),
                         "airline_iata": flight.get("airline_iata", "N/A"),
+                        "airline_name": airline_name,
                         "departure": departure,
+                        "departure_airport": departure_airport,
                         "arrival": arrival,
+                        "arrival_airport": arrival_airport,
                         "estimated_departure": estimated_departure,
                         "estimated_arrival": estimated_arrival,
+                        "scheduled_departure": scheduled_departure,
+                        "scheduled_arrival": scheduled_arrival,
+                        "departure_delay": departure_delay,
+                        "arrival_delay": arrival_delay,
+                        "departure_gate": departure_gate,
+                        "arrival_gate": arrival_gate,
+                        "departure_terminal": departure_terminal,
+                        "arrival_terminal": arrival_terminal,
+                        "aircraft": aircraft,
                         "status": flight.get("status", "N/A"),
                         "lat": lat,
                         "lon": lon
@@ -280,13 +335,44 @@ async def get_flights():
                 if estimated_arrival != "N/A":
                     estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
 
+                # Datos adicionales
+                scheduled_departure = flight.get("departure", {}).get("scheduled", "N/A")
+                scheduled_arrival = flight.get("arrival", {}).get("scheduled", "N/A")
+                if scheduled_departure != "N/A":
+                    scheduled_departure = datetime.strptime(scheduled_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                if scheduled_arrival != "N/A":
+                    scheduled_arrival = datetime.strptime(scheduled_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+
+                departure_delay = str(flight.get("departure", {}).get("delay", "0"))
+                arrival_delay = str(flight.get("arrival", {}).get("delay", "0"))
+                departure_gate = flight.get("departure", {}).get("gate", "N/A")
+                arrival_gate = flight.get("arrival", {}).get("gate", "N/A")
+                departure_terminal = flight.get("departure", {}).get("terminal", "N/A")
+                arrival_terminal = flight.get("arrival", {}).get("terminal", "N/A")
+                aircraft = flight.get("aircraft", {}).get("iata", "N/A")
+                airline_name = flight.get("airline", {}).get("name", "N/A")
+                departure_airport = flight.get("departure", {}).get("airport", departure)
+                arrival_airport = flight.get("arrival", {}).get("airport", arrival)
+
                 all_flights.append({
                     "flight_iata": flight.get("flight", {}).get("iata", "N/A"),
                     "airline_iata": flight.get("airline", {}).get("iata", "N/A"),
+                    "airline_name": airline_name,
                     "departure": departure,
+                    "departure_airport": departure_airport,
                     "arrival": arrival,
+                    "arrival_airport": arrival_airport,
                     "estimated_departure": estimated_departure,
                     "estimated_arrival": estimated_arrival,
+                    "scheduled_departure": scheduled_departure,
+                    "scheduled_arrival": scheduled_arrival,
+                    "departure_delay": departure_delay,
+                    "arrival_delay": arrival_delay,
+                    "departure_gate": departure_gate,
+                    "arrival_gate": arrival_gate,
+                    "departure_terminal": departure_terminal,
+                    "arrival_terminal": arrival_terminal,
+                    "aircraft": aircraft,
                     "status": status,
                     "lat": lat,
                     "lon": lon
@@ -323,17 +409,14 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.add(websocket)
     try:
-        # Enviar el número inicial de usuarios conectados
         await websocket.send_text(str(len(connected_clients)))
-        # Notificar a todos los clientes del nuevo número de usuarios conectados
         for client in connected_clients:
-            if client != websocket:  # No enviar al cliente que se acaba de conectar
+            if client != websocket:
                 await client.send_text(str(len(connected_clients)))
         while True:
-            await websocket.receive_text()  # Mantener la conexión viva
+            await websocket.receive_text()
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
-        # Notificar a los clientes restantes del nuevo número de usuarios conectados
         for client in connected_clients:
             await client.send_text(str(len(connected_clients)))
     except Exception as e:
@@ -345,3 +428,4 @@ async def websocket_endpoint(websocket: WebSocket):
 # Iniciar el servidor
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    
