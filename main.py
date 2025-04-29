@@ -11,6 +11,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime, timedelta
 import pytz
 import asyncio
@@ -50,6 +52,7 @@ def setup_driver():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
     try:
         logger.info("Intentando inicializar el driver de Selenium...")
         service = Service('/usr/local/bin/chromedriver')
@@ -61,8 +64,8 @@ def setup_driver():
         logger.error(f"Error al inicializar el driver de Selenium: {str(e)}")
         return None
 
-# Función para parsear la fecha y hora del formato de AA2000
-def parse_aa2000_datetime(date_str, time_str):
+# Función para parsear la fecha y hora del formato de AA2000 y TAMS
+def parse_datetime(date_str, time_str):
     try:
         datetime_str = f"{date_str} {time_str} 2025"
         dt = datetime.strptime(datetime_str, "%d %b %H:%M %Y")
@@ -70,7 +73,7 @@ def parse_aa2000_datetime(date_str, time_str):
         dt = tz.localize(dt)
         return int(dt.timestamp()), dt.strftime("%H:%M")
     except Exception as e:
-        logger.error(f"Error al parsear fecha de AA2000: {date_str} {time_str}, error: {str(e)}")
+        logger.error(f"Error al parsear fecha: {date_str} {time_str}, error: {str(e)}")
         return 0, "N/A"
 
 # Scraper para AA2000
@@ -105,14 +108,14 @@ def scrape_aa2000_flights():
                 status = cells[4].text.strip()
 
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
-                    scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
+                    scheduled_timestamp, formatted_time = parse_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
                         flights.append({
                             "flight_iata": flight_number,
                             "airline_iata": "AR",
                             "airline_name": "Aerolíneas Argentinas",
                             "departure": origin,
-                            "departure_airport": origin,  # No tenemos nombre completo
+                            "departure_airport": origin,
                             "arrival": "AEP",
                             "arrival_airport": "Aeroparque Jorge Newbery",
                             "estimated_departure": "N/A",
@@ -142,7 +145,7 @@ def scrape_aa2000_flights():
                 status = cells[4].text.strip()
 
                 if "AR" in flight_number or "Aerolíneas Argentinas" in airline:
-                    scheduled_timestamp, formatted_time = parse_aa2000_datetime(date, scheduled_time)
+                    scheduled_timestamp, formatted_time = parse_datetime(date, scheduled_time)
                     if current_time <= scheduled_timestamp <= six_hours_future:
                         flights.append({
                             "flight_iata": flight_number,
@@ -151,7 +154,7 @@ def scrape_aa2000_flights():
                             "departure": "AEP",
                             "departure_airport": "Aeroparque Jorge Newbery",
                             "arrival": destination,
-                            "arrival_airport": destination,  # No tenemos nombre completo
+                            "arrival_airport": destination,
                             "estimated_departure": formatted_time,
                             "estimated_arrival": "N/A",
                             "scheduled_departure": formatted_time,
@@ -180,11 +183,97 @@ def scrape_aa2000_flights():
 
     return flights
 
-# Ruta para servir la página principal
-@app.get("/", response_class=HTMLResponse)
-@app.head("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# Scraper para TAMS
+def scrape_tams_flights():
+    driver = None
+    flights = []
+    current_time = int(time.time())
+    six_hours_future = current_time + (6 * 3600)
+
+    try:
+        logger.info("Scrapeando datos de TAMS...")
+        driver = setup_driver()
+        if driver is None:
+            logger.error("No se pudo inicializar el driver de Selenium. Saltando el scraper de TAMS.")
+            return flights
+
+        url = "http://www.tams.com.ar/organismos/vuelos.aspx"
+        driver.get(url)
+        
+        # Esperar a que la tabla de vuelos se cargue
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
+        )
+
+        # Obtener todas las filas de la tabla (asumimos que hay una sola tabla con los vuelos)
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]  # Saltamos el encabezado
+
+        for row in rows:
+            cells = row.find_elements(By.TAG_NAME, "td")
+            if len(cells) >= 7:  # Ajusta según la estructura real de la tabla
+                flight_number = cells[0].text.strip()
+                airline = cells[1].text.strip()
+                origin = cells[2].text.strip()
+                destination = cells[3].text.strip()
+                scheduled_time = cells[4].text.strip()
+                gate = cells[5].text.strip()
+                status = cells[6].text.strip()
+                # Observaciones (puede requerir interacción para obtener el texto en rollover)
+                observations = "N/A"
+                try:
+                    obs_cell = cells[7] if len(cells) > 7 else None
+                    if obs_cell and obs_cell.text.strip() == "OBS":
+                        # Simular un rollover podría ser complicado; intentamos obtener el atributo title si existe
+                        observations = obs_cell.get_attribute("title") or "N/A"
+                except:
+                    pass
+
+                # Determinar si es llegada o partida basándonos en si AEP está en origen o destino
+                is_arrival = destination == "AEP"
+                date = datetime.now().strftime("%d %b")
+
+                # Parsear la fecha y hora
+                scheduled_timestamp, formatted_time = parse_datetime(date, scheduled_time)
+
+                # Filtrar por vuelos de Aerolíneas Argentinas (AR) y dentro de las próximas 6 horas
+                if ("AR" in flight_number or "Aerolíneas Argentinas" in airline) and current_time <= scheduled_timestamp <= six_hours_future:
+                    flight_data = {
+                        "flight_iata": flight_number,
+                        "airline_iata": "AR",
+                        "airline_name": "Aerolíneas Argentinas",
+                        "departure": origin,
+                        "departure_airport": origin,
+                        "arrival": destination,
+                        "arrival_airport": destination,
+                        "estimated_departure": formatted_time if not is_arrival else "N/A",
+                        "estimated_arrival": formatted_time if is_arrival else "N/A",
+                        "scheduled_departure": formatted_time if not is_arrival else "N/A",
+                        "scheduled_arrival": formatted_time if is_arrival else "N/A",
+                        "departure_delay": "0",
+                        "arrival_delay": "0",
+                        "departure_gate": gate if not is_arrival else "N/A",
+                        "arrival_gate": gate if is_arrival else "N/A",
+                        "departure_terminal": "N/A",
+                        "arrival_terminal": "N/A",
+                        "aircraft": "N/A",
+                        "status": status,
+                        "observations": observations,
+                        "lat": AIRPORT_COORDS.get(origin if not is_arrival else "AEP", {"lat": -34.5592})["lat"],
+                        "lon": AIRPORT_COORDS.get(origin if not is_arrival else "AEP", {"lon": -58.4156})["lon"]
+                    }
+                    flights.append(flight_data)
+
+        logger.info(f"Vuelos scrapeados de TAMS (AR, AEP, próximas 6 horas): {len(flights)}")
+        if flights:
+            logger.info(f"Primeros 3 vuelos scrapeados de TAMS: {flights[:3]}")
+
+    except Exception as e:
+        logger.error(f"Error al scrapear TAMS: {str(e)}")
+    finally:
+        if driver:
+            driver.quit()
+
+    return flights
 
 # Ruta para obtener todos los vuelos
 @app.get("/flights")
@@ -200,7 +289,14 @@ async def get_flights():
     except Exception as e:
         logger.error(f"Error al obtener vuelos de AA2000: {str(e)}")
 
-    # 2. Consultar GoFlightLabs
+    # 2. Scraper de TAMS
+    try:
+        tams_flights = scrape_tams_flights()
+        all_flights.extend(tams_flights)
+    except Exception as e:
+        logger.error(f"Error al obtener vuelos de TAMS: {str(e)}")
+
+    # 3. Consultar GoFlightLabs
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de GoFlightLabs...")
@@ -234,7 +330,6 @@ async def get_flights():
                     if estimated_arrival != "N/A":
                         estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
 
-                    # Datos adicionales
                     scheduled_departure = flight.get("dep_scheduled", "N/A")
                     scheduled_arrival = flight.get("arr_scheduled", "N/A")
                     if scheduled_departure != "N/A":
@@ -250,7 +345,7 @@ async def get_flights():
                     arrival_terminal = flight.get("arr_terminal", "N/A")
                     aircraft = flight.get("aircraft_iata", "N/A")
                     airline_name = flight.get("airline_name", "N/A")
-                    departure_airport = flight.get("dep_airport", departure)  # Fallback al código IATA
+                    departure_airport = flight.get("dep_airport", departure)
                     arrival_airport = flight.get("arr_airport", arrival)
 
                     all_flights.append({
@@ -273,6 +368,7 @@ async def get_flights():
                         "arrival_terminal": arrival_terminal,
                         "aircraft": aircraft,
                         "status": flight.get("status", "N/A"),
+                        "observations": "N/A",
                         "lat": lat,
                         "lon": lon
                     })
@@ -281,7 +377,7 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
 
-    # 3. Consultar AviationStack
+    # 4. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -335,7 +431,6 @@ async def get_flights():
                 if estimated_arrival != "N/A":
                     estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
 
-                # Datos adicionales
                 scheduled_departure = flight.get("departure", {}).get("scheduled", "N/A")
                 scheduled_arrival = flight.get("arrival", {}).get("scheduled", "N/A")
                 if scheduled_departure != "N/A":
@@ -374,6 +469,7 @@ async def get_flights():
                     "arrival_terminal": arrival_terminal,
                     "aircraft": aircraft,
                     "status": status,
+                    "observations": "N/A",
                     "lat": lat,
                     "lon": lon
                 })
@@ -382,7 +478,7 @@ async def get_flights():
         except Exception as e:
             logger.error(f"Error inesperado al consultar AviationStack: {str(e)}")
 
-    # 4. Eliminar duplicados basados en flight_iata
+    # 5. Eliminar duplicados basados en flight_iata
     seen_flights = set()
     unique_flights = []
     for flight in all_flights:
@@ -428,4 +524,3 @@ async def websocket_endpoint(websocket: WebSocket):
 # Iniciar el servidor
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    
