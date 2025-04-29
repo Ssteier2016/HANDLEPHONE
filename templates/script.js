@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Variable para almacenar todos los vuelos
-  let allFlights = [];
+  let all Flights = [];
 
   // Configurar WebSocket para rastrear usuarios conectados
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -98,11 +98,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Función para actualizar la tabla
-  function updateTable(flights) {
+  function updateTable(flights, failedSources) {
     console.log("Actualizando tabla con", flights.length, "vuelos");
     flightsBody.innerHTML = '';
+
+    // Mostrar mensaje sobre fuentes fallidas
+    if (failedSources && failedSources.length > 0) {
+      const errorRow = document.createElement('tr');
+      errorRow.innerHTML = `<td colspan="8" style="color: red;">Advertencia: No se pudieron obtener datos de las siguientes fuentes: ${failedSources.join(', ')}. Los datos mostrados podrían estar incompletos.</td>`;
+      flightsBody.appendChild(errorRow);
+    }
+
     if (flights.length === 0) {
-      flightsBody.innerHTML = '<tr><td colspan="8">No se encontraron vuelos para los filtros aplicados.</td></tr>';
+      const noDataRow = document.createElement('tr');
+      noDataRow.innerHTML = '<td colspan="8">No se encontraron vuelos para los filtros aplicados.</td>';
+      flightsBody.appendChild(noDataRow);
       return;
     }
 
@@ -220,7 +230,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       allFlights = data.flights || [];
+      const failedSources = data.failed_sources || [];
       console.log("Vuelos procesados:", allFlights);
+      console.log("Fuentes fallidas:", failedSources);
 
       if (allFlights.length === 0) {
         flightsBody.innerHTML = '<tr><td colspan="8">No se encontraron vuelos.</td></tr>';
@@ -228,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      updateTable(allFlights);
+      updateTable(allFlights, failedSources);
       updateMapMarkers(allFlights);
       updateLastUpdated();
 
