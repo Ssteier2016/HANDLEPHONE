@@ -31,6 +31,10 @@ GOFLIGHTLABS_API_URL = f"https://www.goflightlabs.com/flights?access_key={GOFLIG
 AVIATIONSTACK_API_KEY = "e2ffa37f30b26c5ab57dfbf77982a25b"
 AVIATIONSTACK_API_URL = f"http://api.aviationstack.com/v1/flights?access_key={AVIATIONSTACK_API_KEY}"
 
+# Clave de API de SerpApi
+SERPAPI_API_KEY = "b1b5b25c9b389d5a70d5bceab6bc568dcdec531a1872b91e789d799c90c762fe"
+SERPAPI_FLIGHTS_URL = f"https://serpapi.com/search?engine=google_flights&api_key={SERPAPI_API_KEY}"
+
 # Coordenadas aproximadas de los aeropuertos
 AIRPORT_COORDS = {
     "AEP": {"lat": -34.5592, "lon": -58.4156},
@@ -54,27 +58,95 @@ async def get_flights():
     six_hours_future = current_time + (6 * 3600)
     failed_sources = []
 
-    # 1. Scraper de AA2000 (Desactivado temporalmente hasta resolver el problema con chromedriver)
-    """
-    try:
-        aa2000_flights = scrape_aa2000_flights()
-        all_flights.extend(aa2000_flights)
-    except Exception as e:
-        logger.error(f"Error al obtener vuelos de AA2000: {str(e)}")
-        failed_sources.append("AA2000")
-    """
+    # 1. Consultar SerpApi (Google Flights)
+    async with httpx.AsyncClient() as client:
+        try:
+            logger.info("Consultando la API de SerpApi (Google Flights)...")
+            # Consulta para vuelos saliendo o llegando a AEP
+            response = await client.get(
+                SERPAPI_FLIGHTS_URL,
+                params={
+                    "departure_id": "AEP",
+                    "arrival_id": "",  # Dejar vacío para buscar todos los destinos desde AEP
+                    "hl": "es",  # Idioma español
+                    "currency": "ARS",  # Moneda argentina
+                    "outbound_date": datetime.now().strftime("%Y-%m-%d"),  # Fecha de hoy
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
 
-    # 2. Scraper de TAMS (Desactivado temporalmente hasta resolver el problema con chromedriver)
-    """
-    try:
-        tams_flights = scrape_tams_flights()
-        all_flights.extend(tams_flights)
-    except Exception as e:
-        logger.error(f"Error al obtener vuelos de TAMS: {str(e)}")
-        failed_sources.append("TAMS")
-    """
+            logger.info(f"Datos recibidos de SerpApi: {data}")
 
-    # 3. Consultar GoFlightLabs
+            flights = data.get("best_flights", []) + data.get("other_flights", [])
+            logger.info(f"Total de vuelos recibidos de SerpApi: {len(flights)}")
+
+            if flights:
+                logger.info(f"Primeros 3 vuelos crudos de SerpApi: {flights[:3]}")
+            else:
+                logger.info("No se recibieron vuelos de SerpApi")
+
+            for flight in flights:
+                # Filtrar solo vuelos de Aerolíneas Argentinas (AR)
+                airline = flight.get("flights", [{}])[0].get("airline", "")
+                if "Aerolíneas Argentinas" not in airline:
+                    continue
+
+                departure = flight.get("flights", [{}])[0].get("departure_airport", {}).get("id", "N/A")
+                arrival = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("id", "N/A")
+
+                # Asegurarse de que el vuelo involucre AEP
+                if departure != "AEP" and arrival != "AEP":
+                    continue
+
+                lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
+                lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
+
+                estimated_departure = flight.get("flights", [{}])[0].get("departure_airport", {}).get("time", "N/A")
+                estimated_arrival = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("time", "N/A")
+                if estimated_departure != "N/A":
+                    # Formato: "2025-04-29 08:00"
+                    estimated_departure = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M").strftime("%H:%M")
+                if estimated_arrival != "N/A":
+                    estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M").strftime("%H:%M")
+
+                flight_number = flight.get("flights", [{}])[0].get("flight_number", "N/A")
+                airline_name = flight.get("flights", [{}])[0].get("airline", "N/A")
+                departure_airport = flight.get("flights", [{}])[0].get("departure_airport", {}).get("name", departure)
+                arrival_airport = flight.get("flights", [{}])[0].get("arrival_airport", {}).get("name", arrival)
+
+                all_flights.append({
+                    "flight_iata": flight_number,
+                    "airline_iata": "AR",
+                    "airline_name": airline_name,
+                    "departure": departure,
+                    "departure_airport": departure_airport,
+                    "arrival": arrival,
+                    "arrival_airport": arrival_airport,
+                    "estimated_departure": estimated_departure,
+                    "estimated_arrival": estimated_arrival,
+                    "scheduled_departure": estimated_departure,  # No disponible en SerpApi, usamos el estimado
+                    "scheduled_arrival": estimated_arrival,  # No disponible en SerpApi, usamos el estimado
+                    "departure_delay": "0",  # No disponible en SerpApi
+                    "arrival_delay": "0",  # No disponible en SerpApi
+                    "departure_gate": "N/A",  # No disponible en SerpApi
+                    "arrival_gate": "N/A",  # No disponible en SerpApi
+                    "departure_terminal": "N/A",  # No disponible en SerpApi
+                    "arrival_terminal": "N/A",  # No disponible en SerpApi
+                    "aircraft": "N/A",  # No disponible en SerpApi
+                    "status": "scheduled",  # No disponible en SerpApi, asumimos programado
+                    "observations": "Datos obtenidos de Google Flights vía SerpApi",
+                    "lat": lat,
+                    "lon": lon
+                })
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Error HTTP al consultar SerpApi: {str(e)}")
+            failed_sources.append("SerpApi")
+        except Exception as e:
+            logger.error(f"Error inesperado al consultar SerpApi: {str(e)}")
+            failed_sources.append("SerpApi")
+
+    # 2. Consultar GoFlightLabs
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de GoFlightLabs...")
@@ -158,7 +230,7 @@ async def get_flights():
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
             failed_sources.append("GoFlightLabs")
 
-    # 4. Consultar AviationStack
+    # 3. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -266,7 +338,7 @@ async def get_flights():
             logger.error(f"Error inesperado al consultar AviationStack: {str(e)}")
             failed_sources.append("AviationStack")
 
-    # 5. Eliminar duplicados basados en flight_iata
+    # 4. Eliminar duplicados basados en flight_iata
     seen_flights = set()
     unique_flights = []
     for flight in all_flights:
