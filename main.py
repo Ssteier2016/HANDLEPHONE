@@ -47,8 +47,10 @@ def setup_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     try:
+        logger.info("Intentando inicializar el driver de Selenium...")
         # Especificar la ruta de ChromeDriver manualmente
         service = Service('/usr/local/bin/chromedriver')
+        logger.info("Ruta de ChromeDriver especificada: /usr/local/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
         logger.info("Driver de Selenium inicializado correctamente")
         return driver
