@@ -31,12 +31,13 @@ h1 {
   margin-right: 10px;
 }
 
-#airline-filter {
+#airline-filter, #origin-filter, #destination-filter {
   padding: 8px;
   font-size: 16px;
   border: 1px solid #ddd;
   border-radius: 5px;
   width: 200px;
+  margin-right: 10px;
 }
 
 #filter-btn, #refresh-btn {
@@ -123,11 +124,14 @@ h1 {
 
   .filter-container label {
     font-size: 14px;
+    display: block;
+    margin-bottom: 5px;
   }
 
-  #airline-filter {
-    width: 150px;
+  #airline-filter, #origin-filter, #destination-filter {
+    width: 100%;
     font-size: 14px;
+    margin-bottom: 10px;
   }
 
   #filter-btn, #refresh-btn {
