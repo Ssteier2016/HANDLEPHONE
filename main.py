@@ -1,7 +1,7 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, Request, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 import httpx
 import uvicorn
 import logging
@@ -12,6 +12,7 @@ import asyncio
 import sqlite3
 import bcrypt
 import re
+import secrets
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -75,35 +76,52 @@ ALLOWED_POSITIONS = [
 def init_db():
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
+    # Tabla para usuarios
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         legajo TEXT PRIMARY KEY,
         apellido TEXT NOT NULL,
         position TEXT NOT NULL,
         password TEXT NOT NULL
     )''')
+    # Tabla para sesiones (almacenar tokens)
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        legajo TEXT NOT NULL,
+        FOREIGN KEY (legajo) REFERENCES users (legajo)
+    )''')
     conn.commit()
     conn.close()
 
 init_db()
 
-# Simulación de autenticación (para manejar sesiones)
-class Session:
-    def __init__(self):
-        self.logged_in = False
-        self.user = None
-
-session = Session()
-
-# Dependencia para verificar si el usuario está logueado
+# Dependencia para verificar si el usuario está logueado usando cookies
 def get_current_user(request: Request):
-    if not session.logged_in:
+    token = request.cookies.get("session_token")
+    if not token:
         return RedirectResponse(url="/login", status_code=303)
-    return session.user
+
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT legajo FROM sessions WHERE token = ?", (token,))
+    session_data = c.fetchone()
+    if not session_data:
+        conn.close()
+        return RedirectResponse(url="/login", status_code=303)
+
+    legajo = session_data[0]
+    c.execute("SELECT legajo, apellido, position FROM users WHERE legajo = ?", (legajo,))
+    user = c.fetchone()
+    conn.close()
+
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    return {"legajo": user[0], "apellido": user[1], "position": user[2]}
 
 # Ruta para la página de registro
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("register.html", {"request": request, "positions": ALLOWED_POSITIONS})
 
@@ -117,7 +135,7 @@ async def register(
     password: str = Form(...),
     confirm_password: str = Form(...)
 ):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
     # Validar que el legajo y el apellido coincidan con la lista predefinida
@@ -183,7 +201,7 @@ async def register(
 # Ruta para la página de inicio de sesión
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request})
 
@@ -193,11 +211,9 @@ async def login(
     request: Request,
     legajo: str = Form(...),
     apellido: str = Form(...),
-    password: str = Form(...),
-    fingerprint: str = Form(...),
-    facial_recognition: str = Form(...)
+    password: str = Form(...)
 ):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
     # Validar que el legajo y el apellido coincidan con la lista predefinida
@@ -228,29 +244,38 @@ async def login(
             "error": "Contraseña incorrecta."
         })
 
-    # Simular verificación biométrica (huella y reconocimiento facial)
-    if fingerprint.lower() != "ok" or facial_recognition.lower() != "ok":
-        return templates.TemplateResponse("login.html", {
-            "request": request,
-            "error": "Verificación biométrica fallida. Ingresa 'OK' en ambos campos."
-        })
+    # Generar un token de sesión
+    session_token = secrets.token_hex(16)
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO sessions (token, legajo) VALUES (?, ?)", (session_token, legajo))
+    conn.commit()
+    conn.close()
 
-    # Iniciar sesión
-    session.logged_in = True
-    session.user = {"legajo": legajo, "apellido": apellido, "position": user[2]}
-    return RedirectResponse(url="/", status_code=303)
+    # Configurar la cookie y redirigir
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="session_token", value=session_token, httponly=True, max_age=30*24*60*60)  # 30 días
+    return response
 
 # Ruta para cerrar sesión
 @app.get("/logout", response_class=HTMLResponse)
-async def logout():
-    session.logged_in = False
-    session.user = None
-    return RedirectResponse(url="/login", status_code=303)
+async def logout(request: Request):
+    token = request.cookies.get("session_token")
+    if token:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="session_token")
+    return response
 
 # Ruta para la página de restablecimiento de contraseña
 @app.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("reset_password.html", {"request": request})
 
@@ -263,7 +288,7 @@ async def reset_password(
     new_password: str = Form(...),
     confirm_new_password: str = Form(...)
 ):
-    if session.logged_in:
+    if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
     # Validar que el legajo y el apellido coincidan con la lista predefinida
@@ -307,7 +332,7 @@ async def reset_password(
 @app.head("/", response_class=HTMLResponse)
 async def read_root(request: Request, user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
-        return user  # Si get_current_user devuelve una redirección, retornarla
+        return user
     return templates.TemplateResponse("index.html", {
         "request": request,
         "user": user
@@ -317,7 +342,7 @@ async def read_root(request: Request, user: dict = Depends(get_current_user)):
 @app.get("/flights")
 async def get_flights(user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
-        return user  # Si get_current_user devuelve una redirección, retornarla
+        return user
     all_flights = []
     current_time = int(time.time())
     six_hours_future = current_time + (6 * 3600)
