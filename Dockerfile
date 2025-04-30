@@ -7,6 +7,15 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     ffmpeg \
     wget \
+    libxss1 \
+    libappindicator3-1 \
+    libindicator3-7 \
+    fonts-liberation \
+    libasound2 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -24,7 +33,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el resto de los archivos del proyecto (incluye install_chromedriver.sh)
 COPY . .
 
-# Ejecutar el script para instalar Chrome y ChromeDriver
+# Ejecutar el script para instalar Chrome
 RUN chmod +x install_chromedriver.sh && ./install_chromedriver.sh
 
 # Exponer el puerto (Render usa PORT, por defecto 10000)
