@@ -14,6 +14,21 @@ import bcrypt
 import re
 import secrets
 import json
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+def setup_selenium():
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')  # Ejecutar en modo headless
+    options.add_argument('--no-sandbox')  # Necesario para entornos como Render
+    options.add_argument('--disable-dev-shm-usage')  # Evitar problemas de memoria en contenedores
+    options.add_argument('--disable-gpu')  # Desactivar GPU (no necesario en headless)
+
+    # Configurar el servicio de ChromeDriver usando webdriver-manager
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
