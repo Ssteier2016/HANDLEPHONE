@@ -1,83 +1,41 @@
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
-sqlalchemy==2.0.35
-python-decouple==3.8  # Para manejar variables de entorno
-numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
-asyncio==3.4.3
-confluent-kafka
-httpx==0.19.0
-selenium==4.15.2
 # Dependencias requeridas para el backend y la API
-aiohttp>=3.10.5,<4.0.0
-python-dotenv>=1.0.1,<2.0.0
-cachetools>=5.5.0,<6.0.0
-bcrypt==4.0.1
-python-multipart
+fastapi==0.111.1  # Actualizado para soportar pydantic>=2.7.0
+uvicorn==0.30.6  # Versión más reciente
+jinja2==3.1.4  # Versión más reciente
+httpx==0.27.2  # Versión más reciente, compatible con FastAPI
+bcrypt==4.2.0  # Versión más reciente
+python-multipart==0.0.9  # Para manejar formularios en FastAPI
+pydantic==2.9.2  # Especificamos explícitamente para evitar conflictos
+aiohttp==3.10.5  # Compatible con httpx y otras dependencias
+python-dotenv==1.0.1  # Para variables de entorno
+cachetools==5.5.0  # Útil para caching si lo usas
+websockets==15.0  # Para WebSockets
+pytz==2023.3  # Sin cambios
 
-fastapi==0.68.1
-uvicorn==0.15.0
-jinja2==3.0.1
-webdriver_manager==4.0.1
-pytz==2023.3
+# Dependencias para scraping y APIs de vuelos
+selenium==4.15.2  # Mantenemos esta versión
+webdriver_manager==4.0.2  # Versión más reciente
+beautifulsoup4==4.12.3  # Para scraping, si lo usas
 
 # Dependencias para manejo de audio
-speechrecognition>=3.10.0,<4.0.0
-pydub>=0.25.1,<0.26.0
-soundfile>=0.12.1,<0.13.0
-sounddevice==0.4.7  # Para manejar audio en el servidor (si aplica)
-
-# Dependencias para WebSockets
-websockets>=15.0.1,<16.0.0
+speechrecognition==3.10.4  # Versión más reciente
+pydub==0.25.1  # Compatible con speechrecognition
+soundfile==0.12.1  # Compatible con pydub
+sounddevice==0.4.7  # Para manejar audio en el servidor
 
 # Dependencias para base de datos
-# Nota: Usas sqlite3, que es parte de Python, pero incluyo psycopg2 por si usas PostgreSQL en producción
-psycopg2-binary>=2.9.9,<2.10.0  # Opcional
-
-# Dependencias para APIs de vuelos
-FlightRadarAPI>=1.3.33  # Opcional
-
-# Dependencias opcionales para scraping
-beautifulsoup4>=4.12.2,<5.0.0  # Opcional
-
-# Dependencias para validación de configuraciones (opcional)
-pydantic-settings>=2.5.2,<3.0.0
+# SQLite es estándar, pero incluimos psycopg2-binary por si usas PostgreSQL
+# psycopg2-binary==2.9.9  # Descomentar si usas PostgreSQL
 
 # Dependencias para logging
-loguru>=0.7.2,<1.0.0
+loguru==0.7.2  # Simplificado para errores
 
 # Dependencias para pruebas (opcional)
-pytest>=8.3.2,<9.0.0
-pytest-asyncio>=0.23.8,<1.0.0
+pytest==8.3.2  # Para pruebas
+pytest-asyncio==0.24.0  # Para pruebas asíncronas
 
-# Nota: Instalar ffmpeg en el sistema
-# En Render, usa un script de instalación si es necesario
-
-# Dependencias para notificaciones push (descomentar si implementas)
-#pywebpush>=1.14.1,<2.0.0  # Enviar notificaciones push desde el backend
-#cryptography>=43.0.1,<44.0.0  # Generar claves VAPID para notificaciones
-#http_ece>=1.1.0,<2.0.0  # Encriptación de contenido push
-
-# Dependencias para validación de configuraciones (opcional)
-pydantic-settings>=2.5.2,<3.0.0  # Validar variables de entorno con Pydantic
-
-# Dependencias para mejorar el rendimiento
-Flask-Compress>=1.14.0,<2.0.0  # Comprimir respuestas JSON de /aep_flights
-
-# Dependencias para logging (opcional)
-loguru>=0.7.2,<1.0.0  # Logging simplificado para errores en main.py
-
-# Nota: Instalar ffmpeg en el sistema para soporte de audio en pydub y speechrecognition
-# En Ubuntu/Debian: sudo apt-get install ffmpeg
-# En macOS: brew install ffmpeg
-# En Windows: Descargar desde https://ffmpeg.org/download.html y agregar al PATH
-# Opcional para notificaciones push (descomentar si las implementás):
-# pywebpush>=1.14.1,<2.0.0
-# cryptography>=43.0.1,<44.0.0  # Nuevo: Para generar claves VAPID en notificaciones push
-
-# Opcional para validación avanzada de variables de entorno:
-# pydantic-settings>=2.5.2,<3.0.0  # Nuevo: Para validar configuraciones con Pydantic
-
-# Nota: Instalar ffmpeg en el sistema para soporte de audio en pydub y speechrecognition
-# En Ubuntu/Debian: sudo apt-get install ffmpeg
-# En macOS: brew install ffmpeg
-# En Windows: Descargar desde https://ffmpeg.org/download.html y agregar al PATH
+# Nota: Dependencias como confluent-kafka, python-jose, sqlalchemy, numpy, FlightRadarAPI, etc.,
+# no se incluyen porque no parecen ser usadas en main.py.
+# Descomenta las siguientes líneas si implementas notificaciones push:
+# pywebpush==1.14.1
+# cryptography==43.0.1
