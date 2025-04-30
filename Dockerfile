@@ -8,15 +8,15 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     wget \
     libxss1 \
-    libappindicator3-1 \
-    libindicator3-7 \
+    libayatana-appindicator3-1 \
+    libayatana-indicator3-7 \
     fonts-liberation \
     libasound2 \
     libnspr4 \
     libnss3 \
     libx11-xcb1 \
     xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* || { echo "Error installing dependencies"; exit 1; }
 
 # Establecer el directorio de trabajo
 WORKDIR /app
