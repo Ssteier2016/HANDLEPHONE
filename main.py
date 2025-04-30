@@ -6,13 +6,14 @@ import httpx
 import uvicorn
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import asyncio
 import sqlite3
 import bcrypt
 import re
 import secrets
+import json
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -47,8 +48,8 @@ AIRPORT_COORDS = {
 # Lista para rastrear conexiones WebSocket activas
 connected_clients = set()
 
-# Lista para almacenar los mensajes del chat (temporal, se pierde al reiniciar el servidor)
-chat_messages = []
+# Lista para almacenar usuarios conectados con sus detalles
+connected_users = {}
 
 # Lista predefinida de usuarios permitidos (legajo: apellido)
 ALLOWED_USERS = {
@@ -75,7 +76,7 @@ ALLOWED_POSITIONS = [
     "Jefatura", "Administración", "Movilero", "Micros", "Pañolero", "Señalero"
 ]
 
-# Inicializar la base de datos SQLite
+# Inicializar la base de datos SQLite para usuarios y sesiones
 def init_db():
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
@@ -95,7 +96,33 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Inicializar la base de datos SQLite para mensajes del chat
+def init_chat_db():
+    conn = sqlite3.connect("chat.db")
+    c = conn.cursor()
+    # Tabla para mensajes del chat
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT,
+        sender TEXT,
+        content TEXT,
+        timestamp TEXT
+    )''')
+    conn.commit()
+    conn.close()
+
+# Limpiar mensajes antiguos (más de 7 días)
+def clean_old_messages():
+    conn = sqlite3.connect("chat.db")
+    c = conn.cursor()
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("DELETE FROM messages WHERE timestamp < ?", (seven_days_ago,))
+    conn.commit()
+    conn.close()
+
+# Inicializar las bases de datos al iniciar la app
 init_db()
+init_chat_db()
 
 # Dependencia para verificar si el usuario está logueado usando cookies
 def get_current_user(request: Request):
@@ -120,9 +147,6 @@ def get_current_user(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     return {"legajo": user[0], "apellido": user[1], "position": user[2]}
-
-# Lista para almacenar usuarios conectados con sus detalles
-connected_users = {}
 
 # Ruta para la página de registro
 @app.get("/register", response_class=HTMLResponse)
@@ -485,12 +509,20 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                 for flight in flights:
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
+
+                    # Filtrar solo vuelos que involucren AEP
+                    if departure != "AEP" and arrival != "AEP":
+                        continue
+
                     lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
                     lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
-                    estimated_departure = flight.get("dep_estimated", "N/A")
-                    estimated_arrival = flight.get("arr_estimated", "N/A")
+                    estimated_departure = flight.get("dep_estimated", flight.get("dep_scheduled", "N/A"))
+                    estimated_arrival = flight.get("arr_estimated", flight.get("arr_scheduled", "N/A"))
+                    scheduled_departure = flight.get("dep_scheduled", "N/A")
+                    scheduled_arrival = flight.get("arr_scheduled", "N/A")
                     departure_datetime = None
+
                     if estimated_departure != "N/A":
                         try:
                             departure_datetime = datetime.strptime(estimated_departure, "%Y-%m-%d %H:%M:%S")
@@ -502,9 +534,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                             estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
                         except ValueError:
                             estimated_arrival = "N/A"
-
-                    scheduled_departure = flight.get("dep_scheduled", "N/A")
-                    scheduled_arrival = flight.get("arr_scheduled", "N/A")
                     if scheduled_departure != "N/A":
                         try:
                             scheduled_departure = datetime.strptime(scheduled_departure, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
@@ -516,20 +545,16 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                         except ValueError:
                             scheduled_arrival = "N/A"
 
-                    departure_delay = str(flight.get("dep_delayed", "0"))
-                    arrival_delay = str(flight.get("arr_delayed", "0"))
-                    departure_gate = flight.get("dep_gate", "N/A")
-                    arrival_gate = flight.get("arr_gate", "N/A")
-                    departure_terminal = flight.get("dep_terminal", "N/A")
-                    arrival_terminal = flight.get("arr_terminal", "N/A")
-                    aircraft = flight.get("aircraft_iata", "N/A")
+                    flight_number = flight.get("flight_iata", "N/A")
+                    airline_iata = flight.get("airline_iata", "N/A")
                     airline_name = flight.get("airline_name", "N/A")
                     departure_airport = flight.get("dep_airport", departure)
                     arrival_airport = flight.get("arr_airport", arrival)
+                    status = flight.get("status", "N/A").lower()
 
                     all_flights.append({
-                        "flight_iata": flight.get("flight_iata", "N/A"),
-                        "airline_iata": flight.get("airline_iata", "N/A"),
+                        "flight_iata": flight_number,
+                        "airline_iata": airline_iata,
                         "airline_name": airline_name,
                         "departure": departure,
                         "departure_airport": departure_airport,
@@ -539,18 +564,18 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                         "estimated_arrival": estimated_arrival,
                         "scheduled_departure": scheduled_departure,
                         "scheduled_arrival": scheduled_arrival,
-                        "departure_delay": departure_delay,
-                        "arrival_delay": arrival_delay,
-                        "departure_gate": departure_gate,
-                        "arrival_gate": arrival_gate,
-                        "departure_terminal": departure_terminal,
-                        "arrival_terminal": arrival_terminal,
-                        "aircraft": aircraft,
-                        "status": flight.get("status", "N/A"),
-                        "observations": "N/A",
+                        "departure_delay": flight.get("dep_delayed", "0"),
+                        "arrival_delay": flight.get("arr_delayed", "0"),
+                        "departure_gate": flight.get("dep_gate", "N/A"),
+                        "arrival_gate": flight.get("arr_gate", "N/A"),
+                        "departure_terminal": flight.get("dep_terminal", "N/A"),
+                        "arrival_terminal": flight.get("arr_terminal", "N/A"),
+                        "aircraft": flight.get("aircraft", "N/A"),
+                        "status": status,
+                        "observations": "Datos obtenidos de GoFlightLabs",
                         "lat": lat,
                         "lon": lon,
-                        "departure_datetime": departure_datetime
+                        "departure_datetime": departure_datetime  # Para ordenar
                     })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar GoFlightLabs: {str(e)}")
@@ -563,7 +588,13 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
-            response = await client.get(AVIATIONSTACK_API_URL)
+            response = await client.get(
+                AVIATIONSTACK_API_URL,
+                params={
+                    "dep_iata": "AEP",
+                    "flight_date": datetime.now().strftime("%Y-%m-%d"),
+                }
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -571,87 +602,63 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
 
             flights = data.get("data", [])
             logger.info(f"Total de vuelos recibidos de AviationStack: {len(flights)}")
-            
+
             if flights:
                 logger.info(f"Primeros 3 vuelos crudos de AviationStack: {flights[:3]}")
             else:
                 logger.info("No se recibieron vuelos de AviationStack")
 
-            filtered_flights = []
             for flight in flights:
-                airline_iata = flight.get("airline", {}).get("iata", "") or ""
-                departure_iata = flight.get("departure", {}).get("iata", "") or ""
-                arrival_iata = flight.get("arrival", {}).get("iata", "") or ""
-                scheduled = flight.get("departure", {}).get("scheduled", None)
+                airline_iata = flight.get("airline", {}).get("iata", "N/A")
+                if airline_iata != "AR":  # Filtrar solo Aerolíneas Argentinas
+                    continue
 
-                if (
-                    airline_iata.upper() == "AR"
-                    and (departure_iata == "AEP" or arrival_iata == "AEP")
-                    and scheduled is not None
-                ):
-                    filtered_flights.append(flight)
-
-            filtered_flights = [
-                flight for flight in filtered_flights
-                if (
-                    current_time <= parse_aviationstack_time(
-                        flight.get("departure", {}).get("scheduled", "1970-01-01T00:00:00+00:00")
-                    ) <= six_hours_future
-                )
-            ]
-
-            logger.info(f"Vuelos filtrados de AviationStack (AR, AEP, próximas 6 horas): {len(filtered_flights)}")
-
-            for flight in filtered_flights:
                 departure = flight.get("departure", {}).get("iata", "N/A")
                 arrival = flight.get("arrival", {}).get("iata", "N/A")
+
+                if departure != "AEP" and arrival != "AEP":
+                    continue
+
                 lat = AIRPORT_COORDS.get(departure, {"lat": -34.5592})["lat"]
                 lon = AIRPORT_COORDS.get(departure, {"lon": -58.4156})["lon"]
 
-                status = flight.get("flight_status", "N/A")
-
                 estimated_departure = flight.get("departure", {}).get("estimated", "N/A")
                 estimated_arrival = flight.get("arrival", {}).get("estimated", "N/A")
+                scheduled_departure = flight.get("departure", {}).get("scheduled", "N/A")
+                scheduled_arrival = flight.get("arrival", {}).get("scheduled", "N/A")
                 departure_datetime = None
+
                 if estimated_departure != "N/A":
                     try:
-                        departure_datetime = datetime.strptime(estimated_departure[:19], "%Y-%m-%dT%H:%M:%S")
+                        departure_datetime = datetime.strptime(estimated_departure, "%Y-%m-%dT%H:%M:%S+00:00")
                         estimated_departure = departure_datetime.strftime("%H:%M")
                     except ValueError:
                         estimated_departure = "N/A"
                 if estimated_arrival != "N/A":
                     try:
-                        estimated_arrival = datetime.strptime(estimated_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                        estimated_arrival = datetime.strptime(estimated_arrival, "%Y-%m-%dT%H:%M:%S+00:00").strftime("%H:%M")
                     except ValueError:
                         estimated_arrival = "N/A"
-
-                scheduled_departure = flight.get("departure", {}).get("scheduled", "N/A")
-                scheduled_arrival = flight.get("arrival", {}).get("scheduled", "N/A")
                 if scheduled_departure != "N/A":
                     try:
-                        scheduled_departure = datetime.strptime(scheduled_departure[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                        scheduled_departure = datetime.strptime(scheduled_departure, "%Y-%m-%dT%H:%M:%S+00:00").strftime("%H:%M")
                     except ValueError:
                         scheduled_departure = "N/A"
                 if scheduled_arrival != "N/A":
                     try:
-                        scheduled_arrival = datetime.strptime(scheduled_arrival[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+                        scheduled_arrival = datetime.strptime(scheduled_arrival, "%Y-%m-%dT%H:%M:%S+00:00").strftime("%H:%M")
                     except ValueError:
                         scheduled_arrival = "N/A"
 
-                departure_delay = str(flight.get("departure", {}).get("delay", "0"))
-                arrival_delay = str(flight.get("arrival", {}).get("delay", "0"))
-                departure_gate = flight.get("departure", {}).get("gate", "N/A")
-                arrival_gate = flight.get("arrival", {}).get("gate", "N/A")
-                departure_terminal = flight.get("departure", {}).get("terminal", "N/A")
-                arrival_terminal = flight.get("arrival", {}).get("terminal", "N/A")
-                aircraft = flight.get("aircraft", {}).get("iata", "N/A")
+                flight_number = flight.get("flight", {}).get("iata", "N/A")
                 airline_name = flight.get("airline", {}).get("name", "N/A")
                 departure_airport = flight.get("departure", {}).get("airport", departure)
                 arrival_airport = flight.get("arrival", {}).get("airport", arrival)
+                status = flight.get("flight_status", "N/A").lower()
 
                 all_flights.append({
-                    "flight_iata": flight.get("flight", {}).get("iata", "N/A"),
-                    "airline_iata": flight.get("airline", {}).get("iata", "N/A"),
+                    "flight_iata": flight_number,
+                    "airline_iata": airline_iata,
                     "airline_name": airline_name,
                     "departure": departure,
                     "departure_airport": departure_airport,
@@ -661,18 +668,18 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "estimated_arrival": estimated_arrival,
                     "scheduled_departure": scheduled_departure,
                     "scheduled_arrival": scheduled_arrival,
-                    "departure_delay": departure_delay,
-                    "arrival_delay": arrival_delay,
-                    "departure_gate": departure_gate,
-                    "arrival_gate": arrival_gate,
-                    "departure_terminal": departure_terminal,
-                    "arrival_terminal": arrival_terminal,
-                    "aircraft": aircraft,
+                    "departure_delay": flight.get("departure", {}).get("delay", "0"),
+                    "arrival_delay": flight.get("arrival", {}).get("delay", "0"),
+                    "departure_gate": flight.get("departure", {}).get("gate", "N/A"),
+                    "arrival_gate": flight.get("arrival", {}).get("gate", "N/A"),
+                    "departure_terminal": flight.get("departure", {}).get("terminal", "N/A"),
+                    "arrival_terminal": flight.get("arrival", {}).get("terminal", "N/A"),
+                    "aircraft": "N/A",  # AviationStack no proporciona este dato
                     "status": status,
-                    "observations": "N/A",
+                    "observations": "Datos obtenidos de AviationStack",
                     "lat": lat,
                     "lon": lon,
-                    "departure_datetime": departure_datetime
+                    "departure_datetime": departure_datetime  # Para ordenar
                 })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar AviationStack: {str(e)}")
@@ -681,170 +688,148 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             logger.error(f"Error inesperado al consultar AviationStack: {str(e)}")
             failed_sources.append("AviationStack")
 
-    # 4. Eliminar duplicados basados en flight_iata
-    seen_flights = set()
-    unique_flights = []
+    # Eliminar duplicados y ordenar por fecha de salida
+    unique_flights = {}
     for flight in all_flights:
-        flight_iata = flight["flight_iata"]
-        if flight_iata not in seen_flights:
-            seen_flights.add(flight_iata)
-            unique_flights.append(flight)
+        flight_key = (flight["flight_iata"], flight["estimated_departure"])
+        if flight_key not in unique_flights:
+            unique_flights[flight_key] = flight
 
-    # 5. Ordenar por hora de salida (departure_datetime)
-    unique_flights.sort(
-        key=lambda x: x["departure_datetime"] if x["departure_datetime"] else datetime.max,
-        reverse=False
-    )
+    all_flights = list(unique_flights.values())
+    all_flights.sort(key=lambda x: x["departure_datetime"] if x["departure_datetime"] else datetime.max)
 
-    # 6. Paginación: 25 vuelos por página
+    # Paginación
     flights_per_page = 25
-    total_flights = len(unique_flights)
+    total_flights = len(all_flights)
     total_pages = (total_flights + flights_per_page - 1) // flights_per_page
     start_idx = (page - 1) * flights_per_page
     end_idx = start_idx + flights_per_page
-    paginated_flights = unique_flights[start_idx:end_idx]
+    paginated_flights = all_flights[start_idx:end_idx]
 
-    # Eliminar el campo departure_datetime de los datos devueltos
+    # Remover el campo departure_datetime de la respuesta
     for flight in paginated_flights:
         flight.pop("departure_datetime", None)
 
-    logger.info(f"Total de vuelos procesados: {total_flights}")
-
     return {
         "flights": paginated_flights,
-        "failed_sources": failed_sources,
-        "total_flights": total_flights,
         "total_pages": total_pages,
-        "current_page": page
+        "failed_sources": failed_sources
     }
 
-# Función auxiliar para parsear el tiempo de AviationStack
-def parse_aviationstack_time(time_str):
-    try:
-        return int(time.mktime(time.strptime(time_str[:19], "%Y-%m-%dT%H:%M:%S")))
-    except Exception as e:
-        logger.error(f"Error al parsear tiempo de AviationStack: {time_str}, error: {str(e)}")
-        return 0
+# Ruta para obtener la lista de usuarios (para la sección "Guardia")
+@app.get("/users")
+async def get_users(user: dict = Depends(get_current_user)):
+    if isinstance(user, RedirectResponse):
+        return user
 
-# WebSocket para rastrear usuarios conectados
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT legajo, apellido, position FROM users")
+    users = [{"legajo": row[0], "apellido": row[1], "position": row[2]} for row in c.fetchall()]
+    conn.close()
+    return {"users": users}
+
+# Ruta para obtener el historial del chat (últimos 7 días)
+@app.get("/chat-history")
+async def get_chat_history(user: dict = Depends(get_current_user)):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    conn = sqlite3.connect("chat.db")
+    c = conn.cursor()
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("SELECT type, sender, content, timestamp FROM messages WHERE timestamp >= ? ORDER BY timestamp ASC", (seven_days_ago,))
+    messages = [{"type": row[0], "sender": row[1], "content": row[2], "timestamp": row[3]} for row in c.fetchall()]
+    conn.close()
+    return {"messages": messages}
+
+# WebSocket para usuarios conectados
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str = None):
+async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.add(websocket)
 
-    # Obtener detalles del usuario
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("SELECT legajo FROM sessions WHERE token = ?", (token,))
-    session_data = c.fetchone()
-    user = None
-    if session_data:
-        legajo = session_data[0]
-        c.execute("SELECT legajo, apellido, position FROM users WHERE legajo = ?", (legajo,))
-        user = c.fetchone()
-    conn.close()
+    # Obtener el token de la cookie desde los headers del WebSocket
+    token = None
+    for header in websocket.headers.items():
+        if header[0] == "cookie":
+            cookies = header[1].split("; ")
+            for cookie in cookies:
+                if cookie.startswith("session_token="):
+                    token = cookie.split("=")[1]
+                    break
+            break
 
-    if user:
-        connected_users[websocket] = {
-            "token": token,
-            "legajo": user[0],
-            "apellido": user[1],
-            "position": user[2]
-        }
+    if token:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("SELECT legajo FROM sessions WHERE token = ?", (token,))
+        session_data = c.fetchone()
+        if session_data:
+            legajo = session_data[0]
+            c.execute("SELECT legajo, apellido, position FROM users WHERE legajo = ?", (legajo,))
+            user = c.fetchone()
+            if user:
+                connected_users[websocket] = {
+                    "token": token,
+                    "legajo": user[0],
+                    "apellido": user[1],
+                    "position": user[2]
+                }
+        conn.close()
 
     try:
-        await websocket.send_text(str(len(connected_clients)))
-        for client in connected_clients:
-            if client != websocket:
-                await client.send_text(str(len(connected_clients)))
+        # Enviar el conteo de usuarios conectados a todos los clientes
+        await broadcast_user_count()
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
         if websocket in connected_users:
             del connected_users[websocket]
-        for client in connected_clients:
-            await client.send_text(str(len(connected_clients)))
-    except Exception as e:
-        logger.error(f"Error en WebSocket: {str(e)}")
-        connected_clients.remove(websocket)
-        if websocket in connected_users:
-            del connected_users[websocket]
-        for client in connected_clients:
-            await client.send_text(str(len(connected_clients)))
+        await broadcast_user_count()
 
 # WebSocket para el chat global
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
     await websocket.accept()
-    connected_clients.add(websocket)
     try:
-        # Enviar mensajes previos al usuario que se conecta
-        for message in chat_messages:
-            await websocket.send_json(message)
-
         while True:
-            data = await websocket.receive_json()
-            message_type = data.get("type")
-            sender = data.get("sender", "Anónimo")
-            content = data.get("content")
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            message["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            if message_type == "text":
-                # Mensaje de texto
-                message = {
-                    "type": "text",
-                    "sender": sender,
-                    "content": content,
-                    "timestamp": datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).strftime("%Y-%m-%d %H:%M:%S")
-                }
-                chat_messages.append(message)
-                # Mantener solo los últimos 100 mensajes para evitar que crezca indefinidamente
-                if len(chat_messages) > 100:
-                    chat_messages.pop(0)
+            # Guardar el mensaje en la base de datos
+            conn = sqlite3.connect("chat.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO messages (type, sender, content, timestamp) VALUES (?, ?, ?, ?)",
+                      (message["type"], message["sender"], message["content"], message["timestamp"]))
+            conn.commit()
+            conn.close()
 
-                # Transmitir el mensaje a todos los clientes conectados
-                for client in connected_clients:
-                    await client.send_json(message)
+            # Limpiar mensajes antiguos
+            clean_old_messages()
 
-            elif message_type == "audio":
-                # Mensaje de audio (base64)
-                message = {
-                    "type": "audio",
-                    "sender": sender,
-                    "content": content,  # URL de datos en base64
-                    "timestamp": datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).strftime("%Y-%m-%d %H:%M:%S")
-                }
-                chat_messages.append(message)
-                if len(chat_messages) > 100:
-                    chat_messages.pop(0)
-
-                # Transmitir el audio a todos los clientes conectados
-                for client in connected_clients:
-                    await client.send_json(message)
-
+            # Enviar el mensaje a todos los clientes conectados al chat
+            message_str = json.dumps(message)
+            for client in connected_clients:
+                try:
+                    await client.send_text(message_str)
+                except WebSocketDisconnect:
+                    connected_clients.remove(client)
     except WebSocketDisconnect:
-        connected_clients.remove(websocket)
-        if websocket in connected_users:
-            del connected_users[websocket]
-    except Exception as e:
-        logger.error(f"Error en WebSocket de chat: {str(e)}")
-        connected_clients.remove(websocket)
-        if websocket in connected_users:
-            del connected_users[websocket]
+        pass
 
-# Ruta para obtener la lista de usuarios conectados
-@app.get("/users")
-async def get_connected_users():
-    users = [
-        {
-            "legajo": user["legajo"],
-            "apellido": user["apellido"],
-            "position": user["position"]
-        }
-        for user in connected_users.values()
-    ]
-    return {"users": users}
+# Función para enviar el conteo de usuarios conectados
+async def broadcast_user_count():
+    count = len(connected_users)
+    message = json.dumps({"type": "user_count", "count": count})
+    for client in connected_clients:
+        try:
+            await client.send_text(message)
+        except WebSocketDisconnect:
+            connected_clients.remove(client)
 
-# Iniciar el servidor
+# Iniciar la app
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
