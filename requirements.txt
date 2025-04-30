@@ -1,41 +1,31 @@
 # Dependencias requeridas para el backend y la API
-fastapi==0.111.1  # Actualizado para soportar pydantic>=2.7.0
-uvicorn==0.30.6  # Versión más reciente
-jinja2==3.1.4  # Versión más reciente
-httpx==0.27.2  # Versión más reciente, compatible con FastAPI
-bcrypt==4.2.0  # Versión más reciente
-python-multipart==0.0.9  # Para manejar formularios en FastAPI
-pydantic==2.9.2  # Especificamos explícitamente para evitar conflictos
-aiohttp==3.10.5  # Compatible con httpx y otras dependencias
-python-dotenv==1.0.1  # Para variables de entorno
-cachetools==5.5.0  # Útil para caching si lo usas
-websockets==15.0  # Para WebSockets
-pytz==2023.3  # Sin cambios
+fastapi==0.111.1
+uvicorn==0.30.6
+jinja2==3.1.4
+httpx==0.27.2
+bcrypt==4.2.0
+python-multipart==0.0.9
+pydantic==2.9.2
+aiohttp==3.10.5
+python-dotenv==1.0.1
+cachetools==5.5.0
+websockets==15.0
+pytz==2023.3
 
 # Dependencias para scraping y APIs de vuelos
-selenium==4.15.2  # Mantenemos esta versión
-webdriver_manager==4.0.2  # Versión más reciente
-beautifulsoup4==4.12.3  # Para scraping, si lo usas
+selenium==4.15.2
+webdriver_manager==4.0.2
+beautifulsoup4==4.12.3
 
 # Dependencias para manejo de audio
-speechrecognition==3.10.4  # Versión más reciente
-pydub==0.25.1  # Compatible con speechrecognition
-soundfile==0.12.1  # Compatible con pydub
-sounddevice==0.4.7  # Para manejar audio en el servidor
-
-# Dependencias para base de datos
-# SQLite es estándar, pero incluimos psycopg2-binary por si usas PostgreSQL
-# psycopg2-binary==2.9.9  # Descomentar si usas PostgreSQL
+speechrecognition==3.10.4
+pydub==0.25.1
+soundfile==0.12.1
+sounddevice==0.4.7
 
 # Dependencias para logging
-loguru==0.7.2  # Simplificado para errores
+loguru==0.7.2
 
 # Dependencias para pruebas (opcional)
-pytest==8.3.2  # Para pruebas
-pytest-asyncio==0.24.0  # Para pruebas asíncronas
-
-# Nota: Dependencias como confluent-kafka, python-jose, sqlalchemy, numpy, FlightRadarAPI, etc.,
-# no se incluyen porque no parecen ser usadas en main.py.
-# Descomenta las siguientes líneas si implementas notificaciones push:
-# pywebpush==1.14.1
-# cryptography==43.0.1
+pytest==8.3.2
+pytest-asyncio==0.24.0
