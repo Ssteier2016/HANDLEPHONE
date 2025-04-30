@@ -10,7 +10,6 @@ httpx==0.19.0
 selenium==4.19.0
 webdriver_manager==4.0.1
 pytz==2023.3
-sqlite3
 # Dependencias requeridas para el backend y la API
 fastapi>=0.115.0,<0.116.0
 uvicorn>=0.30.6,<0.31.0
