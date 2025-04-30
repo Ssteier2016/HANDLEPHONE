@@ -1,14 +1,11 @@
-# Usar una imagen base de Python 3.9
-FROM python:3.9
+# Usar una imagen base de Python 3.11
+FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para PyAudio, Vosk y herramientas adicionales
+# Instalar dependencias del sistema necesarias para audio y compilación
 RUN apt-get update && apt-get install -y \
-    portaudio19-dev \
     gcc \
-    build-essential \
+    libffi-dev \
     ffmpeg \
-    wget \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -30,5 +27,5 @@ COPY . .
 ENV PORT=10000
 EXPOSE $PORT
 
-# Comando para iniciar la aplicación (usar formato de shell para sustitución de variables)
+# Comando para iniciar la aplicación
 CMD uvicorn main:app --host 0.0.0.0 --port $PORT
