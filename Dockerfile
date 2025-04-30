@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     ffmpeg \
     wget \
+    unzip \
     libxss1 \
     libayatana-appindicator3-1 \
     libayatana-indicator3-7 \
@@ -16,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     libnss3 \
     libx11-xcb1 \
     xdg-utils \
+    libglib2.0-0 \
+    libgconf-2-4 \
+    libfontconfig1 \
     && rm -rf /var/lib/apt/lists/* || { echo "Error installing dependencies"; exit 1; }
 
 # Establecer el directorio de trabajo
