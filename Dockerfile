@@ -1,11 +1,12 @@
 # Usar una imagen base de Python 3.11
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para audio y compilación
+# Instalar dependencias del sistema necesarias para audio, compilación y Chrome
 RUN apt-get update && apt-get install -y \
     gcc \
     libffi-dev \
     ffmpeg \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer el directorio de trabajo
@@ -20,8 +21,11 @@ RUN pip install --upgrade pip && pip install wheel
 # Instalar las dependencias en un paso separado
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el resto de los archivos del proyecto
+# Copiar el resto de los archivos del proyecto (incluye install_chromedriver.sh)
 COPY . .
+
+# Ejecutar el script para instalar Chrome y ChromeDriver
+RUN chmod +x install_chromedriver.sh && ./install_chromedriver.sh
 
 # Exponer el puerto (Render usa PORT, por defecto 10000)
 ENV PORT=10000
