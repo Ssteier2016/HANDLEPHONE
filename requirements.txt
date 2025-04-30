@@ -5,19 +5,20 @@ python-decouple==3.8  # Para manejar variables de entorno
 numpy==1.26.4  # Para cálculos de distancia (si usas en main.py)
 asyncio==3.4.3
 confluent-kafka
-jinja2==3.1.3
 httpx==0.19.0
 selenium==4.19.0
-webdriver_manager==4.0.1
-pytz==2023.3
 # Dependencias requeridas para el backend y la API
-fastapi>=0.115.0,<0.116.0
-uvicorn>=0.30.6,<0.31.0
 aiohttp>=3.10.5,<4.0.0
 python-dotenv>=1.0.1,<2.0.0
 cachetools>=5.5.0,<6.0.0
 bcrypt
 python-multipart
+
+fastapi==0.68.1
+uvicorn==0.15.0
+jinja2==3.0.1
+webdriver_manager==4.0.1
+pytz==2023.3
 
 # Dependencias para manejo de audio
 speechrecognition>=3.10.0,<4.0.0
@@ -64,10 +65,6 @@ Flask-Compress>=1.14.0,<2.0.0  # Comprimir respuestas JSON de /aep_flights
 
 # Dependencias para logging (opcional)
 loguru>=0.7.2,<1.0.0  # Logging simplificado para errores en main.py
-
-# Dependencias para pruebas (opcional)
-pytest>=8.3.2,<9.0.0  # Framework de pruebas unitarias
-pytest-asyncio>=0.23.8,<1.0.0  # Soporte para pruebas asíncronas
 
 # Nota: Instalar ffmpeg en el sistema para soporte de audio en pydub y speechrecognition
 # En Ubuntu/Debian: sudo apt-get install ffmpeg
