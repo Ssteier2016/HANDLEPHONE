@@ -63,7 +63,7 @@
       opacity: 0;
       transition: opacity 0.2s ease;
     }
-    .menu.active {
+    .menu-container:hover .menu {
       display: block;
       opacity: 1;
     }
@@ -382,7 +382,7 @@
       opacity: 0;
       transition: opacity 0.2s ease;
     }
-    #users-dropdown.active {
+    #users-count:hover #users-dropdown {
       display: block;
       opacity: 1;
     }
@@ -548,32 +548,42 @@
 
   <script>
     // Inicializar el mapa
-    const map = L.map("map").setView([-34.5592, -58.4156], 15);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    let map;
+    try {
+      map = L.map("map").setView([-34.5592, -58.4156], 15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+    } catch (error) {
+      console.error("Error al inicializar el mapa:", error);
+      document.getElementById("map").innerHTML = "Error al cargar el mapa.";
+    }
 
     let markers = [];
 
     function updateMap(flights) {
-      markers.forEach(marker => map.removeLayer(marker));
-      markers = [];
+      try {
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
 
-      flights.forEach(flight => {
-        if (flight.lat && flight.lon) {
-          const marker = L.marker([flight.lat, flight.lon]).addTo(map);
-          marker.bindPopup(`
-            <b>Vuelo:</b> ${flight.flight_iata}<br>
-            <b>Aerolínea:</b> ${flight.airline_name}<br>
-            <b>Salida:</b> ${flight.departure_airport} (${flight.departure})<br>
-            <b>Arribo:</b> ${flight.arrival_airport} (${flight.arrival})<br>
-            <b>Hora Est. Salida:</b> ${flight.estimated_departure}<br>
-            <b>Hora Est. Arribo:</b> ${flight.estimated_arrival}<br>
-            <b>Estado:</b> ${flight.status}
-          `);
-          markers.push(marker);
-        }
-      });
+        flights.forEach(flight => {
+          if (flight.lat && flight.lon) {
+            const marker = L.marker([flight.lat, flight.lon]).addTo(map);
+            marker.bindPopup(`
+              <b>Vuelo:</b> ${flight.flight_iata}<br>
+              <b>Aerolínea:</b> ${flight.airline_name}<br>
+              <b>Salida:</b> ${flight.departure_airport} (${flight.departure})<br>
+              <b>Arribo:</b> ${flight.arrival_airport} (${flight.arrival})<br>
+              <b>Hora Est. Salida:</b> ${flight.estimated_departure}<br>
+              <b>Hora Est. Arribo:</b> ${flight.estimated_arrival}<br>
+              <b>Estado:</b> ${flight.status}
+            `);
+            markers.push(marker);
+          }
+        });
+      } catch (error) {
+        console.error("Error al actualizar el mapa:", error);
+      }
     }
 
     let currentPage = 1;
@@ -582,84 +592,96 @@
     let filteredFlights = [];
 
     function filterFlights() {
-      const searchInput = document.getElementById("search-input").value.toUpperCase().trim();
-      const terms = searchInput.split(" ");
+      try {
+        const searchInput = document.getElementById("search-input").value.toUpperCase().trim();
+        const terms = searchInput.split(" ");
 
-      filteredFlights = allFlights.filter(flight => {
-        const flightMatch = terms.some(term => flight.flight_iata.includes(term));
-        const departureMatch = terms.some(term => flight.departure === term || flight.departure_airport.includes(term));
-        const arrivalMatch = terms.some(term => flight.arrival === term || flight.arrival_airport.includes(term));
-        return flightMatch || departureMatch || arrivalMatch;
-      });
+        filteredFlights = allFlights.filter(flight => {
+          const flightMatch = terms.some(term => flight.flight_iata.includes(term));
+          const departureMatch = terms.some(term => flight.departure === term || flight.departure_airport.includes(term));
+          const arrivalMatch = terms.some(term => flight.arrival === term || flight.arrival_airport.includes(term));
+          return flightMatch || departureMatch || arrivalMatch;
+        });
 
-      totalPages = Math.ceil(filteredFlights.length / 25);
-      currentPage = 1;
-      renderFlights();
+        totalPages = Math.ceil(filteredFlights.length / 25);
+        currentPage = 1;
+        renderFlights();
+      } catch (error) {
+        console.error("Error al filtrar vuelos:", error);
+      }
     }
 
     function renderFlights() {
-      const flightsPerPage = 25;
-      const startIdx = (currentPage - 1) * flightsPerPage;
-      const endIdx = startIdx + flightsPerPage;
-      const paginatedFlights = filteredFlights.slice(startIdx, endIdx);
+      try {
+        const flightsPerPage = 25;
+        const startIdx = (currentPage - 1) * flightsPerPage;
+        const endIdx = startIdx + flightsPerPage;
+        const paginatedFlights = filteredFlights.slice(startIdx, endIdx);
 
-      const tbody = document.getElementById("flights-tbody");
-      tbody.innerHTML = "";
+        const tbody = document.getElementById("flights-tbody");
+        tbody.innerHTML = "";
 
-      if (paginatedFlights.length > 0) {
-        paginatedFlights.forEach((flight, index) => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${flight.flight_iata}</td>
-            <td>${flight.airline_name}</td>
-            <td>${flight.departure_airport} (${flight.departure})</td>
-            <td>${flight.arrival_airport} (${flight.arrival})</td>
-            <td>${flight.estimated_departure}</td>
-            <td>${flight.estimated_arrival}</td>
-            <td>${flight.status}</td>
-            <td><button onclick="toggleDetails(${startIdx + index})">➕</button></td>
-          `;
-          tbody.appendChild(row);
+        if (paginatedFlights.length > 0) {
+          paginatedFlights.forEach((flight, index) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${flight.flight_iata}</td>
+              <td>${flight.airline_name}</td>
+              <td>${flight.departure_airport} (${flight.departure})</td>
+              <td>${flight.arrival_airport} (${flight.arrival})</td>
+              <td>${flight.estimated_departure}</td>
+              <td>${flight.estimated_arrival}</td>
+              <td>${flight.status}</td>
+              <td><button onclick="toggleDetails(${startIdx + index})">➕</button></td>
+            `;
+            tbody.appendChild(row);
 
-          const detailsRow = document.createElement("tr");
-          detailsRow.classList.add("details-row");
-          detailsRow.id = `details-${startIdx + index}`;
-          detailsRow.innerHTML = `
-            <td colspan="8">
-              <strong>Detalles del vuelo:</strong><br>
-              Nombre completo del aeropuerto de salida: ${flight.departure_airport}<br>
-              Nombre completo del aeropuerto de llegada: ${flight.arrival_airport}<br>
-              Hora programada de salida: ${flight.scheduled_departure}<br>
-              Retraso de salida: ${flight.departure_delay} minutos<br>
-              Terminal de salida: ${flight.departure_terminal}<br>
-              Puerta de salida: ${flight.departure_gate}<br>
-              Hora programada de llegada: ${flight.scheduled_arrival}<br>
-              Retraso de llegada: ${flight.arrival_delay} minutos<br>
-              Terminal de llegada: ${flight.arrival_terminal}<br>
-              Puerta de llegada: ${flight.arrival_gate}<br>
-              Tipo de avión: ${flight.aircraft}<br>
-              Observaciones: ${flight.observations}
-            </td>
-          `;
-          tbody.appendChild(detailsRow);
-        });
+            const detailsRow = document.createElement("tr");
+            detailsRow.classList.add("details-row");
+            detailsRow.id = `details-${startIdx + index}`;
+            detailsRow.innerHTML = `
+              <td colspan="8">
+                <strong>Detalles del vuelo:</strong><br>
+                Nombre completo del aeropuerto de salida: ${flight.departure_airport}<br>
+                Nombre completo del aeropuerto de llegada: ${flight.arrival_airport}<br>
+                Hora programada de salida: ${flight.scheduled_departure}<br>
+                Retraso de salida: ${flight.departure_delay} minutos<br>
+                Terminal de salida: ${flight.departure_terminal}<br>
+                Puerta de salida: ${flight.departure_gate}<br>
+                Hora programada de llegada: ${flight.scheduled_arrival}<br>
+                Retraso de llegada: ${flight.arrival_delay} minutos<br>
+                Terminal de llegada: ${flight.arrival_terminal}<br>
+                Puerta de llegada: ${flight.arrival_gate}<br>
+                Tipo de avión: ${flight.aircraft}<br>
+                Observaciones: ${flight.observations}
+              </td>
+            `;
+            tbody.appendChild(detailsRow);
+          });
 
-        updateMap(paginatedFlights);
-        document.getElementById("page-info").textContent = `Página ${currentPage} de ${totalPages}`;
-        document.getElementById("prev-page").disabled = currentPage === 1;
-        document.getElementById("next-page").disabled = currentPage === totalPages;
-      } else {
-        tbody.innerHTML = `<tr><td colspan="8">No se encontraron vuelos.</td></tr>`;
-        updateMap([]);
-        document.getElementById("page-info").textContent = `Página 1 de 1`;
-        document.getElementById("prev-page").disabled = true;
-        document.getElementById("next-page").disabled = true;
+          updateMap(paginatedFlights);
+          document.getElementById("page-info").textContent = `Página ${currentPage} de ${totalPages}`;
+          document.getElementById("prev-page").disabled = currentPage === 1;
+          document.getElementById("next-page").disabled = currentPage === totalPages;
+        } else {
+          tbody.innerHTML = `<tr><td colspan="8">No se encontraron vuelos.</td></tr>`;
+          updateMap([]);
+          document.getElementById("page-info").textContent = `Página 1 de 1`;
+          document.getElementById("prev-page").disabled = true;
+          document.getElementById("next-page").disabled = true;
+        }
+      } catch (error) {
+        console.error("Error al renderizar vuelos:", error);
       }
     }
 
     function toggleDetails(index) {
-      const detailsRow = document.getElementById(`details-${index}`);
-      detailsRow.classList.toggle("visible");
+      try {
+        const detailsRow = document.getElementById(`details-${index}`);
+        detailsRow.classList.toggle("visible");
+      } catch (error) {
+        console.error("Error al togglear detalles:", error);
+      }
     }
 
     async function updateFlightsTable() {
@@ -714,124 +736,140 @@
     updateFlightsTable();
     setInterval(updateFlightsTable, 900000);
 
-    const ws = new WebSocket(`wss://${window.location.host}/ws`);
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "user_count") {
-          fetch("/users")
-            .then(res => res.json())
-            .then(userData => {
-              const uniqueUsers = [];
-              const seenLegajos = new Set();
-              userData.users.forEach(user => {
-                if (!seenLegajos.has(user.legajo)) {
-                  seenLegajos.add(user.legajo);
-                  uniqueUsers.push(user);
-                }
+    let ws;
+    try {
+      ws = new WebSocket(`wss://${window.location.host}/ws`);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "user_count") {
+            fetch("/users")
+              .then(res => res.json())
+              .then(userData => {
+                const uniqueUsers = [];
+                const seenLegajos = new Set();
+                userData.users.forEach(user => {
+                  if (!seenLegajos.has(user.legajo)) {
+                    seenLegajos.add(user.legajo);
+                    uniqueUsers.push(user);
+                  }
+                });
+
+                document.getElementById("users-count").textContent = uniqueUsers.length;
+                const usersDropdown = document.getElementById("users-dropdown");
+                usersDropdown.innerHTML = uniqueUsers.map(user => `
+                  <div class="user-item" onclick="openPrivateChat('${user.apellido}', '${user.legajo}')">
+                    ${user.apellido} (${user.legajo})
+                  </div>
+                `).join("");
+              })
+              .catch(error => {
+                console.error("Error al obtener la lista de usuarios:", error);
               });
-
-              document.getElementById("users-count").textContent = uniqueUsers.length;
-              const usersDropdown = document.getElementById("users-dropdown");
-              usersDropdown.innerHTML = uniqueUsers.map(user => `
-                <div class="user-item" onclick="openPrivateChat('${user.apellido}', '${user.legajo}')">
-                  ${user.apellido} (${user.legajo})
-                </div>
-              `).join("");
-            })
-            .catch(error => {
-              console.error("Error al obtener la lista de usuarios:", error);
-            });
+          }
+        } catch (error) {
+          console.error("Error al parsear mensaje de WebSocket:", error);
         }
-      } catch (error) {
-        console.error("Error al parsear mensaje de WebSocket:", error);
-      }
-    };
+      };
+      ws.onclose = () => {
+        console.log("Conexión de usuarios cerrada");
+      };
+    } catch (error) {
+      console.error("Error al inicializar WebSocket de usuarios:", error);
+    }
 
-    // WebSocket para el chat
-    const chatSocket = new WebSocket(`wss://${window.location.host}/chat`);
+    let chatSocket;
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
     let stream = null;
     let privateChatRecipient = null;
 
-    chatSocket.onopen = () => {
-      console.log("Conexión de chat establecida");
-    };
+    try {
+      chatSocket = new WebSocket(`wss://${window.location.host}/chat`);
+      chatSocket.onopen = () => {
+        console.log("Conexión de chat establecida");
+      };
 
-    chatSocket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        const chatMessages = document.getElementById("chat-messages");
-        const privateChatMessages = document.getElementById("private-chat-messages");
+      chatSocket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          const chatMessages = document.getElementById("chat-messages");
+          const privateChatMessages = document.getElementById("private-chat-messages");
 
-        const messageElement = document.createElement("div");
-        messageElement.classList.add("chat-message");
+          const messageElement = document.createElement("div");
+          messageElement.classList.add("chat-message");
 
-        const time = new Date(message.timestamp).toLocaleTimeString();
+          const time = new Date(message.timestamp).toLocaleTimeString();
 
-        if (message.sender_legajo !== "{{ user.legajo }}") {
-          if (message.type === "text") {
-            if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
-              messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-              privateChatMessages.appendChild(messageElement);
-              privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-              document.getElementById("private-chat-container").classList.add("active");
-            } else {
-              messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-              chatMessages.appendChild(messageElement);
-              chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-          } else if (message.type === "audio") {
-            if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
-              messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-              privateChatMessages.appendChild(messageElement);
-              privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-              document.getElementById("private-chat-container").classList.add("active");
-            } else {
-              messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-              chatMessages.appendChild(messageElement);
-              chatMessages.scrollTop = chatMessages.scrollHeight;
+          if (message.sender_legajo !== "{{ user.legajo }}") {
+            if (message.type === "text") {
+              if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+                messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+                privateChatMessages.appendChild(messageElement);
+                privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+                document.getElementById("private-chat-container").classList.add("active");
+              } else {
+                messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+                chatMessages.appendChild(messageElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              }
+            } else if (message.type === "audio") {
+              if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+                messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+                privateChatMessages.appendChild(messageElement);
+                privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+                document.getElementById("private-chat-container").classList.add("active");
+              } else {
+                messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+                chatMessages.appendChild(messageElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              }
             }
           }
+        } catch (error) {
+          console.error("Error al procesar mensaje de chat:", error);
         }
-      } catch (error) {
-        console.error("Error al procesar mensaje de chat:", error);
-      }
-    };
+      };
 
-    chatSocket.onclose = () => {
-      console.log("Conexión de chat cerrada");
-    };
+      chatSocket.onclose = () => {
+        console.log("Conexión de chat cerrada");
+      };
+    } catch (error) {
+      console.error("Error al inicializar WebSocket de chat:", error);
+    }
 
     document.getElementById("send-message").addEventListener("click", () => {
-      const input = document.getElementById("chat-message-input");
-      const message = input.value.trim();
-      if (message) {
-        const time = new Date().toLocaleTimeString();
-        const messageElement = document.createElement("div");
-        messageElement.classList.add("chat-message");
-        messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
-        document.getElementById("chat-messages").appendChild(messageElement);
-        document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+      try {
+        const input = document.getElementById("chat-message-input");
+        const message = input.value.trim();
+        if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+          const time = new Date().toLocaleTimeString();
+          const messageElement = document.createElement("div");
+          messageElement.classList.add("chat-message");
+          messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
+          document.getElementById("chat-messages").appendChild(messageElement);
+          document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
 
-        chatSocket.send(JSON.stringify({
-          type: "text",
-          sender: "{{ user.apellido }}",
-          sender_legajo: "{{ user.legajo }}",
-          content: message
-        }));
-        input.value = "";
+          chatSocket.send(JSON.stringify({
+            type: "text",
+            sender: "{{ user.apellido }}",
+            sender_legajo: "{{ user.legajo }}",
+            content: message
+          }));
+          input.value = "";
+        }
+      } catch (error) {
+        console.error("Error al enviar mensaje:", error);
       }
     });
 
     document.getElementById("record-audio").addEventListener("click", async () => {
-      const recordButton = document.getElementById("record-audio");
-      const status = document.getElementById("recording-status");
+      try {
+        const recordButton = document.getElementById("record-audio");
+        const status = document.getElementById("recording-status");
 
-      if (!isRecording) {
-        try {
+        if (!isRecording) {
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(stream);
           audioChunks = [];
@@ -854,12 +892,14 @@
               document.getElementById("chat-messages").appendChild(messageElement);
               document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
 
-              chatSocket.send(JSON.stringify({
-                type: "audio",
-                sender: "{{ user.apellido }}",
-                sender_legajo: "{{ user.legajo }}",
-                content: base64Audio
-              }));
+              if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                  type: "audio",
+                  sender: "{{ user.apellido }}",
+                  sender_legajo: "{{ user.legajo }}",
+                  content: base64Audio
+                }));
+              }
             };
             if (stream) {
               stream.getTracks().forEach(track => track.stop());
@@ -871,15 +911,15 @@
           isRecording = true;
           recordButton.textContent = "Parar Grabación";
           status.textContent = "Grabando...";
-        } catch (error) {
-          console.error("Error al acceder al micrófono:", error);
-          status.textContent = "Error al grabar audio.";
+        } else {
+          mediaRecorder.stop();
+          isRecording = false;
+          recordButton.textContent = "Grabar Audio";
+          status.textContent = "";
         }
-      } else {
-        mediaRecorder.stop();
-        isRecording = false;
-        recordButton.textContent = "Grabar Audio";
-        status.textContent = "";
+      } catch (error) {
+        console.error("Error al grabar audio:", error);
+        document.getElementById("recording-status").textContent = "Error al grabar audio.";
       }
     });
 
@@ -890,32 +930,39 @@
     });
 
     function openPrivateChat(apellido, legajo) {
-      privateChatRecipient = { apellido, legajo };
-      document.getElementById("private-chat-recipient").textContent = `${apellido} (${legajo})`;
-      document.getElementById("private-chat-messages").innerHTML = "";
-      document.getElementById("private-chat-container").classList.add("active");
-      document.getElementById("users-dropdown").classList.remove("active");
+      try {
+        privateChatRecipient = { apellido, legajo };
+        document.getElementById("private-chat-recipient").textContent = `${apellido} (${legajo})`;
+        document.getElementById("private-chat-messages").innerHTML = "";
+        document.getElementById("private-chat-container").classList.add("active");
+      } catch (error) {
+        console.error("Error al abrir chat privado:", error);
+      }
     }
 
     document.getElementById("send-private-message").addEventListener("click", () => {
-      const input = document.getElementById("private-chat-message-input");
-      const message = input.value.trim();
-      if (message && privateChatRecipient) {
-        const time = new Date().toLocaleTimeString();
-        const messageElement = document.createElement("div");
-        messageElement.classList.add("chat-message");
-        messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
-        document.getElementById("private-chat-messages").appendChild(messageElement);
-        document.getElementById("private-chat-messages").scrollTop = document.getElementById("private-chat-messages").scrollHeight;
+      try {
+        const input = document.getElementById("private-chat-message-input");
+        const message = input.value.trim();
+        if (message && privateChatRecipient && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+          const time = new Date().toLocaleTimeString();
+          const messageElement = document.createElement("div");
+          messageElement.classList.add("chat-message");
+          messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
+          document.getElementById("private-chat-messages").appendChild(messageElement);
+          document.getElementById("private-chat-messages").scrollTop = document.getElementById("private-chat-messages").scrollHeight;
 
-        chatSocket.send(JSON.stringify({
-          type: "text",
-          sender: "{{ user.apellido }}",
-          sender_legajo: "{{ user.legajo }}",
-          content: message,
-          recipient: privateChatRecipient.legajo
-        }));
-        input.value = "";
+          chatSocket.send(JSON.stringify({
+            type: "text",
+            sender: "{{ user.apellido }}",
+            sender_legajo: "{{ user.legajo }}",
+            content: message,
+            recipient: privateChatRecipient.legajo
+          }));
+          input.value = "";
+        }
+      } catch (error) {
+        console.error("Error al enviar mensaje privado:", error);
       }
     });
 
@@ -926,118 +973,109 @@
     });
 
     function closePrivateChat() {
-      document.getElementById("private-chat-container").classList.remove("active");
-      privateChatRecipient = null;
+      try {
+        document.getElementById("private-chat-container").classList.remove("active");
+        privateChatRecipient = null;
+      } catch (error) {
+        console.error("Error al cerrar chat privado:", error);
+      }
     }
 
-    document.getElementById("users-count").addEventListener("mouseenter", () => {
-      document.getElementById("users-dropdown").classList.add("active");
-    });
-
-    document.getElementById("users-count").addEventListener("mouseleave", () => {
-      setTimeout(() => {
-        if (!document.getElementById("users-dropdown").matches(":hover")) {
-          document.getElementById("users-dropdown").classList.remove("active");
-        }
-      }, 200);
-    });
-
-    document.getElementById("users-dropdown").addEventListener("mouseleave", () => {
-      document.getElementById("users-dropdown").classList.remove("active");
-    });
-
-    // Corregido: Manejadores de eventos para el menú
-    document.querySelector(".menu-container").addEventListener("mouseenter", () => {
-      document.getElementById("menu").classList.add("active");
-    });
-
-    document.querySelector(".menu-container").addEventListener("mouseleave", () => {
-      setTimeout(() => {
-        if (!document.getElementById("menu").matches(":hover") && !document.querySelector(".menu-container:hover")) {
-          document.getElementById("menu").classList.remove("active");
-        }
-      }, 200);
-    });
-
     document.getElementById("map-toggle").addEventListener("click", () => {
-      const mapContainer = document.getElementById("map-container");
-      const toggleButton = document.getElementById("map-toggle");
-      const isMapMinimized = mapContainer.classList.toggle("minimized");
-      toggleButton.textContent = isMapMinimized ? "+" : "−";
-      if (!isMapMinimized) {
-        map.invalidateSize();
+      try {
+        const mapContainer = document.getElementById("map-container");
+        const toggleButton = document.getElementById("map-toggle");
+        const isMapMinimized = mapContainer.classList.toggle("minimized");
+        toggleButton.textContent = isMapMinimized ? "+" : "−";
+        if (!isMapMinimized && map) {
+          map.invalidateSize();
+        }
+      } catch (error) {
+        console.error("Error al togglear mapa:", error);
       }
     });
 
     function showGuardia() {
-      fetch("/users")
-        .then(res => res.json())
-        .then(data => {
-          const uniqueUsers = [];
-          const seenLegajos = new Set();
-          data.users.forEach(user => {
-            if (!seenLegajos.has(user.legajo)) {
-              seenLegajos.add(user.legajo);
-              uniqueUsers.push(user);
-            }
+      try {
+        fetch("/users")
+          .then(res => res.json())
+          .then(data => {
+            const uniqueUsers = [];
+            const seenLegajos = new Set();
+            data.users.forEach(user => {
+              if (!seenLegajos.has(user.legajo)) {
+                seenLegajos.add(user.legajo);
+                uniqueUsers.push(user);
+              }
+            });
+            const userList = uniqueUsers.map(user => `${user.apellido} (${user.legajo})`).join("<br>");
+            const newWindow = window.open("", "_blank");
+            newWindow.document.write(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Guardia</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 20px; }
+                  h2 { color: #007bff; }
+                </style>
+              </head>
+              <body>
+                <h2>Lista de Usuarios (Guardia)</h2>
+                ${userList || "No hay usuarios disponibles."}
+              </body>
+              </html>
+            `);
+            newWindow.document.close();
+          })
+          .catch(error => {
+            console.error("Error al obtener la lista de usuarios:", error);
+            alert("Error al cargar la lista de usuarios.");
           });
-          const userList = uniqueUsers.map(user => `${user.apellido} (${user.legajo})`).join("<br>");
-          const newWindow = window.open("", "_blank");
-          newWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Guardia</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                h2 { color: #007bff; }
-              </style>
-            </head>
-            <body>
-              <h2>Lista de Usuarios (Guardia)</h2>
-              ${userList || "No hay usuarios disponibles."}
-            </body>
-            </html>
-          `);
-          newWindow.document.close();
-        })
-        .catch(error => {
-          console.error("Error al obtener la lista de usuarios:", error);
-          alert("Error al cargar la lista de usuarios.");
-        });
+      } catch (error) {
+        console.error("Error al mostrar guardia:", error);
+      }
     }
 
     function showChatHistory() {
-      fetch("/chat-history")
-        .then(res => res.json())
-        .then(data => {
-          const chatHistoryMessages = document.getElementById("chat-history-messages");
-          chatHistoryMessages.innerHTML = "";
-          if (data.messages && data.messages.length > 0) {
-            data.messages.forEach(message => {
-              const messageElement = document.createElement("div");
-              messageElement.classList.add("chat-message");
-              const time = new Date(message.timestamp).toLocaleTimeString();
-              if (message.type === "text") {
-                messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-              } else if (message.type === "audio") {
-                messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-              }
-              chatHistoryMessages.appendChild(messageElement);
-            });
-          } else {
-            chatHistoryMessages.innerHTML = "No hay mensajes en el historial.";
-          }
-          document.getElementById("chat-history-container").classList.add("active");
-        })
-        .catch(error => {
-          console.error("Error al obtener el historial del chat:", error);
-          alert("Error al cargar el historial del chat.");
-        });
+      try {
+        fetch("/chat-history")
+          .then(res => res.json())
+          .then(data => {
+            const chatHistoryMessages = document.getElementById("chat-history-messages");
+            chatHistoryMessages.innerHTML = "";
+            if (data.messages && data.messages.length > 0) {
+              data.messages.forEach(message => {
+                const messageElement = document.createElement("div");
+                messageElement.classList.add("chat-message");
+                const time = new Date(message.timestamp).toLocaleTimeString();
+                if (message.type === "text") {
+                  messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+                } else if (message.type === "audio") {
+                  messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+                }
+                chatHistoryMessages.appendChild(messageElement);
+              });
+            } else {
+              chatHistoryMessages.innerHTML = "No hay mensajes en el historial.";
+            }
+            document.getElementById("chat-history-container").classList.add("active");
+          })
+          .catch(error => {
+            console.error("Error al obtener el historial del chat:", error);
+            alert("Error al cargar el historial del chat.");
+          });
+      } catch (error) {
+        console.error("Error al mostrar historial:", error);
+      }
     }
 
     function closeChatHistory() {
-      document.getElementById("chat-history-container").classList.remove("active");
+      try {
+        document.getElementById("chat-history-container").classList.remove("active");
+      } catch (error) {
+        console.error("Error al cerrar historial:", error);
+      }
     }
   </script>
 </body>
