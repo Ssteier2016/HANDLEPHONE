@@ -61,7 +61,7 @@
       z-index: 1000;
       width: 200px;
       opacity: 0;
-      transition: opacity 0.2s ease; /* Suavizar aparición */
+      transition: opacity 0.2s ease;
     }
     .menu.active {
       display: block;
@@ -361,13 +361,16 @@
     }
     #users-count {
       cursor: pointer;
+      position: relative;
     }
     #users-connected {
-      display: none; /* Ocultar usuarios conectados en pantalla principal */
+      display: none;
     }
     #users-dropdown {
       display: none;
       position: absolute;
+      top: 100%;
+      left: 0;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 4px;
@@ -441,8 +444,7 @@
 <body>
   <div class="header">
     <h1>{{ user.apellido }} ({{ user.legajo }})</h1>
-    <!-- Modificado: Menú con hover -->
-    <div class="menu-container" onmouseenter="showMenu()" onmouseleave="hideMenu()">
+    <div class="menu-container">
       <img src="/templates/menu.png" alt="Menú" class="menu-icon">
       <div class="menu" id="menu">
         <div class="menu-item" onclick="window.location.href='https://movil.nortur.ar/ingreso.aspx'">Transporte</div>
@@ -478,7 +480,6 @@
     <div class="update-info">
       <span>Última actualización: <span id="last-update">Cargando...</span></span>
       <span>Habilitar voz para llegadas: <input type="checkbox" id="voice-notifications"></span>
-      <!-- Modificado: Usuarios conectados solo en tooltip -->
       <span>Usuarios conectados: <span id="users-count">0</span></span>
       <div id="users-connected"></div>
       <div id="users-dropdown"></div>
@@ -718,7 +719,6 @@
       try {
         const data = JSON.parse(event.data);
         if (data.type === "user_count") {
-          // Filtrar usuarios únicos por legajo
           fetch("/users")
             .then(res => res.json())
             .then(userData => {
@@ -732,7 +732,6 @@
               });
 
               document.getElementById("users-count").textContent = uniqueUsers.length;
-              // Actualizar solo el dropdown, no users-connected
               const usersDropdown = document.getElementById("users-dropdown");
               usersDropdown.innerHTML = uniqueUsers.map(user => `
                 <div class="user-item" onclick="openPrivateChat('${user.apellido}', '${user.legajo}')">
@@ -762,44 +761,43 @@
     };
 
     chatSocket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      const chatMessages = document.getElementById("chat-messages");
-      const privateChatMessages = document.getElementById("private-chat-messages");
+      try {
+        const message = JSON.parse(event.data);
+        const chatMessages = document.getElementById("chat-messages");
+        const privateChatMessages = document.getElementById("private-chat-messages");
 
-      const messageElement = document.createElement("div");
-      messageElement.classList.add "chat-message");
+        const messageElement = document.createElement("div");
+        messageElement.classList.add("chat-message");
 
-      const time = new Date(message.timestamp).toLocaleTimeString();
+        const time = new Date(message.timestamp).toLocaleTimeString();
 
-      // No renderizar mensajes del usuario actual (ya se renderizan localmente)
-      if (message.sender_legajo !== "{{ user.legajo }}") {
-        if (message.type === "text") {
-          if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
-            // Mensaje privado
-            messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-            privateChatMessages.appendChild(messageElement);
-            privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-            document.getElementById("private-chat-container").classList.add("active");
-          } else {
-            // Mensaje global
-            messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-            chatMessages.appendChild(messageElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          }
-        } else if (message.type === "audio") {
-          if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
-            // Mensaje privado
-            messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-            privateChatMessages.appendChild(messageElement);
-            privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-            document.getElementById("private-chat-container").classList.add("active");
-          } else {
-            // Mensaje global
-            messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-            chatMessages.appendChild(messageElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (message.sender_legajo !== "{{ user.legajo }}") {
+          if (message.type === "text") {
+            if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+              messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+              privateChatMessages.appendChild(messageElement);
+              privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+              document.getElementById("private-chat-container").classList.add("active");
+            } else {
+              messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+              chatMessages.appendChild(messageElement);
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+          } else if (message.type === "audio") {
+            if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+              messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+              privateChatMessages.appendChild(messageElement);
+              privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+              document.getElementById("private-chat-container").classList.add("active");
+            } else {
+              messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+              chatMessages.appendChild(messageElement);
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
           }
         }
+      } catch (error) {
+        console.error("Error al procesar mensaje de chat:", error);
       }
     };
 
@@ -807,7 +805,6 @@
       console.log("Conexión de chat cerrada");
     };
 
-    // Modificado: Renderizar mensajes localmente antes de enviar
     document.getElementById("send-message").addEventListener("click", () => {
       const input = document.getElementById("chat-message-input");
       const message = input.value.trim();
@@ -850,7 +847,6 @@
             reader.onloadend = () => {
               const base64Audio = reader.result;
 
-              // Renderizar localmente
               const time = new Date().toLocaleTimeString();
               const messageElement = document.createElement("div");
               messageElement.classList.add("chat-message");
@@ -893,7 +889,6 @@
       }
     });
 
-    // Modificado: Chat privado
     function openPrivateChat(apellido, legajo) {
       privateChatRecipient = { apellido, legajo };
       document.getElementById("private-chat-recipient").textContent = `${apellido} (${legajo})`;
@@ -935,13 +930,11 @@
       privateChatRecipient = null;
     }
 
-    // Modificado: Mostrar/ocultar dropdown de usuarios con hover
     document.getElementById("users-count").addEventListener("mouseenter", () => {
       document.getElementById("users-dropdown").classList.add("active");
     });
 
     document.getElementById("users-count").addEventListener("mouseleave", () => {
-      // Retrasar el cierre para permitir interacción con el dropdown
       setTimeout(() => {
         if (!document.getElementById("users-dropdown").matches(":hover")) {
           document.getElementById("users-dropdown").classList.remove("active");
@@ -953,6 +946,19 @@
       document.getElementById("users-dropdown").classList.remove("active");
     });
 
+    // Corregido: Manejadores de eventos para el menú
+    document.querySelector(".menu-container").addEventListener("mouseenter", () => {
+      document.getElementById("menu").classList.add("active");
+    });
+
+    document.querySelector(".menu-container").addEventListener("mouseleave", () => {
+      setTimeout(() => {
+        if (!document.getElementById("menu").matches(":hover") && !document.querySelector(".menu-container:hover")) {
+          document.getElementById("menu").classList.remove("active");
+        }
+      }, 200);
+    });
+
     document.getElementById("map-toggle").addEventListener("click", () => {
       const mapContainer = document.getElementById("map-container");
       const toggleButton = document.getElementById("map-toggle");
@@ -962,20 +968,6 @@
         map.invalidateSize();
       }
     });
-
-    // Modificado: Funciones para menú con hover
-    function showMenu() {
-      document.getElementById("menu").classList.add("active");
-    }
-
-    function hideMenu() {
-      // Retrasar el cierre para permitir interacción con submenús
-      setTimeout(() => {
-        if (!document.getElementById("menu").matches(":hover") && !document.querySelector(".menu-container:hover")) {
-          document.getElementById("menu").classList.remove("active");
-        }
-      }, 200);
-    }
 
     function showGuardia() {
       fetch("/users")
