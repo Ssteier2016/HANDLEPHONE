@@ -985,96 +985,59 @@
       try {
         const mapContainer = document.getElementById("map-container");
         const toggleButton = document.getElementById("map-toggle");
-        const isMapMinimized = mapContainer.classList.toggle("minimized");
-        toggleButton.textContent = isMapMinimized ? "+" : "−";
-        if (!isMapMinimized && map) {
-          map.invalidateSize();
-        }
+        const isMinimized = mapContainer.classList.toggle("minimized");
+        toggleButton.textContent = isMinimized ? "+" : "−";
       } catch (error) {
-        console.error("Error al togglear mapa:", error);
+        console.error("Error al minimizar/mostrar mapa:", error);
       }
     });
 
-    function showGuardia() {
+    async function showGuardia() {
       try {
-        fetch("/users")
-          .then(res => res.json())
-          .then(data => {
-            const uniqueUsers = [];
-            const seenLegajos = new Set();
-            data.users.forEach(user => {
-              if (!seenLegajos.has(user.legajo)) {
-                seenLegajos.add(user.legajo);
-                uniqueUsers.push(user);
-              }
-            });
-            const userList = uniqueUsers.map(user => `${user.apellido} (${user.legajo})`).join("<br>");
-            const newWindow = window.open("", "_blank");
-            newWindow.document.write(`
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Guardia</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 20px; }
-                  h2 { color: #007bff; }
-                </style>
-              </head>
-              <body>
-                <h2>Lista de Usuarios (Guardia)</h2>
-                ${userList || "No hay usuarios disponibles."}
-              </body>
-              </html>
-            `);
-            newWindow.document.close();
-          })
-          .catch(error => {
-            console.error("Error al obtener la lista de usuarios:", error);
-            alert("Error al cargar la lista de usuarios.");
-          });
+        const response = await fetch("/guardia");
+        const data = await response.json();
+        alert(`Guardia actual: ${data.guardia || "No disponible"}`);
       } catch (error) {
-        console.error("Error al mostrar guardia:", error);
+        console.error("Error al obtener guardia:", error);
+        alert("Error al cargar la guardia.");
       }
     }
 
-    function showChatHistory() {
+    async function showChatHistory() {
       try {
-        fetch("/chat-history")
-          .then(res => res.json())
-          .then(data => {
-            const chatHistoryMessages = document.getElementById("chat-history-messages");
-            chatHistoryMessages.innerHTML = "";
-            if (data.messages && data.messages.length > 0) {
-              data.messages.forEach(message => {
-                const messageElement = document.createElement("div");
-                messageElement.classList.add("chat-message");
-                const time = new Date(message.timestamp).toLocaleTimeString();
-                if (message.type === "text") {
-                  messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-                } else if (message.type === "audio") {
-                  messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-                }
-                chatHistoryMessages.appendChild(messageElement);
-              });
-            } else {
-              chatHistoryMessages.innerHTML = "No hay mensajes en el historial.";
+        const response = await fetch("/chat_history");
+        const messages = await response.json();
+        const historyMessages = document.getElementById("chat-history-messages");
+        historyMessages.innerHTML = "";
+
+        if (messages.length > 0) {
+          messages.forEach(message => {
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("chat-message");
+            const time = new Date(message.timestamp).toLocaleTimeString();
+            if (message.type === "text") {
+              messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+            } else if (message.type === "audio") {
+              messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
             }
-            document.getElementById("chat-history-container").classList.add("active");
-          })
-          .catch(error => {
-            console.error("Error al obtener el historial del chat:", error);
-            alert("Error al cargar el historial del chat.");
+            historyMessages.appendChild(messageElement);
           });
+        } else {
+          historyMessages.innerHTML = "<p>No hay mensajes en el historial.</p>";
+        }
+
+        document.getElementById("chat-history-container").classList.add("active");
       } catch (error) {
-        console.error("Error al mostrar historial:", error);
+        console.error("Error al obtener historial de chat:", error);
+        document.getElementById("chat-history-messages").innerHTML = "<p>Error al cargar el historial.</p>";
       }
     }
 
     function closeChatHistory() {
       try {
-        document.getElementById("chat-history-container").classList.remove("active");
+        document.getElementById("chid="chat-history-container").classList.remove("active");
       } catch (error) {
-        console.error("Error al cerrar historial:", error);
+        console.error("Error al cerrar historial de chat:", error);
       }
     }
   </script>
