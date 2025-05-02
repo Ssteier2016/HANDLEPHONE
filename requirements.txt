@@ -11,12 +11,18 @@ aiohttp==3.10.5
 python-dotenv==1.0.1 
 cachetools==5.5.0 
 websockets==15.0 
-pytz==2023.3
-
-WebSocket y chat
-
+pytz==2023.3 
+Flask==2.3.2 
+gunicorn==20.1.0 
+requests==2.31.0 
 websocket-client==1.6.1 
 python-socketio==5.8.0
+
+Scraping
+
+selenium==4.15.2 
+webdriver_manager==4.0.2 
+beautifulsoup4==4.12.3
 
 Audio
 
