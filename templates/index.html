@@ -12,8 +12,7 @@
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f0f0f0;
-      background-image: url('/templates/fondoaero.png');
+      background-image: url('/templates/fondoaero.png'); /* Solo imagen de fondo */
       background-size: cover;
       background-position: center;
       background-attachment: fixed;
@@ -28,7 +27,7 @@
       color: white;
       padding: 10px 20px;
       display: flex;
-      justify-content: flex-start; /* Alineado a la izquierda */
+      justify-content: flex-start;
       align-items: center;
       width: 100%;
       max-width: 1200px;
@@ -38,7 +37,7 @@
     .header h1 {
       margin: 0;
       font-size: 24px;
-      margin-left: 60px; /* Margen para evitar superposición con el menú */
+      margin-left: 60px;
     }
     .menu-container {
       position: absolute;
@@ -128,7 +127,7 @@
       transition: height 0.3s ease;
       width: 100%;
       max-width: 800px;
-      z-index: 1001; /* Por encima de otros elementos, pero debajo del historial */
+      z-index: 1001;
     }
     #map-container.minimized {
       height: 40px;
@@ -199,67 +198,29 @@
     #pagination span {
       margin: 0 10px;
     }
-    #chat-container {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+    #chat-global-container {
       width: 100%;
       max-width: 800px;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      z-index: 1001; /* Por encima de otros elementos, pero debajo del historial */
-      transition: height 0.3s ease;
+      margin-top: 20px;
+      z-index: 1001;
     }
-    #chat-container.minimized {
-      height: 40px;
-    }
-    #chat-container h3 {
+    #chat-global-container h3 {
       margin: 0;
       padding: 10px;
       background-color: #007bff;
       color: white;
       border-top-left-radius: 8px;
       border-top-right-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: relative;
-    }
-    #chat-title-img {
-      width: 100px;
-      height: auto;
-    }
-    #chat-toggle {
-      background: none;
-      border: none;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    #unread-count {
-      position: absolute;
-      top: 5px;
-      right: 30px;
-      background-color: red;
-      color: white;
-      border-radius: 50%;
-      padding: 2px 6px;
-      font-size: 12px;
-      display: none;
     }
     #chat-messages {
-      flex: 1;
       padding: 10px;
       overflow-y: auto;
       border-bottom: 1px solid #ccc;
-      display: none;
       max-height: 300px;
-    }
-    #chat-container:not(.minimized) #chat-messages {
-      display: block;
     }
     .chat-message {
       margin-bottom: 10px;
@@ -273,10 +234,6 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
-      display: none;
-    }
-    #chat-container:not(.minimized) #chat-input {
-      display: flex;
     }
     #chat-input input {
       padding: 5px;
@@ -298,6 +255,70 @@
     #recording-status {
       color: red;
       font-size: 0.9em;
+    }
+    #private-chat-container {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 400px;
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      z-index: 1002;
+    }
+    #private-chat-container.active {
+      display: block;
+    }
+    #private-chat-container h3 {
+      margin: 0;
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #private-chat-messages {
+      padding: 10px;
+      overflow-y: auto;
+      border-bottom: 1px solid #ccc;
+      max-height: 200px;
+    }
+    #private-chat-input {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    #private-chat-input input {
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 100%;
+    }
+    #private-chat-input button {
+      padding: 5px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #private-chat-input button:hover {
+      background-color: #0056b3;
+    }
+    #close-private-chat {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
     }
     #filters {
       margin-bottom: 20px;
@@ -332,15 +353,43 @@
       margin-bottom: 20px;
       flex-wrap: wrap;
     }
+    #users-connected {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 5px;
+      flex-wrap: wrap;
+    }
+    #users-dropdown {
+      display: none;
+      position: absolute;
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      width: 200px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #users-dropdown.active {
+      display: block;
+    }
+    .user-item {
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .user-item:last-child {
+      border-bottom: none;
+    }
+    .user-item:hover {
+      background-color: #f0f0f0;
+    }
     .details-row {
       display: none;
     }
     .details-row.visible {
       display: table-row;
-    }
-    #users-connected {
-      margin-top: 10px;
-      text-align: center;
     }
     .logo-container {
       text-align: center;
@@ -358,7 +407,7 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      z-index: 2000; /* Por encima de todo */
+      z-index: 2000;
       padding: 20px;
       max-height: 80vh;
       overflow-y: auto;
@@ -382,7 +431,6 @@
 </head>
 <body>
   <div class="header">
-    <!-- Modificado: solo apellido y legajo, alineado a la izquierda -->
     <h1>{{ user.apellido }} ({{ user.legajo }})</h1>
     <div class="menu-container">
       <img src="/templates/menu.png" alt="Menú" class="menu-icon" onclick="toggleMenu()">
@@ -411,7 +459,6 @@
       <img src="/templates/logo.png" alt="Logo" style="max-width: 200px;">
     </div>
 
-    <!-- Movido: buscador y update-info debajo del logo -->
     <div id="filters">
       <label>Vuelos disponibles</label>
       <input type="text" id="search-input" placeholder="Ej. AR AEP EZE">
@@ -420,10 +467,10 @@
 
     <div class="update-info">
       <span>Última actualización: <span id="last-update">Cargando...</span></span>
-      <!-- Eliminado el botón de actualizar vuelos -->
       <span>Habilitar voz para llegadas: <input type="checkbox" id="voice-notifications"></span>
-      <span>Usuarios conectados: <span id="users-count">0</span></span>
+      <span>Usuarios conectados: <span id="users-count" onclick="toggleUsersDropdown()">0</span></span>
       <div id="users-connected"></div>
+      <div id="users-dropdown"></div>
     </div>
 
     <div id="map-container">
@@ -457,18 +504,28 @@
       </div>
     </div>
 
-    <div id="chat-container">
-      <h3>
-        <img src="/templates/msn.png" alt="Chat" id="chat-title-img">
-        <span id="unread-count">0</span>
-        <button id="chat-toggle">−</button>
-      </h3>
+    <!-- Nuevo: Chat global estático -->
+    <div id="chat-global-container">
+      <h3>Chat global</h3>
       <div id="chat-messages"></div>
       <div id="chat-input">
         <input type="text" id="chat-message-input" placeholder="Escribe un mensaje...">
         <button id="send-message">Enviar</button>
         <button id="record-audio">Grabar Audio</button>
         <span id="recording-status"></span>
+      </div>
+    </div>
+
+    <!-- Nuevo: Chat privado -->
+    <div id="private-chat-container">
+      <h3>
+        Chat privado con <span id="private-chat-recipient"></span>
+        <button id="close-private-chat" onclick="closePrivateChat()">✕</button>
+      </h3>
+      <div id="private-chat-messages"></div>
+      <div id="private-chat-input">
+        <input type="text" id="private-chat-message-input" placeholder="Escribe un mensaje...">
+        <button id="send-private-message">Enviar</button>
       </div>
     </div>
 
@@ -488,7 +545,6 @@
 
     let markers = [];
 
-    // Función para actualizar el mapa
     function updateMap(flights) {
       markers.forEach(marker => map.removeLayer(marker));
       markers = [];
@@ -515,7 +571,6 @@
     let allFlights = [];
     let filteredFlights = [];
 
-    // Función para filtrar vuelos
     function filterFlights() {
       const searchInput = document.getElementById("search-input").value.toUpperCase().trim();
       const terms = searchInput.split(" ");
@@ -532,7 +587,6 @@
       renderFlights();
     }
 
-    // Función para renderizar los vuelos
     function renderFlights() {
       const flightsPerPage = 25;
       const startIdx = (currentPage - 1) * flightsPerPage;
@@ -593,13 +647,11 @@
       }
     }
 
-    // Función para toggle de detalles
     function toggleDetails(index) {
       const detailsRow = document.getElementById(`details-${index}`);
       detailsRow.classList.toggle("visible");
     }
 
-    // Función para actualizar la tabla de vuelos
     async function updateFlightsTable() {
       try {
         const response = await fetch(`/flights?page=${currentPage}`);
@@ -649,26 +701,37 @@
       }
     });
 
-    // Llamada inicial y actualización automática cada 15 minutos
     updateFlightsTable();
-    setInterval(updateFlightsTable, 900000); // 15 minutos = 900,000 ms
+    setInterval(updateFlightsTable, 900000);
 
     const ws = new WebSocket(`wss://${window.location.host}/ws`);
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "user_count") {
-          document.getElementById("users-count").textContent = data.count;
+          // Filtrar usuarios únicos por legajo
           fetch("/users")
             .then(res => res.json())
             .then(userData => {
-              const usersDiv = document.getElementById("users-connected");
-              usersDiv.innerHTML = "";
+              const uniqueUsers = [];
+              const seenLegajos = new Set();
               userData.users.forEach(user => {
-                const userItem = document.createElement("div");
-                userItem.textContent = `${user.apellido} (${user.legajo})`;
-                usersDiv.appendChild(userItem);
+                if (!seenLegajos.has(user.legajo)) {
+                  seenLegajos.add(user.legajo);
+                  uniqueUsers.push(user);
+                }
               });
+
+              document.getElementById("users-count").textContent = uniqueUsers.length;
+              const usersDiv = document.getElementById("users-connected");
+              usersDiv.innerHTML = uniqueUsers.map(user => `<span>${user.apellido} (${user.legajo})</span>`).join(", ");
+
+              const usersDropdown = document.getElementById("users-dropdown");
+              usersDropdown.innerHTML = uniqueUsers.map(user => `
+                <div class="user-item" onclick="openPrivateChat('${user.apellido}', '${user.legajo}')">
+                  ${user.apellido} (${user.legajo})
+                </div>
+              `).join("");
             })
             .catch(error => {
               console.error("Error al obtener la lista de usuarios:", error);
@@ -685,9 +748,7 @@
     let audioChunks = [];
     let isRecording = false;
     let stream = null;
-    let unreadMessages = 0;
-    let isChatMinimized = false;
-    let isMapMinimized = false;
+    let privateChatRecipient = null;
 
     chatSocket.onopen = () => {
       console.log("Conexión de chat establecida");
@@ -696,24 +757,40 @@
     chatSocket.onmessage = (event) => {
       const message = JSON.parse(event.data);
       const chatMessages = document.getElementById("chat-messages");
+      const privateChatMessages = document.getElementById("private-chat-messages");
 
       const messageElement = document.createElement("div");
       messageElement.classList.add("chat-message");
 
+      // Formato: [hora] Apellido: contenido
+      const time = new Date(message.timestamp).toLocaleTimeString();
+
       if (message.type === "text") {
-        messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): ${message.content}`;
+        if (message.recipient && message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}") {
+          // Mensaje privado
+          messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+          privateChatMessages.appendChild(messageElement);
+          privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+          document.getElementById("private-chat-container").classList.add("active");
+        } else {
+          // Mensaje global
+          messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+          chatMessages.appendChild(messageElement);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
       } else if (message.type === "audio") {
-        messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): <audio controls src="${message.content}"></audio>`;
-      }
-
-      chatMessages.appendChild(messageElement);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-
-      if (isChatMinimized) {
-        unreadMessages++;
-        const unreadCount = document.getElementById("unread-count");
-        unreadCount.textContent = unreadMessages;
-        unreadCount.style.display = "block";
+        if (message.recipient && message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}") {
+          // Mensaje privado
+          messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+          privateChatMessages.appendChild(messageElement);
+          privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+          document.getElementById("private-chat-container").classList.add("active");
+        } else {
+          // Mensaje global
+          messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+          chatMessages.appendChild(messageElement);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
       }
     };
 
@@ -727,7 +804,8 @@
       if (message) {
         chatSocket.send(JSON.stringify({
           type: "text",
-          sender: "{{ user.apellido }} ({{ user.position }})",
+          sender: "{{ user.apellido }}",
+          sender_legajo: "{{ user.legajo }}",
           content: message
         }));
         input.value = "";
@@ -756,7 +834,8 @@
               const base64Audio = reader.result;
               chatSocket.send(JSON.stringify({
                 type: "audio",
-                sender: "{{ user.apellido }} ({{ user.position }})",
+                sender: "{{ user.apellido }}",
+                sender_legajo: "{{ user.legajo }}",
                 content: base64Audio
               }));
             };
@@ -788,23 +867,51 @@
       }
     });
 
-    document.getElementById("chat-toggle").addEventListener("click", () => {
-      const chatContainer = document.getElementById("chat-container");
-      const toggleButton = document.getElementById("chat-toggle");
-      isChatMinimized = !isChatMinimized;
-      chatContainer.classList.toggle("minimized", isChatMinimized);
-      toggleButton.textContent = isChatMinimized ? "+" : "−";
-      if (!isChatMinimized) {
-        unreadMessages = 0;
-        document.getElementById("unread-count").style.display = "none";
+    // Nuevo: Funciones para chat privado
+    function openPrivateChat(apellido, legajo) {
+      privateChatRecipient = { apellido, legajo };
+      document.getElementById("private-chat-recipient").textContent = `${apellido} (${legajo})`;
+      document.getElementById("private-chat-messages").innerHTML = "";
+      document.getElementById("private-chat-container").classList.add("active");
+      document.getElementById("users-dropdown").classList.remove("active");
+    }
+
+    document.getElementById("send-private-message").addEventListener("click", () => {
+      const input = document.getElementById("private-chat-message-input");
+      const message = input.value.trim();
+      if (message && privateChatRecipient) {
+        chatSocket.send(JSON.stringify({
+          type: "text",
+          sender: "{{ user.apellido }}",
+          sender_legajo: "{{ user.legajo }}",
+          content: message,
+          recipient: privateChatRecipient.legajo
+        }));
+        input.value = "";
       }
     });
+
+    document.getElementById("private-chat-message-input").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        document.getElementById("send-private-message").click();
+      }
+    });
+
+    function closePrivateChat() {
+      document.getElementById("private-chat-container").classList.remove("active");
+      privateChatRecipient = null;
+    }
+
+    // Nuevo: Toggle del menú desplegable de usuarios
+    function toggleUsersDropdown() {
+      const dropdown = document.getElementById("users-dropdown");
+      dropdown.classList.toggle("active");
+    }
 
     document.getElementById("map-toggle").addEventListener("click", () => {
       const mapContainer = document.getElementById("map-container");
       const toggleButton = document.getElementById("map-toggle");
-      isMapMinimized = !isMapMinimized;
-      mapContainer.classList.toggle("minimized", isMapMinimized);
+      const isMapMinimized = mapContainer.classList.toggle("minimized");
       toggleButton.textContent = isMapMinimized ? "+" : "−";
       if (!isMapMinimized) {
         map.invalidateSize();
@@ -820,7 +927,15 @@
       fetch("/users")
         .then(res => res.json())
         .then(data => {
-          const userList = data.users.map(user => `${user.apellido} (${user.legajo})`).join("<br>");
+          const uniqueUsers = [];
+          const seenLegajos = new Set();
+          data.users.forEach(user => {
+            if (!seenLegajos.has(user.legajo)) {
+              seenLegajos.add(user.legajo);
+              uniqueUsers.push(user);
+            }
+          });
+          const userList = uniqueUsers.map(user => `${user.apellido} (${user.legajo})`).join("<br>");
           const newWindow = window.open("", "_blank");
           newWindow.document.write(`
             <!DOCTYPE html>
@@ -856,10 +971,11 @@
             data.messages.forEach(message => {
               const messageElement = document.createElement("div");
               messageElement.classList.add("chat-message");
+              const time = new Date(message.timestamp).toLocaleTimeString();
               if (message.type === "text") {
-                messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): ${message.content}`;
+                messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
               } else if (message.type === "audio") {
-                messageElement.innerHTML = `<strong>${message.sender}</strong> (${message.timestamp}): <audio controls src="${message.content}"></audio>`;
+                messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
               }
               chatHistoryMessages.appendChild(messageElement);
             });
