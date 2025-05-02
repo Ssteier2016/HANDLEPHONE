@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Agregar middleware CSP y CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
