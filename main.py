@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, Request, Depe
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from starlette.middleware.cors import CORSMiddleware
 import httpx
 import uvicorn
 import logging
@@ -20,53 +21,60 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 def setup_selenium():
     options = webdriver.ChromeOptions()
-    options.add_argument('--headless')  # Ejecutar en modo headless
-    options.add_argument('--no-sandbox')  # Necesario para entornos como Render
-    options.add_argument('--disable-dev-shm-usage')  # Evitar problemas de memoria en contenedores
-    options.add_argument('--disable-gpu')  # Desactivar GPU (no necesario en headless)
-
-    # Configurar el servicio de ChromeDriver usando webdriver-manager
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Montar la carpeta templates para archivos estáticos
-app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+# Agregar middleware CSP y CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Configurar Jinja2 para plantillas HTML
+@app.middleware("http")
+async def add_csp_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://unpkg.com; "
+        "style-src 'self' https://unpkg.com; "
+        "img-src 'self' https://*.tile.openstreetmap.org data:; "
+        "connect-src 'self' wss://handyhandle.onrender.com; "
+        "font-src 'self'; "
+        "media-src 'self' data:"
+    )
+    return response
+
+app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 templates = Jinja2Templates(directory="templates")
 
-# Clave de API de GoFlightLabs
 GOFLIGHTLABS_API_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiZjkzOWJiZmM2ZWY3Y2QxMzcyY2I2NjJjZjI0NzI0ZTAwY2I0M2RmZTcyMmY2NDZiNTQwNjJiMTk0NGM4NGEwZDc3MjU1NWY1ZDA3YWRlZDkiLCJpYXQiOjE3NDQ5MjU3NjYsIm5iZiI6MTc0NDkyNTc2NiwiZXhwIjoxNzc2NDYxNzY1LCJzdWIiOiIyNDcxNyIsInNjb3BlcyI6W119.Ln6gpY3DDOUHesjuqbIeVYh86GLvggRaPaP8oGh-mGy8hQxMlqX7ie_U0zXfowKKFInnDdsHAg8PuZB2yt31qQ"
 GOFLIGHTLABS_API_URL = f"https://www.goflightlabs.com/flights?access_key={GOFLIGHTLABS_API_KEY}"
-
-# Clave de API de AviationStack
 AVIATIONSTACK_API_KEY = "e2ffa37f30b26c5ab57dfbf77982a25b"
 AVIATIONSTACK_API_URL = f"http://api.aviationstack.com/v1/flights?access_key={AVIATIONSTACK_API_KEY}"
-
-# Clave de API de SerpApi
 SERPAPI_API_KEY = "b1b5b25c9b389d5a70d5bceab6bc568dcdec531a1872b91e789d799c90c762fe"
 SERPAPI_FLIGHTS_URL = f"https://serpapi.com/search?engine=google_flights&api_key={SERPAPI_API_KEY}"
 
-# Coordenadas aproximadas de los aeropuertos
 AIRPORT_COORDS = {
     "AEP": {"lat": -34.5592, "lon": -58.4156},
     "EZE": {"lat": -34.8222, "lon": -58.5358},
 }
 
-# Lista para rastrear conexiones WebSocket activas
 connected_clients = set()
-
-# Lista para almacenar usuarios conectados con sus detalles
 connected_users = {}
 
-# Lista predefinida de usuarios permitidos (legajo: apellido)
 ALLOWED_USERS = {
     "35127": "Souto",
     "35145": "Gimenez",
@@ -85,24 +93,20 @@ ALLOWED_USERS = {
     "38546": "Leto",
 }
 
-# Lista de posiciones permitidas
 ALLOWED_POSITIONS = [
     "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
     "Jefatura", "Administración", "Movilero", "Micros", "Pañolero", "Señalero"
 ]
 
-# Inicializar la base de datos SQLite para usuarios y sesiones
 def init_db():
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
-    # Tabla para usuarios
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         legajo TEXT PRIMARY KEY,
         apellido TEXT NOT NULL,
         position TEXT NOT NULL,
         password TEXT NOT NULL
     )''')
-    # Tabla para sesiones (almacenar tokens)
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         legajo TEXT NOT NULL,
@@ -111,22 +115,21 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Inicializar la base de datos SQLite para mensajes del chat
 def init_chat_db():
     conn = sqlite3.connect("chat.db")
     c = conn.cursor()
-    # Tabla para mensajes del chat
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT,
         sender TEXT,
+        sender_legajo TEXT,
         content TEXT,
-        timestamp TEXT
+        timestamp TEXT,
+        recipient TEXT
     )''')
     conn.commit()
     conn.close()
 
-# Limpiar mensajes antiguos (más de 7 días)
 def clean_old_messages():
     conn = sqlite3.connect("chat.db")
     c = conn.cursor()
@@ -135,11 +138,9 @@ def clean_old_messages():
     conn.commit()
     conn.close()
 
-# Inicializar las bases de datos al iniciar la app
 init_db()
 init_chat_db()
 
-# Dependencia para verificar si el usuario está logueado usando cookies
 def get_current_user(request: Request):
     token = request.cookies.get("session_token")
     if not token:
@@ -163,14 +164,12 @@ def get_current_user(request: Request):
 
     return {"legajo": user[0], "apellido": user[1], "position": user[2]}
 
-# Ruta para la página de registro
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("register.html", {"request": request, "positions": ALLOWED_POSITIONS})
 
-# Ruta para procesar el registro
 @app.post("/register", response_class=HTMLResponse)
 async def register(
     request: Request,
@@ -183,7 +182,6 @@ async def register(
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
-    # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("register.html", {
             "request": request,
@@ -191,7 +189,6 @@ async def register(
             "error": "Legajo y apellido no coinciden con los registros permitidos."
         })
 
-    # Validar formato del legajo (5 números)
     if not re.match(r'^\d{5}$', legajo):
         return templates.TemplateResponse("register.html", {
             "request": request,
@@ -199,7 +196,6 @@ async def register(
             "error": "El legajo debe contener exactamente 5 números."
         })
 
-    # Validar formato del apellido (solo letras)
     if not re.match(r'^[A-Za-z]+$', apellido):
         return templates.TemplateResponse("register.html", {
             "request": request,
@@ -207,7 +203,6 @@ async def register(
             "error": "El apellido debe contener solo letras."
         })
 
-    # Validar posición
     if position not in ALLOWED_POSITIONS:
         return templates.TemplateResponse("register.html", {
             "request": request,
@@ -215,7 +210,6 @@ async def register(
             "error": "Posición no válida."
         })
 
-    # Validar que las contraseñas coincidan
     if password != confirm_password:
         return templates.TemplateResponse("register.html", {
             "request": request,
@@ -223,10 +217,7 @@ async def register(
             "error": "Las contraseñas no coinciden."
         })
 
-    # Hashear la contraseña
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-    # Guardar el usuario en la base de datos
     try:
         conn = sqlite3.connect("users.db")
         c = conn.cursor()
@@ -243,14 +234,12 @@ async def register(
 
     return RedirectResponse(url="/login", status_code=303)
 
-# Ruta para la página de inicio de sesión
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request})
 
-# Ruta para procesar el inicio de sesión
 @app.post("/login", response_class=HTMLResponse)
 async def login(
     request: Request,
@@ -261,14 +250,12 @@ async def login(
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
-    # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("login.html", {
             "request": request,
             "error": "Legajo y apellido no coinciden con los registros permitidos."
         })
 
-    # Verificar si el usuario está registrado
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE legajo = ?", (legajo,))
@@ -281,15 +268,13 @@ async def login(
             "error": "Usuario no registrado. Por favor, regístrate primero."
         })
 
-    # Verificar la contraseña
-    stored_password = user[3]  # La contraseña hasheada está en la columna 4
+    stored_password = user[3]
     if not bcrypt.checkpw(password.encode('utf-8'), stored_password):
         return templates.TemplateResponse("login.html", {
             "request": request,
             "error": "Contraseña incorrecta."
         })
 
-    # Generar un token de sesión
     session_token = secrets.token_hex(16)
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
@@ -297,12 +282,10 @@ async def login(
     conn.commit()
     conn.close()
 
-    # Configurar la cookie y redirigir
     response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key="session_token", value=session_token, httponly=True, max_age=30*24*60*60)  # 30 días
+    response.set_cookie(key="session_token", value=session_token, httponly=True, max_age=30*24*60*60)
     return response
 
-# Ruta para cerrar sesión
 @app.get("/logout", response_class=HTMLResponse)
 async def logout(request: Request):
     token = request.cookies.get("session_token")
@@ -313,7 +296,6 @@ async def logout(request: Request):
         conn.commit()
         conn.close()
 
-        # Remover usuario de la lista de conectados
         user_to_remove = None
         for ws, user in connected_users.items():
             if user["token"] == token:
@@ -326,14 +308,12 @@ async def logout(request: Request):
     response.delete_cookie(key="session_token")
     return response
 
-# Ruta para la página de restablecimiento de contraseña
 @app.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("reset_password.html", {"request": request})
 
-# Ruta para procesar el restablecimiento de contraseña
 @app.post("/reset-password", response_class=HTMLResponse)
 async def reset_password(
     request: Request,
@@ -345,14 +325,12 @@ async def reset_password(
     if request.cookies.get("session_token"):
         return RedirectResponse(url="/", status_code=303)
 
-    # Validar que el legajo y el apellido coincidan con la lista predefinida
     if legajo not in ALLOWED_USERS or ALLOWED_USERS[legajo].lower() != apellido.lower():
         return templates.TemplateResponse("reset_password.html", {
             "request": request,
             "error": "Legajo y apellido no coinciden con los registros permitidos."
         })
 
-    # Verificar si el usuario está registrado
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE legajo = ?", (legajo,))
@@ -365,7 +343,6 @@ async def reset_password(
             "error": "Usuario no registrado."
         })
 
-    # Validar que las contraseñas coincidan
     if new_password != confirm_new_password:
         conn.close()
         return templates.TemplateResponse("reset_password.html", {
@@ -373,7 +350,6 @@ async def reset_password(
             "error": "Las contraseñas no coinciden."
         })
 
-    # Actualizar la contraseña
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
     c.execute("UPDATE users SET password = ? WHERE legajo = ?", (hashed_password, legajo))
     conn.commit()
@@ -381,7 +357,6 @@ async def reset_password(
 
     return RedirectResponse(url="/login", status_code=303)
 
-# Ruta para servir la página principal (protegida)
 @app.get("/", response_class=HTMLResponse)
 @app.head("/", response_class=HTMLResponse)
 async def read_root(request: Request, user: dict = Depends(get_current_user)):
@@ -392,7 +367,6 @@ async def read_root(request: Request, user: dict = Depends(get_current_user)):
         "user": user
     })
 
-# Ruta para obtener todos los vuelos (protegida)
 @app.get("/flights")
 async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
@@ -403,7 +377,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     six_hours_future = current_time + (6 * 3600)
     failed_sources = []
 
-    # 1. Consultar SerpApi (Google Flights)
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de SerpApi (Google Flights)...")
@@ -411,20 +384,19 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                 SERPAPI_FLIGHTS_URL,
                 params={
                     "departure_id": "AEP",
-                    "arrival_id": "",  # Dejar vacío para buscar todos los destinos
+                    "arrival_id": "",
                     "hl": "es",
                     "currency": "ARS",
                     "outbound_date": datetime.now().strftime("%Y-%m-%d"),
-                    "type": "2",  # Tipo 2 para vuelos de ida
-                    "sort": "3",  # Ordenar por hora de salida
-                    "deep_search": "true"  # Habilitar búsqueda profunda para más resultados
+                    "type": "2",
+                    "sort": "3",
+                    "deep_search": "true"
                 }
             )
             response.raise_for_status()
             data = response.json()
 
             logger.info(f"Datos recibidos de SerpApi: {data}")
-
             flights = data.get("best_flights", []) + data.get("other_flights", [])
             logger.info(f"Total de vuelos recibidos de SerpApi: {len(flights)}")
 
@@ -490,7 +462,7 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "observations": "Datos obtenidos de Google Flights vía SerpApi",
                     "lat": lat,
                     "lon": lon,
-                    "departure_datetime": departure_datetime  # Para ordenar
+                    "departure_datetime": departure_datetime
                 })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar SerpApi: {str(e)}")
@@ -499,7 +471,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             logger.error(f"Error inesperado al consultar SerpApi: {str(e)}")
             failed_sources.append("SerpApi")
 
-    # 2. Consultar GoFlightLabs
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de GoFlightLabs...")
@@ -508,7 +479,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             data = response.json()
 
             logger.info(f"Datos recibidos de GoFlightLabs: {data}")
-
             if not data.get("success"):
                 logger.error("GoFlightLabs no devolvió éxito")
                 failed_sources.append("GoFlightLabs")
@@ -525,7 +495,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     departure = flight.get("dep_iata", "N/A")
                     arrival = flight.get("arr_iata", "N/A")
 
-                    # Filtrar solo vuelos que involucren AEP
                     if departure != "AEP" and arrival != "AEP":
                         continue
 
@@ -590,7 +559,7 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                         "observations": "Datos obtenidos de GoFlightLabs",
                         "lat": lat,
                         "lon": lon,
-                        "departure_datetime": departure_datetime  # Para ordenar
+                        "departure_datetime": departure_datetime
                     })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar GoFlightLabs: {str(e)}")
@@ -599,7 +568,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             logger.error(f"Error inesperado al consultar GoFlightLabs: {str(e)}")
             failed_sources.append("GoFlightLabs")
 
-    # 3. Consultar AviationStack
     async with httpx.AsyncClient() as client:
         try:
             logger.info("Consultando la API de AviationStack...")
@@ -614,7 +582,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             data = response.json()
 
             logger.info(f"Datos recibidos de AviationStack: {data}")
-
             flights = data.get("data", [])
             logger.info(f"Total de vuelos recibidos de AviationStack: {len(flights)}")
 
@@ -625,7 +592,7 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
 
             for flight in flights:
                 airline_iata = flight.get("airline", {}).get("iata", "N/A")
-                if airline_iata != "AR":  # Filtrar solo Aerolíneas Argentinas
+                if airline_iata != "AR":
                     continue
 
                 departure = flight.get("departure", {}).get("iata", "N/A")
@@ -689,12 +656,12 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
                     "arrival_gate": flight.get("arrival", {}).get("gate", "N/A"),
                     "departure_terminal": flight.get("departure", {}).get("terminal", "N/A"),
                     "arrival_terminal": flight.get("arrival", {}).get("terminal", "N/A"),
-                    "aircraft": "N/A",  # AviationStack no proporciona este dato
+                    "aircraft": "N/A",
                     "status": status,
                     "observations": "Datos obtenidos de AviationStack",
                     "lat": lat,
                     "lon": lon,
-                    "departure_datetime": departure_datetime  # Para ordenar
+                    "departure_datetime": departure_datetime
                 })
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al consultar AviationStack: {str(e)}")
@@ -703,7 +670,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
             logger.error(f"Error inesperado al consultar AviationStack: {str(e)}")
             failed_sources.append("AviationStack")
 
-    # Eliminar duplicados y ordenar por fecha de salida
     unique_flights = {}
     for flight in all_flights:
         flight_key = (flight["flight_iata"], flight["estimated_departure"])
@@ -713,7 +679,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     all_flights = list(unique_flights.values())
     all_flights.sort(key=lambda x: x["departure_datetime"] if x["departure_datetime"] else datetime.max)
 
-    # Paginación
     flights_per_page = 25
     total_flights = len(all_flights)
     total_pages = (total_flights + flights_per_page - 1) // flights_per_page
@@ -721,7 +686,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
     end_idx = start_idx + flights_per_page
     paginated_flights = all_flights[start_idx:end_idx]
 
-    # Remover el campo departure_datetime de la respuesta
     for flight in paginated_flights:
         flight.pop("departure_datetime", None)
 
@@ -731,7 +695,6 @@ async def get_flights(page: int = 1, user: dict = Depends(get_current_user)):
         "failed_sources": failed_sources
     }
 
-# Ruta para obtener la lista de usuarios (para la sección "Guardia")
 @app.get("/users")
 async def get_users(user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
@@ -744,8 +707,23 @@ async def get_users(user: dict = Depends(get_current_user)):
     conn.close()
     return {"users": users}
 
-# Ruta para obtener el historial del chat (últimos 7 días)
-@app.get("/chat-history")
+@app.get("/guardia")
+async def get_guardia(user: dict = Depends(get_current_user)):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT legajo, apellido FROM users WHERE position IN ('Supervisor', 'Jefatura') LIMIT 1")
+    guardia = c.fetchone()
+    conn.close()
+
+    if guardia:
+        return {"guardia": f"{guardia[1]} ({guardia[0]})"}
+    else:
+        return {"guardia": "No disponible"}
+
+@app.get("/chat_history")
 async def get_chat_history(user: dict = Depends(get_current_user)):
     if isinstance(user, RedirectResponse):
         return user
@@ -753,18 +731,25 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
     conn = sqlite3.connect("chat.db")
     c = conn.cursor()
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
-    c.execute("SELECT type, sender, content, timestamp FROM messages WHERE timestamp >= ? ORDER BY timestamp ASC", (seven_days_ago,))
-    messages = [{"type": row[0], "sender": row[1], "content": row[2], "timestamp": row[3]} for row in c.fetchall()]
+    c.execute("SELECT type, sender, sender_legajo, content, timestamp, recipient FROM messages WHERE timestamp >= ? ORDER BY timestamp ASC", (seven_days_ago,))
+    messages = [
+        {
+            "type": row[0],
+            "sender": row[1],
+            "sender_legajo": row[2],
+            "content": row[3],
+            "timestamp": row[4],
+            "recipient": row[5]
+        } for row in c.fetchall()
+    ]
     conn.close()
-    return {"messages": messages}
+    return messages
 
-# WebSocket para usuarios conectados
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.add(websocket)
 
-    # Obtener el token de la cookie desde los headers del WebSocket
     token = None
     for header in websocket.headers.items():
         if header[0] == "cookie":
@@ -794,7 +779,6 @@ async def websocket_endpoint(websocket: WebSocket):
         conn.close()
 
     try:
-        # Enviar el conteo de usuarios conectados a todos los clientes
         await broadcast_user_count()
         while True:
             await websocket.receive_text()
@@ -804,38 +788,78 @@ async def websocket_endpoint(websocket: WebSocket):
             del connected_users[websocket]
         await broadcast_user_count()
 
-# WebSocket para el chat global
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
     await websocket.accept()
+    token = None
+    for header in websocket.headers.items():
+        if header[0] == "cookie":
+            cookies = header[1].split("; ")
+            for cookie in cookies:
+                if cookie.startswith("session_token="):
+                    token = cookie.split("=")[1]
+                    break
+            break
+
+    sender_legajo = None
+    if token:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("SELECT legajo FROM sessions WHERE token = ?", (token,))
+        session_data = c.fetchone()
+        if session_data:
+            sender_legajo = session_data[0]
+        conn.close()
+
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
             message["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            message["sender_legajo"] = sender_legajo
 
-            # Guardar el mensaje en la base de datos
             conn = sqlite3.connect("chat.db")
             c = conn.cursor()
-            c.execute("INSERT INTO messages (type, sender, content, timestamp) VALUES (?, ?, ?, ?)",
-                      (message["type"], message["sender"], message["content"], message["timestamp"]))
+            c.execute(
+                "INSERT INTO messages (type, sender, sender_legajo, content, timestamp, recipient) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    message["type"],
+                    message["sender"],
+                    message["sender_legajo"],
+                    message["content"],
+                    message["timestamp"],
+                    message.get("recipient")
+                )
+            )
             conn.commit()
             conn.close()
 
-            # Limpiar mensajes antiguos
             clean_old_messages()
 
-            # Enviar el mensaje a todos los clientes conectados al chat
             message_str = json.dumps(message)
-            for client in connected_clients:
-                try:
-                    await client.send_text(message_str)
-                except WebSocketDisconnect:
-                    connected_clients.remove(client)
+            if "recipient" in message and message["recipient"]:
+                recipient_legajo = message["recipient"]
+                sender_clients = [ws for ws, user in connected_users.items() if user["legajo"] == sender_legajo]
+                recipient_clients = [ws for ws, user in connected_users.items() if user["legajo"] == recipient_legajo]
+                target_clients = set(sender_clients + recipient_clients)
+                for client in target_clients:
+                    try:
+                        await client.send_text(message_str)
+                    except WebSocketDisconnect:
+                        connected_clients.discard(client)
+                        if client in connected_users:
+                            del connected_users[client]
+            else:
+                for client in connected_clients:
+                    try:
+                        await client.send_text(message_str)
+                    except WebSocketDisconnect:
+                        connected_clients.discard(client)
+                        if client in connected_users:
+                            del connected_users[client]
     except WebSocketDisconnect:
         pass
 
-# Función para enviar el conteo de usuarios conectados
 async def broadcast_user_count():
     count = len(connected_users)
     message = json.dumps({"type": "user_count", "count": count})
@@ -843,8 +867,9 @@ async def broadcast_user_count():
         try:
             await client.send_text(message)
         except WebSocketDisconnect:
-            connected_clients.remove(client)
+            connected_clients.discard(client)
+            if client in connected_users:
+                del connected_users[client]
 
-# Iniciar la app
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
