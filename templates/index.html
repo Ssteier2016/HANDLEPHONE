@@ -28,7 +28,7 @@
       color: white;
       padding: 10px 20px;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start; /* Alineado a la izquierda */
       align-items: center;
       width: 100%;
       max-width: 1200px;
@@ -38,22 +38,12 @@
     .header h1 {
       margin: 0;
       font-size: 24px;
-    }
-    .logout-btn {
-      background-color: #dc3545;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .logout-btn:hover {
-      background-color: #c82333;
+      margin-left: 60px; /* Margen para evitar superposición con el menú */
     }
     .menu-container {
       position: absolute;
       top: 10px;
-      right: 80px;
+      left: 20px;
     }
     .menu-icon {
       cursor: pointer;
@@ -64,12 +54,13 @@
       display: none;
       position: absolute;
       top: 40px;
-      right: 0;
+      left: 0;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 4px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       z-index: 1000;
+      width: 200px;
     }
     .menu.active {
       display: block;
@@ -79,6 +70,8 @@
       cursor: pointer;
       border-bottom: 1px solid #eee;
       position: relative;
+      font-size: 16px;
+      color: #000;
     }
     .menu-item:last-child {
       border-bottom: none;
@@ -89,13 +82,14 @@
     .submenu {
       display: none;
       position: absolute;
-      left: -100%;
+      left: 100%;
       top: 0;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 4px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       z-index: 1001;
+      width: 200px;
     }
     .menu-item:hover .submenu {
       display: block;
@@ -104,6 +98,7 @@
       padding: 10px 20px;
       cursor: pointer;
       border-bottom: 1px solid #eee;
+      color: #000;
     }
     .submenu-item:last-child {
       border-bottom: none;
@@ -133,6 +128,7 @@
       transition: height 0.3s ease;
       width: 100%;
       max-width: 800px;
+      z-index: 1001; /* Por encima de otros elementos, pero debajo del historial */
     }
     #map-container.minimized {
       height: 40px;
@@ -154,7 +150,7 @@
       color: white;
       font-size: 16px;
       cursor: pointer;
-      z-index: 1000;
+      z-index: 1002;
     }
     #flights-table-container {
       margin-top: 20px;
@@ -204,17 +200,17 @@
       margin: 0 10px;
     }
     #chat-container {
-      position: fixed;
+      position: absolute;
       bottom: 20px;
-      right: 20px;
-      width: 300px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 800px;
       background-color: white;
       border: 1px solid #ccc;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      display: flex;
-      flex-direction: column;
-      z-index: 1000;
+      z-index: 1001; /* Por encima de otros elementos, pero debajo del historial */
       transition: height 0.3s ease;
     }
     #chat-container.minimized {
@@ -260,6 +256,7 @@
       overflow-y: auto;
       border-bottom: 1px solid #ccc;
       display: none;
+      max-height: 300px;
     }
     #chat-container:not(.minimized) #chat-messages {
       display: block;
@@ -335,17 +332,6 @@
       margin-bottom: 20px;
       flex-wrap: wrap;
     }
-    #update-btn {
-      padding: 5px 10px;
-      background-color: #28a745;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    #update-btn:hover {
-      background-color: #218838;
-    }
     .details-row {
       display: none;
     }
@@ -372,7 +358,7 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      z-index: 2000;
+      z-index: 2000; /* Por encima de todo */
       padding: 20px;
       max-height: 80vh;
       overflow-y: auto;
@@ -396,7 +382,8 @@
 </head>
 <body>
   <div class="header">
-    <h1>Bienvenido, {{ user.apellido }} ({{ user.position }})</h1>
+    <!-- Modificado: solo apellido y legajo, alineado a la izquierda -->
+    <h1>{{ user.apellido }} ({{ user.legajo }})</h1>
     <div class="menu-container">
       <img src="/templates/menu.png" alt="Menú" class="menu-icon" onclick="toggleMenu()">
       <div class="menu" id="menu">
@@ -414,9 +401,9 @@
         <div class="menu-item" onclick="showChatHistory()">Historial</div>
         <div class="menu-item" onclick="window.location.href='http://www.tams.com.ar/organismos/vuelos.aspx'">Tams</div>
         <div class="menu-item" onclick="window.location.href='http://www.flightradar24.com/'">Flightradar24</div>
+        <div class="menu-item" onclick="window.location.href='/logout'">Cerrar Sesión</div>
       </div>
     </div>
-    <button class="logout-btn" onclick="window.location.href='/logout'">Cerrar Sesión</button>
   </div>
 
   <div class="container">
@@ -424,14 +411,7 @@
       <img src="/templates/logo.png" alt="Logo" style="max-width: 200px;">
     </div>
 
-    <div id="map-container">
-      <h3 style="margin: 0; padding: 10px; background-color: #007bff; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-        Mapa de Vuelos
-        <button id="map-toggle">−</button>
-      </h3>
-      <div id="map"></div>
-    </div>
-
+    <!-- Movido: buscador y update-info debajo del logo -->
     <div id="filters">
       <label>Vuelos disponibles</label>
       <input type="text" id="search-input" placeholder="Ej. AR AEP EZE">
@@ -440,10 +420,18 @@
 
     <div class="update-info">
       <span>Última actualización: <span id="last-update">Cargando...</span></span>
-      <button id="update-btn" onclick="updateFlightsTable()">Actualizar vuelos</button>
+      <!-- Eliminado el botón de actualizar vuelos -->
       <span>Habilitar voz para llegadas: <input type="checkbox" id="voice-notifications"></span>
       <span>Usuarios conectados: <span id="users-count">0</span></span>
       <div id="users-connected"></div>
+    </div>
+
+    <div id="map-container">
+      <h3 style="margin: 0; padding: 10px; background-color: #007bff; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+        Mapa de Vuelos
+        <button id="map-toggle">−</button>
+      </h3>
+      <div id="map"></div>
     </div>
 
     <div id="flights-table-container">
@@ -533,10 +521,10 @@
       const terms = searchInput.split(" ");
 
       filteredFlights = allFlights.filter(flight => {
-        const airlineMatch = terms.includes("AR") ? flight.airline_iata === "AR" : true;
+        const flightMatch = terms.some(term => flight.flight_iata.includes(term));
         const departureMatch = terms.some(term => flight.departure === term || flight.departure_airport.includes(term));
         const arrivalMatch = terms.some(term => flight.arrival === term || flight.arrival_airport.includes(term));
-        return airlineMatch && (departureMatch || arrivalMatch);
+        return flightMatch || departureMatch || arrivalMatch;
       });
 
       totalPages = Math.ceil(filteredFlights.length / 25);
@@ -661,7 +649,9 @@
       }
     });
 
+    // Llamada inicial y actualización automática cada 15 minutos
     updateFlightsTable();
+    setInterval(updateFlightsTable, 900000); // 15 minutos = 900,000 ms
 
     const ws = new WebSocket(`wss://${window.location.host}/ws`);
     ws.onmessage = (event) => {
@@ -770,7 +760,6 @@
                 content: base64Audio
               }));
             };
-            // Detener el stream de audio para apagar el micrófono
             if (stream) {
               stream.getTracks().forEach(track => track.stop());
               stream = null;
@@ -822,13 +811,11 @@
       }
     });
 
-    // Funciones para el menú desplegable
     function toggleMenu() {
       const menu = document.getElementById("menu");
       menu.classList.toggle("active");
     }
 
-    // Función para mostrar la lista de usuarios (Guardia)
     function showGuardia() {
       fetch("/users")
         .then(res => res.json())
@@ -859,7 +846,6 @@
         });
     }
 
-    // Función para mostrar el historial del chat
     function showChatHistory() {
       fetch("/chat-history")
         .then(res => res.json())
