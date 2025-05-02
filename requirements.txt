@@ -1,35 +1,30 @@
-# Dependencias requeridas para el backend y la API
-fastapi==0.111.1
-uvicorn==0.30.6
-jinja2==3.1.4
-httpx==0.27.2
-bcrypt==4.2.0
-python-multipart==0.0.9
-pydantic==2.9.2
-aiohttp==3.10.5
-python-dotenv==1.0.1
-cachetools==5.5.0
-websockets==15.0
+Backend y API
+
+fastapi==0.111.1 
+uvicorn==0.30.6 
+jinja2==3.1.4 
+httpx==0.27.2 
+bcrypt==4.2.0 
+python-multipart==0.0.9 
+pydantic==2.9.2 
+aiohttp==3.10.5 
+python-dotenv==1.0.1 
+cachetools==5.5.0 
+websockets==15.0 
 pytz==2023.3
-Flask==2.3.2 
-gunicorn==20.1.0 
-requests==2.31.0 
+
+WebSocket y chat
+
 websocket-client==1.6.1 
 python-socketio==5.8.0
-# Dependencias para scraping y APIs de vuelos
-selenium==4.15.2
-webdriver_manager==4.0.2
-beautifulsoup4==4.12.3
 
-# Dependencias para manejo de audio
-speechrecognition==3.10.4
-pydub==0.25.1
-soundfile==0.12.1
+Audio
+
+pydub==0.25.1 
+speechrecognition==3.10.4 
+soundfile==0.12.1 
 sounddevice==0.4.7
 
-# Dependencias para logging
-loguru==0.7.2
+Logging
 
-# Dependencias para pruebas (opcional)
-pytest==8.3.2
-pytest-asyncio==0.24.0
+loguru==0.7.2
