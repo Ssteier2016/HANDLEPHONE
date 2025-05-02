@@ -12,7 +12,7 @@
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-image: url('/templates/fondoaero.png'); /* Solo imagen de fondo */
+      background-image: url('/templates/fondoaero.png');
       background-size: cover;
       background-position: center;
       background-attachment: fixed;
@@ -60,9 +60,12 @@
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       z-index: 1000;
       width: 200px;
+      opacity: 0;
+      transition: opacity 0.2s ease; /* Suavizar aparición */
     }
     .menu.active {
       display: block;
+      opacity: 1;
     }
     .menu-item {
       padding: 10px 20px;
@@ -89,9 +92,12 @@
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       z-index: 1001;
       width: 200px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
     }
     .menu-item:hover .submenu {
       display: block;
+      opacity: 1;
     }
     .submenu-item {
       padding: 10px 20px;
@@ -353,11 +359,11 @@
       margin-bottom: 20px;
       flex-wrap: wrap;
     }
+    #users-count {
+      cursor: pointer;
+    }
     #users-connected {
-      display: inline-flex;
-      align-items: center;
-      margin-left: 5px;
-      flex-wrap: wrap;
+      display: none; /* Ocultar usuarios conectados en pantalla principal */
     }
     #users-dropdown {
       display: none;
@@ -370,9 +376,12 @@
       width: 200px;
       max-height: 200px;
       overflow-y: auto;
+      opacity: 0;
+      transition: opacity 0.2s ease;
     }
     #users-dropdown.active {
       display: block;
+      opacity: 1;
     }
     .user-item {
       padding: 10px;
@@ -432,8 +441,9 @@
 <body>
   <div class="header">
     <h1>{{ user.apellido }} ({{ user.legajo }})</h1>
-    <div class="menu-container">
-      <img src="/templates/menu.png" alt="Menú" class="menu-icon" onclick="toggleMenu()">
+    <!-- Modificado: Menú con hover -->
+    <div class="menu-container" onmouseenter="showMenu()" onmouseleave="hideMenu()">
+      <img src="/templates/menu.png" alt="Menú" class="menu-icon">
       <div class="menu" id="menu">
         <div class="menu-item" onclick="window.location.href='https://movil.nortur.ar/ingreso.aspx'">Transporte</div>
         <div class="menu-item">
@@ -468,7 +478,8 @@
     <div class="update-info">
       <span>Última actualización: <span id="last-update">Cargando...</span></span>
       <span>Habilitar voz para llegadas: <input type="checkbox" id="voice-notifications"></span>
-      <span>Usuarios conectados: <span id="users-count" onclick="toggleUsersDropdown()">0</span></span>
+      <!-- Modificado: Usuarios conectados solo en tooltip -->
+      <span>Usuarios conectados: <span id="users-count">0</span></span>
       <div id="users-connected"></div>
       <div id="users-dropdown"></div>
     </div>
@@ -504,7 +515,6 @@
       </div>
     </div>
 
-    <!-- Nuevo: Chat global estático -->
     <div id="chat-global-container">
       <h3>Chat global</h3>
       <div id="chat-messages"></div>
@@ -516,7 +526,6 @@
       </div>
     </div>
 
-    <!-- Nuevo: Chat privado -->
     <div id="private-chat-container">
       <h3>
         Chat privado con <span id="private-chat-recipient"></span>
@@ -723,9 +732,7 @@
               });
 
               document.getElementById("users-count").textContent = uniqueUsers.length;
-              const usersDiv = document.getElementById("users-connected");
-              usersDiv.innerHTML = uniqueUsers.map(user => `<span>${user.apellido} (${user.legajo})</span>`).join(", ");
-
+              // Actualizar solo el dropdown, no users-connected
               const usersDropdown = document.getElementById("users-dropdown");
               usersDropdown.innerHTML = uniqueUsers.map(user => `
                 <div class="user-item" onclick="openPrivateChat('${user.apellido}', '${user.legajo}')">
@@ -742,7 +749,7 @@
       }
     };
 
-    // WebSocket para el chat global
+    // WebSocket para el chat
     const chatSocket = new WebSocket(`wss://${window.location.host}/chat`);
     let mediaRecorder;
     let audioChunks = [];
@@ -760,36 +767,38 @@
       const privateChatMessages = document.getElementById("private-chat-messages");
 
       const messageElement = document.createElement("div");
-      messageElement.classList.add("chat-message");
+      messageElement.classList.add "chat-message");
 
-      // Formato: [hora] Apellido: contenido
       const time = new Date(message.timestamp).toLocaleTimeString();
 
-      if (message.type === "text") {
-        if (message.recipient && message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}") {
-          // Mensaje privado
-          messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-          privateChatMessages.appendChild(messageElement);
-          privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-          document.getElementById("private-chat-container").classList.add("active");
-        } else {
-          // Mensaje global
-          messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
-          chatMessages.appendChild(messageElement);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-      } else if (message.type === "audio") {
-        if (message.recipient && message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}") {
-          // Mensaje privado
-          messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-          privateChatMessages.appendChild(messageElement);
-          privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-          document.getElementById("private-chat-container").classList.add("active");
-        } else {
-          // Mensaje global
-          messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
-          chatMessages.appendChild(messageElement);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
+      // No renderizar mensajes del usuario actual (ya se renderizan localmente)
+      if (message.sender_legajo !== "{{ user.legajo }}") {
+        if (message.type === "text") {
+          if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+            // Mensaje privado
+            messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+            privateChatMessages.appendChild(messageElement);
+            privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+            document.getElementById("private-chat-container").classList.add("active");
+          } else {
+            // Mensaje global
+            messageElement.innerHTML = `[${time}] ${message.sender}: ${message.content}`;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+        } else if (message.type === "audio") {
+          if (message.recipient && (message.recipient === "{{ user.legajo }}" || message.sender_legajo === "{{ user.legajo }}")) {
+            // Mensaje privado
+            messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+            privateChatMessages.appendChild(messageElement);
+            privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
+            document.getElementById("private-chat-container").classList.add("active");
+          } else {
+            // Mensaje global
+            messageElement.innerHTML = `[${time}] ${message.sender}: <audio controls src="${message.content}"></audio>`;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
         }
       }
     };
@@ -798,10 +807,18 @@
       console.log("Conexión de chat cerrada");
     };
 
+    // Modificado: Renderizar mensajes localmente antes de enviar
     document.getElementById("send-message").addEventListener("click", () => {
       const input = document.getElementById("chat-message-input");
       const message = input.value.trim();
       if (message) {
+        const time = new Date().toLocaleTimeString();
+        const messageElement = document.createElement("div");
+        messageElement.classList.add("chat-message");
+        messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
+        document.getElementById("chat-messages").appendChild(messageElement);
+        document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+
         chatSocket.send(JSON.stringify({
           type: "text",
           sender: "{{ user.apellido }}",
@@ -832,6 +849,15 @@
             reader.readAsDataURL(audioBlob);
             reader.onloadend = () => {
               const base64Audio = reader.result;
+
+              // Renderizar localmente
+              const time = new Date().toLocaleTimeString();
+              const messageElement = document.createElement("div");
+              messageElement.classList.add("chat-message");
+              messageElement.innerHTML = `[${time}] {{ user.apellido }}: <audio controls src="${base64Audio}"></audio>`;
+              document.getElementById("chat-messages").appendChild(messageElement);
+              document.getElementById("chat-messages").scrollTop = document.getElementById("chat-messages").scrollHeight;
+
               chatSocket.send(JSON.stringify({
                 type: "audio",
                 sender: "{{ user.apellido }}",
@@ -867,7 +893,7 @@
       }
     });
 
-    // Nuevo: Funciones para chat privado
+    // Modificado: Chat privado
     function openPrivateChat(apellido, legajo) {
       privateChatRecipient = { apellido, legajo };
       document.getElementById("private-chat-recipient").textContent = `${apellido} (${legajo})`;
@@ -880,6 +906,13 @@
       const input = document.getElementById("private-chat-message-input");
       const message = input.value.trim();
       if (message && privateChatRecipient) {
+        const time = new Date().toLocaleTimeString();
+        const messageElement = document.createElement("div");
+        messageElement.classList.add("chat-message");
+        messageElement.innerHTML = `[${time}] {{ user.apellido }}: ${message}`;
+        document.getElementById("private-chat-messages").appendChild(messageElement);
+        document.getElementById("private-chat-messages").scrollTop = document.getElementById("private-chat-messages").scrollHeight;
+
         chatSocket.send(JSON.stringify({
           type: "text",
           sender: "{{ user.apellido }}",
@@ -902,11 +935,23 @@
       privateChatRecipient = null;
     }
 
-    // Nuevo: Toggle del menú desplegable de usuarios
-    function toggleUsersDropdown() {
-      const dropdown = document.getElementById("users-dropdown");
-      dropdown.classList.toggle("active");
-    }
+    // Modificado: Mostrar/ocultar dropdown de usuarios con hover
+    document.getElementById("users-count").addEventListener("mouseenter", () => {
+      document.getElementById("users-dropdown").classList.add("active");
+    });
+
+    document.getElementById("users-count").addEventListener("mouseleave", () => {
+      // Retrasar el cierre para permitir interacción con el dropdown
+      setTimeout(() => {
+        if (!document.getElementById("users-dropdown").matches(":hover")) {
+          document.getElementById("users-dropdown").classList.remove("active");
+        }
+      }, 200);
+    });
+
+    document.getElementById("users-dropdown").addEventListener("mouseleave", () => {
+      document.getElementById("users-dropdown").classList.remove("active");
+    });
 
     document.getElementById("map-toggle").addEventListener("click", () => {
       const mapContainer = document.getElementById("map-container");
@@ -918,9 +963,18 @@
       }
     });
 
-    function toggleMenu() {
-      const menu = document.getElementById("menu");
-      menu.classList.toggle("active");
+    // Modificado: Funciones para menú con hover
+    function showMenu() {
+      document.getElementById("menu").classList.add("active");
+    }
+
+    function hideMenu() {
+      // Retrasar el cierre para permitir interacción con submenús
+      setTimeout(() => {
+        if (!document.getElementById("menu").matches(":hover") && !document.querySelector(".menu-container:hover")) {
+          document.getElementById("menu").classList.remove("active");
+        }
+      }, 200);
     }
 
     function showGuardia() {
