@@ -23,15 +23,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY requirements.txt .
-
 RUN pip install --upgrade pip && pip install wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+COPY install_chromedriver.sh .
 RUN chmod +x install_chromedriver.sh && ./install_chromedriver.sh
 
-ENV PORT=10000
-EXPOSE 10000
+EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
