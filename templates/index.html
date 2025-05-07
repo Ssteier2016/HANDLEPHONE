@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#2196f3">
+    <title>Chat Global</title>
+    <link rel="stylesheet" href="/templates/style.css">
+    <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
+    <link rel="manifest" href="/templates/manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .then(reg => {
+                        console.log('Service Worker registrado:', reg);
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    })
+                    .catch(err => console.error('Error al registrar Service Worker:', err));
+            });
+        }
+    </script>
+</head>
+<body>
+    <!-- Pantalla de introducción (opcional, puede eliminarse si no la necesitas) -->
+    <div id="intro-screen" class="screen" style="display: none;">
+        <p>Cargando...</p>
+    </div>
+
+    <!-- Formulario de Inicio de Sesión -->
+    <div id="login-form" class="screen auth-form" style="display: block;">
+        <h2>Iniciar Sesión</h2>
+        <form id="login-form-form">
+            <label for="login-name">Nombre:</label>
+            <input type="text" id="login-name" name="login-name" placeholder="Tu nombre" required>
+            <label for="login-password">Contraseña:</label>
+            <input type="password" id="login-password" name="login-password" required>
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+        <p id="login-error" class="error"></p>
+        <p><a href="#" id="show-recover">¿Olvidaste tu contraseña?</a></p>
+        <p><a href="#" id="show-register">¿No estás registrado? Regístrate aquí</a></p>
+    </div>
+
+    <!-- Formulario de Recuperación de Contraseña -->
+    <div id="recover-form" class="screen auth-form" style="display: none;">
+        <h2>Recuperar Contraseña</h2>
+        <form id="recover-form-form">
+            <label for="recover-name">Nombre:</label>
+            <input type="text" id="recover-name" name="recover-name" placeholder="Tu nombre" required>
+            <button type="submit">Enviar enlace de recuperación</button>
+        </form>
+        <p id="recover-error" class="error"></p>
+        <p><a href="#" id="show-login">Volver a iniciar sesión</a></p>
+    </div>
+
+    <!-- Formulario de Registro -->
+    <div id="register-form" class="screen auth-form" style="display: none;">
+        <h2>Registrarse</h2>
+        <form id="register-form-form">
+            <label for="register-name">Nombre:</label>
+            <input type="text" id="register-name" name="register-name" placeholder="Tu nombre" required>
+            <label for="register-password">Contraseña:</label>
+            <input type="password" id="register-password" name="register-password" required>
+            <label for="confirm-password">Confirmar Contraseña:</label>
+            <input type="password" id="confirm-password" name="confirm-password" required>
+            <button type="submit">Registrarse</button>
+        </form>
+        <p id="register-error" class="error"></p>
+        <p><a href="#" id="show-login">¿Ya estás registrado? Inicia sesión aquí</a></p>
+    </div>
+
+    <!-- Interfaz Principal (Chat Global) -->
+    <div id="main" class="screen" style="display: none;">
+        <button id="logout-button">Cerrar Sesión</button>
+        <h2>Chat Global Online</h2>
+        <div id="chat-window">
+            <div id="chat-list"></div>
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." maxlength="200">
+            <button id="send-chat">Enviar</button>
+        </div>
+        <img id="talk" src="/templates/mic-off.png" alt="Micrófono apagado" class="mic-button">
+    </div>
+
+    <script src="/templates/script.js"></script>
+</body>
+</html>
