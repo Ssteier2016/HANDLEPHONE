@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <!-- SECCIÓN: Metadatos y enlaces (Versión del usuario) -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,6 +14,17 @@
     <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
     <link rel="manifest" href="/templates/manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- SECCIÓN: Metadatos y enlaces (Versión proporcionada) -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HandyHandle</title>
+    <link rel="stylesheet" href="/templates/style.css">
+    <link rel="manifest" href="/templates/manifest.json">
+    <link rel="icon" href="/templates/icon-192x192.png">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- SECCIÓN: Script inline para Service Worker (Versión del usuario) -->
     <script>
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
@@ -30,6 +42,7 @@
     </script>
 </head>
 <body>
+    <!-- SECCIÓN: Pantalla de registro (Versión del usuario) -->
     <div id="register" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <input id="name" placeholder="Apellido">
@@ -51,8 +64,17 @@
         <button id="register-button">Registrarse</button>
     </div>
 
+    <!-- SECCIÓN: Pantalla de registro (Versión proporcionada) -->
+    <div id="register">
+        <h1>Registro</h1>
+        <input type="text" id="userName" placeholder="Nombre">
+        <input type="text" id="userFunction" placeholder="Función">
+        <input type="text" id="userLegajo" placeholder="Legajo">
+        <button id="register-button">Registrar</button>
+    </div>
+
+    <!-- SECCIÓN: Pantalla principal (Versión del usuario) -->
     <div id="main" style="display: none;">
-        <!-- Corrección: Añadido id="logout-button" para controlar visibilidad -->
         <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h2>Comunicación Aeronáutica</h2>
@@ -73,14 +95,11 @@
             <div id="chat-list"></div>
         </div>
         <div id="group-join">
-            <!-- Corrección: Añadido label y checkbox para grupo privado -->
             <label for="group-id">Nombre del grupo</label>
             <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
-            <!-- Nuevo: Checkbox para indicar grupo privado -->
             <label for="group-private">Grupo Privado</label>
             <input type="checkbox" id="group-private">
             <button id="join-group-btn" onclick="joinGroup()">Unirme</button>
-            <!-- Nuevo: Botón para crear grupo -->
             <button id="create-group-btn" onclick="createGroup()">Crear Grupo</button>
         </div>
         <button id="talk" onclick="toggleTalk()"></button>
@@ -90,6 +109,23 @@
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
+    <!-- SECCIÓN: Pantalla principal (Versión proporcionada) -->
+    <div id="main" style="display: none;">
+        <h1>HandyHandle</h1>
+        <h2>Vuelos de Aerolíneas Argentinas</h2>
+        <div id="flight-details"></div>
+        <input type="text" id="search-input" placeholder="Buscar vuelos...">
+        <button id="search-button">Buscar</button>
+        <button id="talk">Hablar</button>
+        <button id="mute" class="unmuted">Mutear Todos</button>
+        <div id="users"></div>
+        <div id="chat-list"></div>
+        <button id="logout-button">Cerrar Sesión</button>
+        <div id="swipe-hint" style="display: none;"></div>
+        <button id="return-to-group-btn" style="display: none;">Volver al Grupo</button>
+    </div>
+
+    <!-- SECCIÓN: Pantalla de grupo (Versión del usuario) -->
     <div id="group-screen" style="display: none;">
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
@@ -116,6 +152,22 @@
         <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
+    <!-- SECCIÓN: Pantalla de grupo (Versión proporcionada) -->
+    <div id="group-screen" style="display: none;">
+        <h2>Grupo</h2>
+        <input type="text" id="group-id" placeholder="Nombre del grupo">
+        <label><input type="checkbox" id="group-private"> Privado</label>
+        <button onclick="createGroup()">Crear Grupo</button>
+        <button onclick="joinGroup()">Unirse a Grupo</button>
+        <button onclick="leaveGroup()">Abandonar Grupo</button>
+        <div id="group-flight-details"></div>
+        <button id="group-talk">Hablar en Grupo</button>
+        <button id="group-mute" class="unmuted">Mutear Todos</button>
+        <div id="group-users"></div>
+        <div id="group-chat-list"></div>
+    </div>
+
+    <!-- SECCIÓN: Pantalla de radar (Versión del usuario) -->
     <div id="radar-screen" style="display: none;">
         <div class="radar-header">
             <h2>Radar</h2>
@@ -125,6 +177,14 @@
         <div id="map"></div>
     </div>
 
+    <!-- SECCIÓN: Pantalla de radar (Versión proporcionada) -->
+    <div id="radar-screen" style="display: none;">
+        <h2>Radar</h2>
+        <div id="map" style="height: 400px;"></div>
+        <button onclick="backToMainFromRadar()">Volver</button>
+    </div>
+
+    <!-- SECCIÓN: Pantalla de historial (Versión del usuario) -->
     <div id="history-screen" style="display: none;">
         <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button onclick="backToMain()">Volver</button>
@@ -132,7 +192,18 @@
         <div id="history-list"></div>
     </div>
 
+    <!-- SECCIÓN: Pantalla de historial (Versión proporcionada) -->
+    <div id="history-screen" style="display: none;">
+        <h2>Historial</h2>
+        <div id="history-list"></div>
+        <button onclick="backToMain()">Volver</button>
+    </div>
+
+    <!-- SECCIÓN: Scripts externos (Versión del usuario) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/templates/script.js"></script>
+
+    <!-- SECCIÓN: Scripts externos (Versión proporcionada) -->
     <script src="/templates/script.js"></script>
 </body>
 </html>
