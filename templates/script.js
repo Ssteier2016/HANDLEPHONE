@@ -1,4 +1,4 @@
-// Variables globales
+// -------------------- SECCIÓN: Variables globales (Versión del usuario) --------------------
 let ws = null;
 let pingInterval = null;
 let userId;
@@ -31,7 +31,18 @@ const AIRLINE_MAPPING = {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-// Inicializar SpeechRecognition
+// -------------------- SECCIÓN: Variables globales (Versión proporcionada) --------------------
+let wsProvided = null;
+let streamProvided = null;
+let groupMediaRecorder = null;
+let userIdProvided = null;
+let currentGroupProvided = null;
+let mutedUsersProvided = new Set();
+let reconnectIntervalProvided = null;
+let pingIntervalProvided = null;
+const PING_INTERVAL_PROVIDED = 30000;
+
+// -------------------- SECCIÓN: Inicializar SpeechRecognition (Versión del usuario) --------------------
 if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     recognition.lang = 'es-ES';
@@ -44,7 +55,7 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
 }
 
-// Restaurar sesión al cargar la página
+// -------------------- SECCIÓN: Restaurar sesión y eventos DOM (Versión del usuario) --------------------
 document.addEventListener('DOMContentLoaded', () => {
     // Registrar Service Worker
     registerServiceWorker();
@@ -89,7 +100,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Manejar visibilidad de la pestaña
+// -------------------- SECCIÓN: Restaurar sesión y eventos DOM (Versión proporcionada) --------------------
+document.addEventListener('DOMContentLoaded', () => {
+    registerServiceWorkerProvided();
+    const sessionToken = localStorage.getItem('sessionToken');
+    const userName = localStorage.getItem('userName');
+    const userFunction = localStorage.getItem('userFunction');
+    const userLegajo = localStorage.getItem('userLegajo');
+
+    if (window.location.pathname === '/register-form') {
+        document.getElementById('register').style.display = 'block';
+        document.getElementById('main').style.display = 'none';
+    } else if (sessionToken && userName && userFunction && userLegajo) {
+        userIdProvided = `${userLegajo}_${userName}_${userFunction}`;
+        connectWebSocketProvided(sessionToken);
+        document.getElementById('register').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        checkGroupStatusProvided();
+        fetchAA2000Flights();
+        setInterval(fetchAA2000Flights, 300000);
+    }
+
+    document.getElementById('register-button')?.addEventListener('click', registerProvided);
+    document.getElementById('search-button')?.addEventListener('click', sendSearchQueryProvided);
+    document.getElementById('logout-button')?.addEventListener('click', completeLogoutProvided);
+    document.getElementById('talk')?.addEventListener('click', toggleTalkProvided);
+    document.getElementById('group-talk')?.addEventListener('click', toggleGroupTalkProvided);
+    document.getElementById('mute')?.addEventListener('click', toggleMuteProvided);
+    checkNotificationPermissionProvided();
+
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data?.type === 'SEND_MESSAGE' && wsProvided?.readyState === WebSocket.OPEN) {
+            wsProvided.send(JSON.stringify(event.data.message));
+        } else if (event.data?.type === 'SYNC_COMPLETE') {
+            console.log('Sincronización completada');
+        }
+    });
+});
+
+// -------------------- SECCIÓN: Manejar visibilidad de pestaña (Versión del usuario) --------------------
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         console.log('App en segundo plano');
@@ -104,6 +153,15 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+// -------------------- SECCIÓN: Manejar visibilidad de pestaña (Versión proporcionada) --------------------
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && wsProvided?.readyState !== WebSocket.OPEN) {
+        const sessionToken = localStorage.getItem('sessionToken');
+        if (sessionToken) connectWebSocketProvided(sessionToken);
+    }
+});
+
+// -------------------- SECCIÓN: Service Worker y notificaciones (Versión del usuario) --------------------
 function queueMessageForSync(message) {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
@@ -122,7 +180,130 @@ function queueMessageForSync(message) {
     }
 }
 
-// Funciones de audio
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        fetch('/templates/sw.js', { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    navigator.serviceWorker.register('/templates/sw.js')
+                        .then(() => console.log('Service Worker registrado'))
+                        .catch(err => console.error('Error al registrar Service Worker:', err));
+                } else {
+                    console.warn('Archivo sw.js no encontrado.');
+                }
+            })
+            .catch(err => {
+                console.warn('No se pudo verificar sw.js:', err);
+            });
+    } else {
+        console.warn('Service Worker no soportado.');
+    }
+}
+
+function subscribeToPush() {
+    /*
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY')
+            }).then(subscription => {
+                console.log("Suscripción a push exitosa:", subscription);
+                fetch('/subscribe', {
+                    method: 'POST',
+                    body: JSON.stringify(subscription),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(err => {
+                    console.error("Error al enviar suscripción al servidor:", err);
+                });
+            }).catch(err => {
+                console.error("Error al suscribirse a push:", err);
+            });
+        }).catch(err => {
+            console.error("Error al obtener el Service Worker:", err);
+        });
+    } else {
+        console.warn('Notificaciones push no soportadas.');
+    }
+    */
+}
+
+function urlBase64ToUint8Array(base64String) {
+    try {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    } catch (err) {
+        console.error("Error al convertir Base64 a Uint8Array:", err);
+        throw err;
+    }
+}
+
+function checkNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+            console.log('Permiso de notificación ya concedido');
+            subscribeToPush();
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('Permiso de notificación concedido');
+                    subscribeToPush();
+                } else {
+                    console.warn('Permiso de notificación denegado');
+                }
+            }).catch(err => {
+                console.error('Error al solicitar permiso de notificación:', err);
+            });
+        } else {
+            console.warn('Permiso de notificación denegado previamente');
+        }
+    } else {
+        console.warn('Notificaciones no soportadas en este navegador');
+    }
+}
+
+// -------------------- SECCIÓN: Service Worker y notificaciones (Versión proporcionada) --------------------
+function registerServiceWorkerProvided() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/templates/sw.js')
+            .then(() => console.log('Service Worker registrado'))
+            .catch(err => console.error('Error al registrar Service Worker:', err));
+    }
+}
+
+function queueMessageForSyncProvided(message) {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'QUEUE_MESSAGE',
+            message: message
+        });
+        navigator.serviceWorker.ready.then(registration => {
+            registration.sync.register(SYNC_TAG).catch(err => {
+                console.error('Error al registrar sync:', err);
+            });
+        });
+    }
+}
+
+function checkNotificationPermissionProvided() {
+    if ('Notification' in window && Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                console.log('Permiso de notificaciones concedido');
+            }
+        });
+    }
+}
+
+// -------------------- SECCIÓN: Audio (Versión del usuario) --------------------
 function unlockAudio() {
     if (audioContext.state === 'suspended') {
         audioContext.resume().then(() => {
@@ -179,128 +360,59 @@ function playNextAudio() {
     });
 }
 
-// Funciones de búsqueda
-function sendSearchQuery() {
-    const query = document.getElementById('search-input').value.trim();
-    if (!query) {
-        alert('Ingresá una consulta');
-        return;
-    }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'search_query', query }));
-        localStorage.setItem('lastSearchQuery', query);
-        document.getElementById('search-input').value = '';
-        console.log(`Consulta enviada: ${query}`);
-    } else {
-        alert('No conectado al servidor');
-        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
-        localStorage.removeItem('lastSearchQuery');
+// -------------------- SECCIÓN: Audio (Versión proporcionada) --------------------
+function unlockAudioProvided() {
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => console.log("Contexto de audio desbloqueado"));
     }
 }
 
-function displaySearchResponse(message) {
-    const flightDetails = document.getElementById('flight-details');
-    const groupFlightDetails = document.getElementById('group-flight-details');
-    if (!flightDetails || !groupFlightDetails) {
-        console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
-        return;
-    }
-    flightDetails.innerHTML = '';
-    groupFlightDetails.innerHTML = '';
-
-    let flights = [];
-    if (typeof message === 'string') {
-        flights = parseFlightMessage(message);
-    } else if (Array.isArray(message)) {
-        flights = message.map(flight => ({
-            flightNumber: flight.Vuelo || 'N/A',
-            destination: flight.Destino || 'N/A',
-            status: flight.Estado || 'Desconocido'
-        }));
-    } else {
-        console.error("Formato de respuesta de búsqueda inválido:", message);
-        const div = document.createElement('div');
-        div.className = 'flight no-results';
-        div.textContent = 'Error al procesar la búsqueda.';
-        flightDetails.appendChild(div);
-        groupFlightDetails.appendChild(div.cloneNode(true));
-        return;
-    }
-
-    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
-    const filteredFlights = flights.filter(flight =>
-        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        flight.destination.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (filteredFlights.length === 0) {
-        const div = document.createElement('div');
-        div.className = 'flight no-results';
-        div.textContent = 'No se encontraron vuelos para la búsqueda.';
-        flightDetails.appendChild(div);
-        groupFlightDetails.appendChild(div.cloneNode(true));
-    } else {
-        filteredFlights.forEach(flight => {
-            const div = document.createElement('div');
-            div.className = `flight flight-${flight.status.toLowerCase().replace(" ", "-")}`;
-            div.innerHTML = `
-                <strong>Vuelo:</strong> ${flight.flightNumber} |
-                <strong>Destino:</strong> ${flight.destination} |
-                <strong>Estado:</strong> ${flight.status}
-            `;
-            flightDetails.appendChild(div);
-            groupFlightDetails.appendChild(div.cloneNode(true));
-        });
-    }
-
-    flightDetails.scrollTop = flightDetails.scrollHeight;
-    groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
-    console.log("Respuesta de búsqueda mostrada:", filteredFlights);
-}
-
-function parseFlightMessage(message) {
-    const flights = [];
+async function requestMicPermissionProvided() {
     try {
-        if (typeof message === 'string') {
-            const flightEntries = message.split(", ");
-            for (let i = 0; i < flightEntries.length; i += 3) {
-                if (flightEntries[i].startsWith("AR")) {
-                    flights.push({
-                        flightNumber: flightEntries[i],
-                        destination: flightEntries[i + 1].split(" ")[2] || 'N/A',
-                        status: flightEntries[i + 2] || 'Desconocido'
-                    });
-                }
-            }
-        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("Micrófono permitido");
+        return stream;
     } catch (err) {
-        console.error("Error al parsear mensaje de vuelos:", err);
+        console.error("Error al solicitar permiso de micrófono:", err);
+        return null;
     }
-    return flights;
 }
 
-// Funciones de registro y conexión
-function register() {
-    const legajo = document.getElementById("legajo").value;
-    const name = document.getElementById("name").value;
-    const userFunction = document.getElementById("function").value;
-    if (!legajo || !name || !userFunction) {
-        alert("Por favor, ingresa un apellido, un legajo y una función.");
+function playAudioProvided(blob) {
+    if (!blob || blob.size === 0) {
+        console.error("Blob de audio inválido o vacío");
         return;
     }
-    if (!/^\d{5}$/.test(legajo)) {
-        alert("El legajo debe contener exactamente 5 números.");
-        return;
+    const audio = new Audio(URL.createObjectURL(blob));
+    audioQueue.push(audio);
+    playNextAudioProvided();
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaSessionMetadata({
+            title: 'Mensaje de voz',
+            artist: 'HandyHandle',
+            album: 'Comunicación Aeronáutica'
+        });
+        navigator.mediaSession.setActionHandler('play', () => audio.play());
+        navigator.mediaSession.setActionHandler('pause', () => audio.pause());
     }
-    userId = `${legajo}_${name}_${userFunction}`;
-    const sessionToken = btoa(userId);
-    localStorage.setItem("sessionToken", sessionToken);
-    localStorage.setItem("userName", name);
-    localStorage.setItem("userFunction", userFunction);
-    localStorage.setItem("userLegajo", legajo);
-    connectWebSocket(sessionToken);
 }
 
+function playNextAudioProvided() {
+    if (audioQueue.length === 0 || isPlaying) return;
+    isPlaying = true;
+    const audio = audioQueue.shift();
+    audio.play().then(() => {
+        console.log("Audio reproducido");
+        isPlaying = false;
+        playNextAudioProvided();
+    }).catch(err => {
+        console.error("Error reproduciendo audio:", err);
+        isPlaying = false;
+        playNextAudioProvided();
+    });
+}
+
+// -------------------- SECCIÓN: WebSocket (Versión del usuario) --------------------
 function connectWebSocket(sessionToken, retryCount = 0) {
     const wsUrl = `wss://${window.location.host}/ws/${sessionToken}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1})`);
@@ -484,7 +596,6 @@ function connectWebSocket(sessionToken, retryCount = 0) {
     };
 }
 
-// Mantener conexión viva con ping
 function startPing() {
     stopPing();
     pingInterval = setInterval(() => {
@@ -502,7 +613,372 @@ function stopPing() {
     }
 }
 
-// Funciones de vuelos
+// -------------------- SECCIÓN: WebSocket (Versión proporcionada) --------------------
+async function connectWebSocketProvided(token, retryCount = 0) {
+    if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+        console.log('WebSocket ya está conectado');
+        return;
+    }
+
+    const wsUrl = `wss://${window.location.host}/ws/${token}`;
+    wsProvided = new WebSocket(wsUrl);
+
+    wsProvided.onopen = () => {
+        console.log('WebSocket conectado');
+        clearInterval(reconnectIntervalProvided);
+        wsProvided.send(JSON.stringify({
+            type: 'register',
+            name: localStorage.getItem('userName'),
+            function: localStorage.getItem('userFunction')
+        }));
+        startPingProvided();
+        fetchAA2000Flights();
+        updateOpenSkyDataProvided();
+        checkGroupStatusProvided();
+        navigator.serviceWorker.ready.then(registration => {
+            registration.sync.register(SYNC_TAG).catch(err => console.error('Error al registrar sync:', err));
+        });
+    };
+
+    wsProvided.onmessage = async (event) => {
+        const message = JSON.parse(event.data);
+        switch (message.type) {
+            case 'connection_success':
+                console.log('Conexión exitosa:', message.message);
+                break;
+            case 'register_success':
+                console.log('Registro exitoso');
+                break;
+            case 'audio':
+                if (!mutedUsersProvided.has(`${message.sender}_${message.function}`)) {
+                    const audioBlob = base64ToBlobProvided(message.data, 'audio/webm');
+                    if (audioBlob) {
+                        playAudioProvided(audioBlob);
+                        addChatMessageProvided(message, 'chat-list');
+                    }
+                }
+                break;
+            case 'group_message':
+                if (currentGroupProvided === message.group_id && !mutedUsersProvided.has(`${message.sender}_${message.function}`)) {
+                    const audioBlob = base64ToBlobProvided(message.data, 'audio/webm');
+                    if (audioBlob) {
+                        playAudioProvided(audioBlob);
+                        addChatMessageProvided(message, 'group-chat-list');
+                    }
+                }
+                break;
+            case 'users':
+                updateUsersProvided(message.count, message.list);
+                break;
+            case 'flight_update':
+                updateFlightDetailsProvided(message.flights, '#flight-details');
+                updateFlightDetailsProvided(message.flights, '#group-flight-details');
+                break;
+            case 'fr24_update':
+                updateFlightRadar24MarkersProvided(message.flights);
+                break;
+            case 'aa2000_flight_update':
+                updateFlightDetailsAA2000Provided(message.flights, '#flight-details');
+                updateFlightDetailsAA2000Provided(message.flights, '#group-flight-details');
+                break;
+            case 'search_response':
+                displaySearchResponseProvided(message.message);
+                break;
+            case 'mute_all_success':
+                updateMuteButtonProvided(true);
+                break;
+            case 'unmute_all_success':
+                updateMuteButtonProvided(false);
+                break;
+            case 'mute_non_group_success':
+                message.user_ids.forEach(id => mutedUsersProvided.add(id));
+                updateUsersProvided(message.count, message.list);
+                document.getElementById('mute-non-group')?.classList.add('muted');
+                document.getElementById('mute-non-group').textContent = 'Desmutear no grupo';
+                break;
+            case 'unmute_non_group_success':
+                message.user_ids.forEach(id => mutedUsersProvided.delete(id));
+                updateUsersProvided(message.count, message.list);
+                document.getElementById('mute-non-group')?.classList.remove('muted');
+                document.getElementById('mute-non-group').textContent = 'Mutear no grupo';
+                break;
+            case 'group_joined':
+            case 'create_group_success':
+                currentGroupProvided = message.group_id;
+                localStorage.setItem('groupId', currentGroupProvided);
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('group-screen').style.display = 'block';
+                if (message.is_private) {
+                    document.getElementById('logout-button').style.display = 'none';
+                }
+                updateSwipeHintProvided();
+                break;
+            case 'create_group_error':
+                alert(`Error al crear grupo: ${message.message}`);
+                break;
+            case 'check_group':
+                if (!message.in_group) {
+                    currentGroupProvided = null;
+                    localStorage.removeItem('groupId');
+                    updateSwipeHintProvided();
+                }
+                break;
+            case 'pong':
+                console.log('Pong recibido');
+                break;
+            case 'logout_success':
+                completeLogoutProvided();
+                break;
+        }
+    };
+
+    wsProvided.onclose = () => {
+        console.log('WebSocket cerrado');
+        stopPingProvided();
+        const delay = Math.min(PING_INTERVAL_PROVIDED * Math.pow(2, retryCount), 30000);
+        reconnectIntervalProvided = setTimeout(() => connectWebSocketProvided(token, retryCount + 1), delay);
+    };
+
+    wsProvided.onerror = (error) => {
+        console.error('Error WebSocket:', error);
+        wsProvided.close();
+    };
+}
+
+function startPingProvided() {
+    stopPingProvided();
+    pingIntervalProvided = setInterval(() => {
+        if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+            wsProvided.send(JSON.stringify({ type: 'ping' }));
+        }
+    }, PING_INTERVAL_PROVIDED);
+}
+
+function stopPingProvided() {
+    if (pingIntervalProvided) {
+        clearInterval(pingIntervalProvided);
+        pingIntervalProvided = null;
+    }
+}
+
+// -------------------- SECCIÓN: Registro (Versión del usuario) --------------------
+function register() {
+    const legajo = document.getElementById("legajo").value;
+    const name = document.getElementById("name").value;
+    const userFunction = document.getElementById("function").value;
+    if (!legajo || !name || !userFunction) {
+        alert("Por favor, ingresa un apellido, un legajo y una función.");
+        return;
+    }
+    if (!/^\d{5}$/.test(legajo)) {
+        alert("El legajo debe contener exactamente 5 números.");
+        return;
+    }
+    userId = `${legajo}_${name}_${userFunction}`;
+    const sessionToken = btoa(userId);
+    localStorage.setItem("sessionToken", sessionToken);
+    localStorage.setItem("userName", name);
+    localStorage.setItem("userFunction", userFunction);
+    localStorage.setItem("userLegajo", legajo);
+    connectWebSocket(sessionToken);
+}
+
+// -------------------- SECCIÓN: Registro (Versión proporcionada) --------------------
+function registerProvided() {
+    const userName = document.getElementById('userName').value;
+    const userFunction = document.getElementById('userFunction').value;
+    const userLegajo = document.getElementById('userLegajo').value;
+
+    if (!userName || !userFunction || !userLegajo || !/^\d{5}$/.test(userLegajo)) {
+        alert('Completa todos los campos. El legajo debe tener 5 números.');
+        return;
+    }
+
+    const token = btoa(`${userLegajo}_${userName}_${userFunction}`);
+    localStorage.setItem('sessionToken', token);
+    localStorage.setItem('userName', userName);
+    localStorage.setItem('userFunction', userFunction);
+    localStorage.setItem('userLegajo', userLegajo);
+
+    connectWebSocketProvided(token);
+    document.getElementById('register').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+}
+
+// -------------------- SECCIÓN: Búsqueda (Versión del usuario) --------------------
+function sendSearchQuery() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) {
+        alert('Ingresá una consulta');
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'search_query', query }));
+        localStorage.setItem('lastSearchQuery', query);
+        document.getElementById('search-input').value = '';
+        console.log(`Consulta enviada: ${query}`);
+    } else {
+        alert('No conectado al servidor');
+        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+        localStorage.removeItem('lastSearchQuery');
+    }
+}
+
+function displaySearchResponse(message) {
+    const flightDetails = document.getElementById('flight-details');
+    const groupFlightDetails = document.getElementById('group-flight-details');
+    if (!flightDetails || !groupFlightDetails) {
+        console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
+        return;
+    }
+    flightDetails.innerHTML = '';
+    groupFlightDetails.innerHTML = '';
+
+    let flights = [];
+    if (typeof message === 'string') {
+        flights = parseFlightMessage(message);
+    } else if (Array.isArray(message)) {
+        flights = message.map(flight => ({
+            flightNumber: flight.Vuelo || 'N/A',
+            destination: flight.Destino || 'N/A',
+            status: flight.Estado || 'Desconocido'
+        }));
+    } else {
+        console.error("Formato de respuesta de búsqueda inválido:", message);
+        const div = document.createElement('div');
+        div.className = 'flight no-results';
+        div.textContent = 'Error al procesar la búsqueda.';
+        flightDetails.appendChild(div);
+        groupFlightDetails.appendChild(div.cloneNode(true));
+        return;
+    }
+
+    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
+    const filteredFlights = flights.filter(flight =>
+        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        flight.destination.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (filteredFlights.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'flight no-results';
+        div.textContent = 'No se encontraron vuelos para la búsqueda.';
+        flightDetails.appendChild(div);
+        groupFlightDetails.appendChild(div.cloneNode(true));
+    } else {
+        filteredFlights.forEach(flight => {
+            const div = document.createElement('div');
+            div.className = `flight flight-${flight.status.toLowerCase().replace(" ", "-")}`;
+            div.innerHTML = `
+                <strong>Vuelo:</strong> ${flight.flightNumber} |
+                <strong>Destino:</strong> ${flight.destination} |
+                <strong>Estado:</strong> ${flight.status}
+            `;
+            flightDetails.appendChild(div);
+            groupFlightDetails.appendChild(div.cloneNode(true));
+        });
+    }
+
+    flightDetails.scrollTop = flightDetails.scrollHeight;
+    groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
+    console.log("Respuesta de búsqueda mostrada:", filteredFlights);
+}
+
+function parseFlightMessage(message) {
+    const flights = [];
+    try {
+        if (typeof message === 'string') {
+            const flightEntries = message.split(", ");
+            for (let i = 0; i < flightEntries.length; i += 3) {
+                if (flightEntries[i].startsWith("AR")) {
+                    flights.push({
+                        flightNumber: flightEntries[i],
+                        destination: flightEntries[i + 1].split(" ")[2] || 'N/A',
+                        status: flightEntries[i + 2] || 'Desconocido'
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error al parsear mensaje de vuelos:", err);
+    }
+    return flights;
+}
+
+// -------------------- SECCIÓN: Búsqueda (Versión proporcionada) --------------------
+function sendSearchQueryProvided() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) {
+        alert('Ingresa una consulta');
+        return;
+    }
+    if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+        wsProvided.send(JSON.stringify({ type: 'search_query', query }));
+        localStorage.setItem('lastSearchQuery', query);
+        document.getElementById('search-input').value = '';
+    } else {
+        alert('No conectado al servidor');
+    }
+}
+
+function displaySearchResponseProvided(message) {
+    const flightDetails = document.getElementById('flight-details');
+    const groupFlightDetails = document.getElementById('group-flight-details');
+    if (!flightDetails || !groupFlightDetails) {
+        console.error('Elementos #flight-details o #group-flight-details no encontrados');
+        return;
+    }
+    flightDetails.innerHTML = '';
+    groupFlightDetails.innerHTML = '';
+
+    let flights = Array.isArray(message) ? message : parseFlightMessageProvided(message);
+    const searchQuery = localStorage.getItem('lastSearchQuery') || '';
+    const filteredFlights = flights.filter(flight =>
+        flight.flightNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        flight.destination.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (filteredFlights.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'flight no-results';
+        div.textContent = 'No se encontraron vuelos para la búsqueda.';
+        flightDetails.appendChild(div);
+        groupFlightDetails.appendChild(div.cloneNode(true));
+    } else {
+        filteredFlights.forEach(flight => {
+            const div = document.createElement('div');
+            div.className = `flight flight-${flight.status.toLowerCase().replace(' ', '-')}`;
+            div.innerHTML = `
+                <strong>Vuelo:</strong> ${flight.flightNumber} |
+                <strong>Destino:</strong> ${flight.destination} |
+                <strong>Estado:</strong> ${flight.status}
+            `;
+            flightDetails.appendChild(div);
+            groupFlightDetails.appendChild(div.cloneNode(true));
+        });
+    }
+    flightDetails.scrollTop = flightDetails.scrollHeight;
+    groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
+}
+
+function parseFlightMessageProvided(message) {
+    const flights = [];
+    if (typeof message === 'string') {
+        const flightEntries = message.split(', ');
+        for (let i = 0; i < flightEntries.length; i += 3) {
+            if (flightEntries[i].startsWith('AR')) {
+                flights.push({
+                    flightNumber: flightEntries[i],
+                    destination: flightEntries[i + 1]?.split(' ')[2] || 'N/A',
+                    status: flightEntries[i + 2] || 'Desconocido'
+                });
+            }
+        }
+    }
+    return flights;
+}
+
+// -------------------- SECCIÓN: Vuelos (Versión del usuario) --------------------
 function updateFlightDetails(flights, containerId) {
     const container = document.getElementById(containerId.slice(1));
     if (!container) {
@@ -727,7 +1203,150 @@ async function updateOpenSkyData() {
     setTimeout(updateOpenSkyData, 15000);
 }
 
-// Funciones de mapa
+// -------------------- SECCIÓN: Vuelos (Versión proporcionada) --------------------
+async function fetchAA2000Flights() {
+    try {
+        const response = await fetch('/aa2000_flights');
+        const data = await response.json();
+        updateFlightDetailsAA2000Provided(data.flights, '#flight-details');
+        updateFlightDetailsAA2000Provided(data.flights, '#group-flight-details');
+    } catch (err) {
+        console.error('Error al obtener vuelos de Aerolíneas Argentinas:', err);
+    }
+}
+
+function updateFlightDetailsProvided(flights, containerId) {
+    const container = document.querySelector(containerId);
+    if (!container) {
+        console.error(`Elemento ${containerId} no encontrado`);
+        return;
+    }
+    container.innerHTML = '';
+    flights.forEach(flight => {
+        if (flight.Vuelo.startsWith('AR')) {
+            const div = document.createElement('div');
+            div.className = `flight flight-${flight.Estado.toLowerCase().replace(' ', '-')}`;
+            div.innerHTML = `
+                <strong>Vuelo:</strong> ${flight.Vuelo} |
+                <strong>STD:</strong> ${flight.STD} |
+                <strong>Destino:</strong> ${flight.Destino} |
+                <strong>Posición:</strong> ${flight.Posicion} |
+                <strong>Matrícula:</strong> ${flight.Matricula} |
+                <strong>Estado:</strong> ${flight.Estado}
+            `;
+            container.appendChild(div);
+        }
+    });
+    container.scrollTop = container.scrollHeight;
+}
+
+function updateFlightDetailsAA2000Provided(flights, containerId) {
+    const container = document.querySelector(containerId);
+    if (!container) {
+        console.error(`Elemento ${containerId} no encontrado`);
+        return;
+    }
+    container.innerHTML = '';
+    flights.forEach(flight => {
+        const div = document.createElement('div');
+        div.className = `flight flight-${flight.status.toLowerCase().replace(' ', '-')}`;
+        div.innerHTML = `
+            <strong>Vuelo:</strong> AR${flight.flight_number} |
+            <strong>Origen:</strong> ${flight.origin} |
+            <strong>Destino:</strong> ${flight.destination} |
+            <strong>Estado:</strong> ${flight.status} |
+            <strong>Aeronave:</strong> ${flight.aircraft} |
+            <strong>Matrícula:</strong> ${flight.registration}
+        `;
+        container.appendChild(div);
+    });
+    container.scrollTop = container.scrollHeight;
+}
+
+async function updateOpenSkyDataProvided() {
+    try {
+        const [openskyResponse, aa2000Response] = await Promise.all([
+            fetch('/opensky'),
+            fetch('/aa2000_flights')
+        ]);
+        const openskyData = openskyResponse.ok ? await openskyResponse.json() : [];
+        const aa2000Data = aa2000Response.ok ? await aa2000Response.json() : { flights: [] };
+
+        const flightDetails = document.getElementById('flight-details');
+        const groupFlightDetails = document.getElementById('group-flight-details');
+        if (!flightDetails || !groupFlightDetails) {
+            console.error('Elementos #flight-details o #group-flight-details no encontrados');
+            return;
+        }
+
+        flightDetails.innerHTML = '';
+        groupFlightDetails.innerHTML = '';
+
+        if (map) {
+            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === 'Aeroparque');
+        }
+
+        openskyData.forEach(state => {
+            if (state.flight.startsWith('AR') || state.flight.startsWith('ARG')) {
+                const flightNumber = state.flight.replace('ARG', '').replace('AR', '');
+                const displayFlight = `AEP${flightNumber}`;
+                const div = document.createElement('div');
+                div.className = `flight flight-${state.status.toLowerCase().replace(' ', '-')}`;
+                div.innerHTML = `
+                    <strong>Vuelo:</strong> ${displayFlight} |
+                    <strong>STD:</strong> ${state.scheduled} |
+                    <strong>Posición:</strong> ${state.position} |
+                    <strong>Destino:</strong> ${state.destination} |
+                    <strong>Matrícula:</strong> ${state.registration} |
+                    <strong>Estado:</strong> ${state.status}
+                `;
+                flightDetails.appendChild(div);
+                groupFlightDetails.appendChild(div.cloneNode(true));
+
+                if (state.lat && state.lon && map) {
+                    const marker = L.marker([state.lat, state.lon], {
+                        icon: L.icon({
+                            iconUrl: '/templates/aero.png',
+                            iconSize: [30, 30]
+                        })
+                    }).addTo(map)
+                      .bindPopup(`Vuelo: ${displayFlight} / ${state.registration}<br>Ruta: ${state.origin_dest}<br>Estado: ${state.status}`);
+                    marker.flight = state.flight;
+                    marker.registration = state.registration;
+                    markers.push(marker);
+                }
+            }
+        });
+
+        updateFlightDetailsAA2000Provided(aa2000Data.flights, '#flight-details');
+        updateFlightDetailsAA2000Provided(aa2000Data.flights, '#group-flight-details');
+    } catch (err) {
+        console.error('Error al cargar datos de vuelos:', err);
+    }
+    setTimeout(updateOpenSkyDataProvided, 15000);
+}
+
+function updateFlightRadar24MarkersProvided(flights) {
+    if (map) {
+        markers = markers.filter(marker => !marker.isFlightRadar24);
+        flights.forEach(flight => {
+            if (flight.latitude && flight.longitude) {
+                const marker = L.marker([flight.latitude, flight.longitude], {
+                    icon: L.icon({
+                        iconUrl: '/templates/aero.png',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(map)
+                  .bindPopup(`Vuelo: ${flight.flight}<br>Origen: ${flight.origin}<br>Destino: ${flight.destination}<br>Estado: ${flight.status}`);
+                marker.flight = flight.flight;
+                marker.isFlightRadar24 = true;
+                markers.push(marker);
+            }
+        });
+    }
+}
+
+// -------------------- SECCIÓN: Mapa (Versión del usuario) --------------------
 function initMap() {
     console.log("Inicializando mapa...");
     const mapContainer = document.getElementById('map');
@@ -816,7 +1435,28 @@ function filterFlights() {
     console.log("Vuelos filtrados, marcadores actualizados:", markers.length);
 }
 
-// Funciones de grabación
+// -------------------- SECCIÓN: Mapa (Versión proporcionada) --------------------
+function initMapProvided() {
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) {
+        console.error('Contenedor #map no encontrado');
+        return;
+    }
+    map = L.map('map').setView([-34.5597, -58.4116], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+    L.marker([-34.5597, -58.4116], {
+        icon: L.icon({
+            iconUrl: '/templates/airport.png',
+            iconSize: [30, 30]
+        })
+    }).addTo(map).bindPopup('Aeroparque').openPopup();
+    map.invalidateSize();
+}
+
+// -------------------- SECCIÓN: Grabación (Versión del usuario) --------------------
 async function toggleTalk() {
     const talkButton = document.getElementById("talk");
     if (!talkButton) {
@@ -969,280 +1609,78 @@ async function toggleTalk() {
         mediaRecorder.stop();
         talkButton.classList.remove("recording");
     }
-                            }
-
-// Funciones de muteo
-function toggleMute() {
-    const muteButton = document.getElementById("mute");
-    const groupMuteButton = document.getElementById("group-mute");
-    if (muteButton.classList.contains("unmuted")) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_all" }));
-        }
-        muteButton.classList.remove("unmuted");
-        muteButton.classList.add("muted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("unmuted");
-            groupMuteButton.classList.add("muted");
-        }
-    } else {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_all" }));
-        }
-        muteButton.classList.remove("muted");
-        muteButton.classList.add("unmuted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("muted");
-            groupMuteButton.classList.add("unmuted");
-        }
-    }
 }
 
-function toggleGroupMute() {
-    const groupMuteButton = document.getElementById("group-mute");
-    const muteButton = document.getElementById("mute");
-    if (groupMuteButton.classList.contains("unmuted")) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_all" }));
-        }
-        groupMuteButton.classList.remove("unmuted");
-        groupMuteButton.classList.add("muted");
-        if (muteButton) {
-            muteButton.classList.remove("unmuted");
-            muteButton.classList.add("muted");
-        }
-    } else {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_all" }));
-        }
-        groupMuteButton.classList.remove("muted");
-        groupMuteButton.classList.add("unmuted");
-        if (muteButton) {
-            muteButton.classList.remove("muted");
-            muteButton.classList.add("unmuted");
-        }
-    }
-}
-
-function updateMuteButton(isMuted) {
-    const muteButton = document.getElementById("mute");
-    const groupMuteButton = document.getElementById("group-mute");
-    if (isMuted) {
-        muteButton.classList.remove("unmuted");
-        muteButton.classList.add("muted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("unmuted");
-            groupMuteButton.classList.add("muted");
-        }
-    } else {
-        muteButton.classList.remove("muted");
-        muteButton.classList.add("unmuted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("muted");
-            groupMuteButton.classList.add("unmuted");
-        }
-    }
-}
-
-function toggleMuteNonGroup() {
-    const nonGroupMuteButton = document.getElementById("mute-non-group");
-    const isMuting = !nonGroupMuteButton.classList.contains("muted");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: isMuting ? "mute_non_group" : "unmute_non_group", group_id: currentGroup }));
-    }
-    if (isMuting) {
-        nonGroupMuteButton.classList.add("muted");
-        nonGroupMuteButton.textContent = "Desmutear no grupo";
-    } else {
-        nonGroupMuteButton.classList.remove("muted");
-        nonGroupMuteButton.textContent = "Mutear no grupo";
-    }
-}
-
-function toggleMuteUser(userId, button) {
-    if (mutedUsers.has(userId)) {
-        mutedUsers.delete(userId);
-        button.textContent = "🔊";
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_user", target_user_id: userId }));
-        }
-        console.log(`Usuario ${userId} desmuteado`);
-    } else {
-        mutedUsers.add(userId);
-        button.textContent = "🔇";
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_user", target_user_id: userId }));
-        }
-        console.log(`Usuario ${userId} muteado`);
-    }
-}
-
-// Funciones de usuarios
-function updateUsers(count, list) {
-    const usersDiv = document.getElementById('users');
-    const groupUsersDiv = document.getElementById('group-users');
-    if (!usersDiv || !groupUsersDiv) {
-        console.error("Elementos #users o #group-users no encontrados en el DOM");
+// -------------------- SECCIÓN: Grabación (Versión proporcionada) --------------------
+async function toggleTalkProvided() {
+    const talkButton = document.getElementById('talk');
+    if (!talkButton) {
+        console.error('Botón #talk no encontrado');
         return;
     }
-    usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
-    groupUsersDiv.innerHTML = `Usuarios conectados: ${list.filter(user => user.group_id === currentGroup).length}<br>`;
-    const userList = document.createElement("div");
-    userList.className = "user-list";
-    const groupUserList = document.createElement("div");
-    groupUserList.className = "user-list";
 
-    list.forEach(user => {
-        const userDiv = document.createElement("div");
-        userDiv.className = "user-item";
-        if (user.group_id && user.group_id === currentGroup) {
-            userDiv.classList.add('in-group');
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        streamProvided = await requestMicPermissionProvided();
+        if (!streamProvided) return;
+
+        mediaRecorder = new MediaRecorder(streamProvided, { mimeType: 'audio/webm' });
+        let transcript = supportsSpeechRecognition ? '' : 'Procesando...';
+
+        if (supportsSpeechRecognition && recognition) {
+            recognition.onresult = event => {
+                transcript = Array.from(event.results).map(result => result[0].transcript).join('');
+            };
+            recognition.onerror = event => {
+                transcript = 'Error en transcripción: ' + event.error;
+            };
+            recognition.start();
         }
-        const muteButton = document.createElement("button");
-        muteButton.className = "mute-button";
-        const isMuted = mutedUsers.has(user.user_id);
-        muteButton.textContent = isMuted ? "🔇" : "🔊";
-        muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
-        userDiv.appendChild(muteButton);
-        const userText = document.createElement("span");
-        let displayText = user.display;
-        if (!displayText || displayText === user.user_id) {
-            const parts = user.user_id.split('_');
-            if (parts.length === 3) {
-                const [, name, userFunction] = parts;
-                displayText = `${name} (${userFunction})`;
-            } else {
-                displayText = user.user_id;
+
+        mediaRecorder.ondataavailable = event => {
+            if (event.data.size > 0) audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            if (audioBlob.size === 0) {
+                alert('El audio grabado está vacío.');
+                return;
             }
-        }
-        userText.textContent = displayText;
-        userDiv.appendChild(userText);
-        userList.appendChild(userDiv);
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                const base64data = reader.result.split(',')[1];
+                const message = {
+                    type: 'audio',
+                    data: base64data,
+                    text: transcript,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                    sender: localStorage.getItem('userName') || 'Anónimo',
+                    function: localStorage.getItem('userFunction') || 'Desconocida'
+                };
 
-        if (user.group_id === currentGroup) {
-            const groupUserDiv = document.createElement("div");
-            groupUserDiv.className = "user-item";
-            const groupMuteButton = document.createElement("button");
-            groupMuteButton.className = "mute-button";
-            groupMuteButton.textContent = isMuted ? "🔇" : "🔊";
-            groupMuteButton.onclick = () => toggleMuteUser(user.user_id, groupMuteButton);
-            groupUserDiv.appendChild(groupMuteButton);
-            const groupUserText = document.createElement("span");
-            groupUserText.textContent = displayText;
-            groupUserDiv.appendChild(groupUserText);
-            groupUserList.appendChild(groupUserDiv);
-        }
-    });
+                if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+                    wsProvided.send(JSON.stringify(message));
+                } else {
+                    queueMessageForSyncProvided(message);
+                }
 
-    usersDiv.appendChild(userList);
-    groupUsersDiv.appendChild(groupUserList);
-    console.log("Lista de usuarios actualizada:", list);
-}
-// Funciones de grupos
-function createGroup() {
-    const groupId = document.getElementById('group-id').value.trim();
-    const isPrivate = document.getElementById('group-private')?.checked || false;
-    if (!groupId) {
-        alert('Por favor, ingresa un nombre de grupo válido.');
-        return;
-    }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando solicitud para crear grupo:", groupId, "Privado:", isPrivate);
-        ws.send(JSON.stringify({ type: 'create_group', group_id: groupId, is_private: isPrivate }));
-    } else {
-        alert('No estás conectado al servidor. Intenta de nuevo.');
-        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+                addChatMessageProvided(message, 'chat-list');
+                audioChunks = [];
+                streamProvided.getTracks().forEach(track => track.stop());
+                streamProvided = null;
+                if (supportsSpeechRecognition && recognition) recognition.stop();
+            };
+            mediaRecorder = null;
+        };
+
+        mediaRecorder.start(100);
+        talkButton.classList.add('recording');
+    } else if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        talkButton.classList.remove('recording');
     }
 }
-
-function joinGroup() {
-    const groupId = document.getElementById('group-id').value.trim();
-    const isPrivate = document.getElementById('group-private')?.checked || false;
-    if (!groupId) {
-        alert('Por favor, ingresa un nombre de grupo válido.');
-        return;
-    }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando solicitud para unirse al grupo:", groupId, "Privado:", isPrivate);
-        ws.send(JSON.stringify({ type: 'join_group', group_id: groupId, is_private: isPrivate }));
-    } else {
-        alert('No estás conectado al servidor. Intenta de nuevo.');
-        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
-    }
-}
-
-function leaveGroup() {
-    if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
-        ws.send(JSON.stringify({ type: 'leave_group', group_id: currentGroup }));
-        currentGroup = null;
-        localStorage.removeItem('groupId');
-        document.getElementById('group-screen').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        document.getElementById('group-chat-list').innerHTML = '';
-        document.getElementById('group-flight-details').innerHTML = '';
-        const logoutButton = document.getElementById('logout-button');
-        if (logoutButton) logoutButton.style.display = 'block';
-        updateSwipeHint();
-        console.log("Grupo abandonado");
-    }
-}
-
-function checkGroupStatus() {
-    if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
-        ws.send(JSON.stringify({ type: 'check_group', group_id: currentGroup }));
-    }
-}
-
-function updateSwipeHint() {
-    const swipeHint = document.getElementById('swipe-hint');
-    const returnToGroupBtn = document.getElementById('return-to-group-btn');
-    if (!swipeHint || !returnToGroupBtn) {
-        console.error("Elemento #swipe-hint o #return-to-group-btn no encontrado en el DOM");
-        return;
-    }
-    if (currentGroup) {
-        if (document.getElementById('main').style.display === 'block') {
-            swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá hacia la derecha para ir al grupo';
-            returnToGroupBtn.style.display = 'block';
-        } else if (document.getElementById('group-screen').style.display === 'block') {
-            swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá hacia la izquierda para volver';
-            returnToGroupBtn.style.display = 'none';
-        }
-    } else {
-        swipeHint.style.display = 'none';
-        returnToGroupBtn.style.display = 'none';
-    }
-}
-
-function returnToGroup() {
-    if (currentGroup) {
-        document.getElementById('main').classList.add('slide-left');
-        setTimeout(() => {
-            document.getElementById('main').style.display = 'none';
-            document.getElementById('group-screen').style.display = 'block';
-            document.getElementById('main').classList.remove('slide-left');
-            updateSwipeHint();
-        }, 300);
-    }
-}
-
-function backToMainFromGroup() {
-    document.getElementById('group-screen').classList.add('slide-right');
-    setTimeout(() => {
-        document.getElementById('group-screen').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        document.getElementById('group-screen').classList.remove('slide-right');
-        const logoutButton = document.getElementById('logout-button');
-        if (logoutButton) logoutButton.style.display = 'block';
-        checkGroupStatus();
-        updateSwipeHint();
-    }, 300);
-}
-
-let groupRecording = false;
-let groupMediaRecorder = null;
 
 function toggleGroupTalk() {
     const talkButton = document.getElementById('group-talk');
@@ -1320,112 +1758,722 @@ function sendGroupMessage(audioData) {
     }
 }
 
-// Funciones de navegación
-function showGroupRadar() {
-    console.log("Mostrando radar desde grupo...");
-    document.getElementById('group-screen').style.display = 'none';
+// -------------------- SECCIÓN: Grabación (Versión proporcionada) --------------------
+function toggleGroupTalkProvided() {
+    const talkButton = document.getElementById('group-talk');
+    if (!talkButton) return;
+
+    if (!groupMediaRecorder) {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(s => {
+            streamProvided = s;
+            groupMediaRecorder = new MediaRecorder(streamProvided, { mimeType: 'audio/webm' });
+            const chunks = [];
+
+            groupMediaRecorder.ondataavailable = e => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+
+            groupMediaRecorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                if (blob.size === 0) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const audioData = reader.result.split(',')[1];
+                    const message = {
+                        type: 'group_message',
+                        data: audioData,
+                        sender: localStorage.getItem('userName') || 'Anónimo',
+                        function: localStorage.getItem('userFunction') || 'Desconocida',
+                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        text: supportsSpeechRecognition ? 'Procesando...' : 'Procesando...',
+                        group_id: currentGroupProvided
+                    };
+
+                    if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+                        wsProvided.send(JSON.stringify(message));
+                    } else {
+                        queueMessageForSyncProvided(message);
+                    }
+
+                    streamProvided.getTracks().forEach(track => track.stop());
+                    streamProvided = null;
+                };
+                reader.readAsDataURL(blob);
+                groupMediaRecorder = null;
+            };
+
+            groupMediaRecorder.start(100);
+            talkButton.classList.add('recording');
+        }).catch(err => {
+            console.error('Error al acceder al micrófono:', err);
+        });
+    } else {
+        groupMediaRecorder.stop();
+        talkButton.classList.remove('recording');
+    }
+}
+
+// -------------------- SECCIÓN: Muteo (Versión del usuario) --------------------
+function toggleMute() {
+    const muteButton = document.getElementById("mute");
+    const groupMuteButton = document.getElementById("group-mute");
+    if (muteButton.classList.contains("unmuted")) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "mute_all" }));
+        }
+        muteButton.classList.remove("unmuted");
+        muteButton.classList.add("muted");
+        if (groupMuteButton) {
+            groupMuteButton.classList.remove("unmuted");
+            groupMuteButton.classList.add("muted");
+        }
+    } else {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "unmute_all" }));
+        }
+        muteButton.classList.remove("muted");
+        muteButton.classList.add("unmuted");
+        if (groupMuteButton) {
+            groupMuteButton.classList.remove("muted");
+            groupMuteButton.classList.add("unmuted");
+        }
+    }
+}
+
+// Continuación de la función toggleGroupMute (Versión del usuario)
+function toggleGroupMute() {
+    const groupMuteButton = document.getElementById("group-mute");
+    const muteButton = document.getElementById("mute");
+    if (groupMuteButton.classList.contains("unmuted")) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "mute_all" }));
+        }
+        groupMuteButton.classList.remove("unmuted");
+        groupMuteButton.classList.add("muted");
+        if (muteButton) {
+            muteButton.classList.remove("unmuted");
+            muteButton.classList.add("muted");
+        }
+    } else {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "unmute_all" }));
+        }
+        groupMuteButton.classList.remove("muted");
+        groupMuteButton.classList.add("unmuted");
+        if (muteButton) {
+            muteButton.classList.remove("muted");
+            muteButton.classList.add("unmuted");
+        }
+    }
+}
+
+function updateMuteButton(isMuted) {
+    const muteButton = document.getElementById("mute");
+    const groupMuteButton = document.getElementById("group-mute");
+    if (isMuted) {
+        if (muteButton) {
+            muteButton.classList.remove("unmuted");
+            muteButton.classList.add("muted");
+        }
+        if (groupMuteButton) {
+            groupMuteButton.classList.remove("unmuted");
+            groupMuteButton.classList.add("muted");
+        }
+    } else {
+        if (muteButton) {
+            muteButton.classList.remove("muted");
+            muteButton.classList.add("unmuted");
+        }
+        if (groupMuteButton) {
+            groupMuteButton.classList.remove("muted");
+            groupMuteButton.classList.add("unmuted");
+        }
+    }
+}
+
+function toggleMuteNonGroup() {
+    const muteNonGroupButton = document.getElementById("mute-non-group");
+    if (muteNonGroupButton.classList.contains("muted")) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "unmute_non_group" }));
+        }
+    } else {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "mute_non_group" }));
+        }
+    }
+}
+
+// -------------------- SECCIÓN: Muteo (Versión proporcionada) --------------------
+function toggleMuteProvided() {
+    const muteButton = document.getElementById('mute');
+    if (muteButton.classList.contains('unmuted')) {
+        wsProvided.send(JSON.stringify({ type: 'mute_all' }));
+        muteButton.classList.remove('unmuted').add('muted');
+    } else {
+        wsProvided.send(JSON.stringify({ type: 'unmute_all' }));
+        muteButton.classList.remove('muted').add('unmuted');
+    }
+}
+
+function updateMuteButtonProvided(isMuted) {
+    const muteButton = document.getElementById('mute');
+    const groupMuteButton = document.getElementById('group-mute');
+    if (isMuted) {
+        muteButton.classList.remove('unmuted').add('muted');
+        if (groupMuteButton) groupMuteButton.classList.remove('unmuted').add('muted');
+    } else {
+        muteButton.classList.remove('muted').add('unmuted');
+        if (groupMuteButton) groupMuteButton.classList.remove('muted').add('unmuted');
+    }
+}
+
+// -------------------- SECCIÓN: Grupos (Versión del usuario) --------------------
+function createGroup() {
+    const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
+    if (!groupId) {
+        alert('Ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+            type: 'create_group', 
+            group_id: groupId,
+            is_private: isPrivate 
+        }));
+        console.log(`Solicitud de creación de grupo enviada: ${groupId}, privado: ${isPrivate}`);
+    } else {
+        alert('No conectado al servidor');
+        console.error("WebSocket no está abierto para crear grupo");
+    }
+}
+
+function joinGroup() {
+    const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
+    if (!groupId) {
+        alert('Ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+            type: 'join_group', 
+            group_id: groupId,
+            is_private: isPrivate 
+        }));
+        console.log(`Solicitud de unirse al grupo enviada: ${groupId}, privado: ${isPrivate}`);
+    } else {
+        alert('No conectado al servidor');
+        console.error("WebSocket no está abierto para unirse al grupo");
+    }
+}
+
+function leaveGroup() {
+    if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
+        ws.send(JSON.stringify({ 
+            type: 'leave_group', 
+            group_id: currentGroup 
+        }));
+        console.log(`Saliendo del grupo: ${currentGroup}`);
+        currentGroup = null;
+        localStorage.removeItem('groupId');
+        document.getElementById('group-screen').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        const logoutButton = document.getElementById('logout-button');
+        if (logoutButton) logoutButton.style.display = 'block';
+        updateSwipeHint();
+    } else {
+        console.error("No se puede abandonar el grupo: WebSocket no está abierto o no estás en un grupo");
+    }
+}
+
+function checkGroupStatus() {
+    const groupId = localStorage.getItem('groupId');
+    if (groupId && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+            type: 'check_group', 
+            group_id: groupId 
+        }));
+        console.log(`Verificando estado del grupo: ${groupId}`);
+    }
+}
+
+// -------------------- SECCIÓN: Grupos (Versión proporcionada) --------------------
+function createGroupProvided() {
+    const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
+    if (!groupId) {
+        alert('Ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+        wsProvided.send(JSON.stringify({ type: 'create_group', group_id: groupId, is_private: isPrivate }));
+    }
+}
+
+function joinGroupProvided() {
+    const groupId = document.getElementById('group-id').value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked || false;
+    if (!groupId) {
+        alert('Ingresa un nombre de grupo válido.');
+        return;
+    }
+    if (wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+        wsProvided.send(JSON.stringify({ type: 'join_group', group_id: groupId, is_private: isPrivate }));
+    }
+}
+
+function leaveGroupProvided() {
+    if (wsProvided && wsProvided.readyState === WebSocket.OPEN && currentGroupProvided) {
+        wsProvided.send(JSON.stringify({ type: 'leave_group', group_id: currentGroupProvided }));
+        currentGroupProvided = null;
+        localStorage.removeItem('groupId');
+        document.getElementById('group-screen').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        document.getElementById('logout-button').style.display = 'block';
+        updateSwipeHintProvided();
+    }
+}
+
+function checkGroupStatusProvided() {
+    const groupId = localStorage.getItem('groupId');
+    if (groupId && wsProvided && wsProvided.readyState === WebSocket.OPEN) {
+        wsProvided.send(JSON.stringify({ type: 'check_group', group_id: groupId }));
+    }
+}
+
+// -------------------- SECCIÓN: Usuarios (Versión del usuario) --------------------
+function updateUsers(count, list) {
+    const usersDiv = document.getElementById('users');
+    const groupUsersDiv = document.getElementById('group-users');
+    if (!usersDiv || !groupUsersDiv) {
+        console.error("Elementos #users o #group-users no encontrados en el DOM");
+        return;
+    }
+
+    usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
+    groupUsersDiv.innerHTML = `Usuarios conectados: ${list.filter(user => user.group_id === currentGroup).length}<br>`;
+
+    const userList = document.createElement('div');
+    userList.className = 'user-list';
+    const groupUserList = document.createElement('div');
+    groupUserList.className = 'user-list';
+
+    list.forEach(user => {
+        const userId = `${user.name}_${user.function}`;
+        const userDiv = document.createElement('div');
+        userDiv.className = 'user-item';
+        if (user.group_id === currentGroup) {
+            userDiv.classList.add('in-group');
+        }
+        const muteButton = document.createElement('button');
+        muteButton.className = 'mute-button';
+        muteButton.textContent = mutedUsers.has(userId) ? '🔇' : '🔊';
+        muteButton.onclick = () => toggleMuteUser(userId, muteButton);
+        userDiv.appendChild(muteButton);
+        userDiv.appendChild(document.createTextNode(` ${user.name} (${user.function})`));
+        userList.appendChild(userDiv);
+
+        if (user.group_id === currentGroup) {
+            const groupUserDiv = userDiv.cloneNode(true);
+            groupUserList.appendChild(groupUserDiv);
+        }
+    });
+
+    usersDiv.appendChild(userList);
+    groupUsersDiv.appendChild(groupUserList);
+}
+
+function toggleMuteUser(userId, button) {
+    if (mutedUsers.has(userId)) {
+        mutedUsers.delete(userId);
+        button.textContent = '🔊';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ 
+                type: 'unmute_user', 
+                target_user_id: userId 
+            }));
+        }
+        console.log(`Usuario ${userId} desmuteado`);
+    } else {
+        mutedUsers.add(userId);
+        button.textContent = '🔇';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ 
+                type: 'mute_user', 
+                target_user_id: userId 
+            }));
+        }
+        console.log(`Usuario ${userId} muteado`);
+    }
+}
+
+// -------------------- SECCIÓN: Usuarios (Versión proporcionada) --------------------
+function updateUsersProvided(count, list) {
+    const usersDiv = document.getElementById('users');
+    const groupUsersDiv = document.getElementById('group-users');
+    if (!usersDiv || !groupUsersDiv) return;
+
+    usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
+    groupUsersDiv.innerHTML = `Usuarios conectados: ${list.filter(user => user.group_id === currentGroupProvided).length}<br>`;
+
+    const userList = document.createElement('div');
+    userList.className = 'user-list';
+    const groupUserList = document.createElement('div');
+    groupUserList.className = 'user-list';
+
+    list.forEach(user => {
+        const userDiv = document.createElement('div');
+        userDiv.className = 'user-item';
+        if (user.group_id === currentGroupProvided) userDiv.classList.add('in-group');
+        const muteButton = document.createElement('button');
+        muteButton.className = 'mute-button';
+        muteButton.textContent = mutedUsersProvided.has(user.user_id) ? '🔇' : '🔊';
+        muteButton.onclick = () => toggleMuteUserProvided(user.user_id, muteButton);
+        userDiv.appendChild(muteButton);
+        userDiv.appendChild(document.createTextNode(user.display));
+        userList.appendChild(userDiv);
+
+        if (user.group_id === currentGroupProvided) {
+            const groupUserDiv = userDiv.cloneNode(true);
+            groupUserList.appendChild(groupUserDiv);
+        }
+    });
+
+    usersDiv.appendChild(userList);
+    groupUsersDiv.appendChild(groupUserList);
+}
+
+function toggleMuteUserProvided(userId, button) {
+    if (mutedUsersProvided.has(userId)) {
+        mutedUsersProvided.delete(userId);
+        button.textContent = '🔊';
+        wsProvided.send(JSON.stringify({ type: 'unmute_user', target_user_id: userId }));
+    } else {
+        mutedUsersProvided.add(userId);
+        button.textContent = '🔇';
+        wsProvided.send(JSON.stringify({ type: 'mute_user', target_user_id: userId }));
+    }
+}
+
+// -------------------- SECCIÓN: Navegación y gestos (Versión del usuario) --------------------
+function showRadar() {
+    document.getElementById('main').style.display = 'none';
     document.getElementById('radar-screen').style.display = 'block';
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) logoutButton.style.display = 'none';
     if (!map) {
         initMap();
-        updateOpenSkyData();
-    } else {
-        map.invalidateSize();
-        filterFlights();
     }
-}
-
-function showGroupHistory() {
-    document.getElementById('group-screen').style.display = 'none';
-    document.getElementById('history-screen').style.display = 'block';
-    loadHistory();
-}
-
-function showRadar() {
-    console.log("Mostrando radar...");
-    document.getElementById("main").style.display = "none";
-    document.getElementById("radar-screen").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'none';
-    if (!map) {
-        initMap();
-        updateOpenSkyData();
-    } else {
+    if (map) {
         map.invalidateSize();
-        filterFlights();
     }
 }
 
 function backToMainFromRadar() {
-    document.getElementById("radar-screen").style.display = "none";
-    document.getElementById("main").style.display = "block";
+    document.getElementById('radar-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) logoutButton.style.display = 'block';
-    document.getElementById("search-bar").value = "";
-    filterFlights();
     updateSwipeHint();
 }
 
 function showHistory() {
     fetch('/history')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error al cargar historial: ${response.status}`);
-            }
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
-            const historyList = document.getElementById("history-list");
+            const historyList = document.getElementById('history-list');
             if (!historyList) {
                 console.error("Elemento #history-list no encontrado en el DOM");
                 return;
             }
-            historyList.innerHTML = "";
+            historyList.innerHTML = '';
             data.forEach(msg => {
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const utcTime = msg.timestamp.split(":");
-                const utcDate = new Date();
-                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const text = msg.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'chat-message';
+                const localTime = new Date(`1970-01-01T${msg.timestamp}Z`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
                 const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
                 if (audioBlob) {
                     msgDiv.onclick = () => playAudio(audioBlob);
-                } else {
-                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
                 }
                 historyList.appendChild(msgDiv);
             });
-            document.getElementById("main").style.display = "none";
-            document.getElementById("radar-screen").style.display = "none";
-            document.getElementById("history-screen").style.display = "block";
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('history-screen').style.display = 'block';
             const logoutButton = document.getElementById('logout-button');
             if (logoutButton) logoutButton.style.display = 'none';
-            console.log("Historial cargado con", data.length, "mensajes");
         })
         .catch(err => {
-            console.error("Error al cargar historial:", err);
-            const historyList = document.getElementById("history-list");
+            console.error('Error al cargar historial:', err);
+            const historyList = document.getElementById('history-list');
             if (historyList) {
-                historyList.innerHTML = "<div>Error al cargar el historial</div>";
+                historyList.innerHTML = '<div>Error al cargar el historial</div>';
             }
         });
 }
 
 function backToMain() {
-    document.getElementById("history-screen").style.display = "none";
-    document.getElementById("main").style.display = "block";
+    document.getElementById('history-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) logoutButton.style.display = 'block';
     updateSwipeHint();
-    console.log("Volviendo a la pantalla principal desde historial");
 }
 
-// Funciones auxiliares
+function updateSwipeHint() {
+    const swipeHint = document.getElementById('swipe-hint');
+    const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (!swipeHint || !returnToGroupBtn) {
+        console.error("Elementos #swipe-hint o #return-to-group-btn no encontrados en el DOM");
+        return;
+    }
+    if (currentGroup) {
+        if (document.getElementById('main').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá hacia la derecha para ir al grupo';
+            returnToGroupBtn.style.display = 'block';
+        } else if (document.getElementById('group-screen').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá hacia la izquierda para volver';
+            returnToGroupBtn.style.display = 'none';
+        } else {
+            swipeHint.style.display = 'none';
+            returnToGroupBtn.style.display = 'none';
+        }
+    } else {
+        swipeHint.style.display = 'none';
+        returnToGroupBtn.style.display = 'none';
+    }
+}
+
+function returnToGroup() {
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('group-screen').style.display = 'block';
+    updateSwipeHint();
+}
+
+// Gestos de deslizamiento
+document.addEventListener('touchstart', (e) => {
+    if (!isSwiping) {
+        startX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchmove', (e) => {
+    if (!isSwiping) {
+        currentX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchend', (e) => {
+    if (isSwiping) return;
+    const deltaX = currentX - startX;
+    if (Math.abs(deltaX) > 50) {
+        isSwiping = true;
+        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
+            document.getElementById('group-screen').classList.add('slide-right');
+            setTimeout(() => {
+                document.getElementById('group-screen').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+                document.getElementById('group-screen').classList.remove('slide-right');
+                const logoutButton = document.getElementById('logout-button');
+                if (logoutButton) logoutButton.style.display = 'block';
+                updateSwipeHint();
+                isSwiping = false;
+            }, 300);
+        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
+            document.getElementById('main').classList.add('slide-left');
+            setTimeout(() => {
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('group-screen').style.display = 'block';
+                document.getElementById('main').classList.remove('slide-left');
+                updateSwipeHint();
+                isSwiping = false;
+            }, 300);
+        } else {
+            isSwiping = false;
+        }
+    } else {
+        isSwiping = false;
+    }
+});
+
+// -------------------- SECCIÓN: Navegación y gestos (Versión proporcionada) --------------------
+function showRadarProvided() {
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'block';
+    document.getElementById('logout-button').style.display = 'none';
+    if (!map) initMapProvided();
+    map.invalidateSize();
+}
+
+function backToMainFromRadarProvided() {
+    document.getElementById('radar-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('logout-button').style.display = 'block';
+    updateSwipeHintProvided();
+}
+
+function showHistoryProvided() {
+    fetch('/history')
+        .then(response => response.json())
+        .then(data => {
+            const historyList = document.getElementById('history-list');
+            if (!historyList) return;
+            historyList.innerHTML = '';
+            data.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'chat-message';
+                const localTime = new Date(`1970-01-01T${msg.timestamp}Z`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${msg.text}`;
+                const audioBlob = base64ToBlobProvided(msg.audio, 'audio/webm');
+                if (audioBlob) msgDiv.onclick = () => playAudioProvided(audioBlob);
+                historyList.appendChild(msgDiv);
+            });
+            document.getElementById('main').style.display = 'none';
+            document.getElementById('history-screen').style.display = 'block';
+            document.getElementById('logout-button').style.display = 'none';
+        })
+        .catch(err => {
+            console.error('Error al cargar historial:', err);
+            const historyList = document.getElementById('history-list');
+            if (historyList) historyList.innerHTML = '<div>Error al cargar el historial</div>';
+        });
+}
+
+function backToMainProvided() {
+    document.getElementById('history-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('logout-button').style.display = 'block';
+    updateSwipeHintProvided();
+}
+
+function updateSwipeHintProvided() {
+    const swipeHint = document.getElementById('swipe-hint');
+    const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (!swipeHint || !returnToGroupBtn) return;
+    if (currentGroupProvided) {
+        if (document.getElementById('main').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá hacia la derecha para ir al grupo';
+            returnToGroupBtn.style.display = 'block';
+        } else if (document.getElementById('group-screen').style.display === 'block') {
+            swipeHint.style.display = 'block';
+            swipeHint.textContent = 'Deslizá hacia la izquierda para volver';
+            returnToGroupBtn.style.display = 'none';
+        }
+    } else {
+        swipeHint.style.display = 'none';
+        returnToGroupBtn.style.display = 'none';
+    }
+}
+
+// Gestos de deslizamiento (Versión proporcionada)
+document.addEventListener('touchstart', e => {
+    if (!isSwiping) startX = e.touches[0].clientX;
+});
+
+document.addEventListener('touchmove', e => {
+    if (!isSwiping) currentX = e.touches[0].clientX;
+});
+
+document.addEventListener('touchend', e => {
+    if (isSwiping) return;
+    const deltaX = currentX - startX;
+    if (Math.abs(deltaX) > 50) {
+        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
+            document.getElementById('group-screen').classList.add('slide-right');
+            setTimeout(() => {
+                document.getElementById('group-screen').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+                document.getElementById('group-screen').classList.remove('slide-right');
+                document.getElementById('logout-button').style.display = 'block';
+                updateSwipeHintProvided();
+            }, 300);
+        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroupProvided) {
+            document.getElementById('main').classList.add('slide-left');
+            setTimeout(() => {
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('group-screen').style.display = 'block';
+                document.getElementById('main').classList.remove('slide-left');
+                updateSwipeHintProvided();
+            }, 300);
+        }
+    }
+});
+
+// -------------------- SECCIÓN: Cierre de sesión (Versión del usuario) --------------------
+function logout() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+            type: 'logout', 
+            sessionToken: localStorage.getItem('sessionToken') 
+        }));
+        console.log("Enviando solicitud de cierre de sesión");
+    }
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    if (mediaRecorder) {
+        mediaRecorder.stop();
+        mediaRecorder = null;
+    }
+    localStorage.clear();
+    currentGroup = null;
+    mutedUsers.clear();
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    clearInterval(reconnectInterval);
+    stopPing();
+    document.getElementById('register').style.display = 'block';
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'none';
+    document.getElementById('history-screen').style.display = 'none';
+    window.location.href = '/register-form';
+}
+
+// -------------------- SECCIÓN: Cierre de sesión (Versión proporcionada) --------------------
+function completeLogoutProvided() {
+    if (wsProvided) wsProvided.close();
+    if (streamProvided) streamProvided.getTracks().forEach(track => track.stop());
+    if (groupMediaRecorder) groupMediaRecorder.stop();
+    localStorage.clear();
+    currentGroupProvided = null;
+    mutedUsersProvided.clear();
+    clearInterval(reconnectIntervalProvided);
+    stopPingProvided();
+    document.getElementById('register').style.display = 'block';
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'none';
+    document.getElementById('history-screen').style.display = 'none';
+    window.location.href = '/register-form';
+}
+
+// -------------------- SECCIÓN: Funciones auxiliares (Versión del usuario) --------------------
 function base64ToBlob(base64, mime) {
+    try {
+        const byteString = atob(base64);
+        const arrayBuffer = new ArrayBuffer(byteString.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < byteString.length; i++) {
+            uint8Array[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([arrayBuffer], { type: mime });
+    } catch (err) {
+        console.error("Error al convertir Base64 a Blob:", err);
+        return null;
+    }
+}
+
+// -------------------- SECCIÓN: Funciones auxiliares (Versión proporcionada) --------------------
+function base64ToBlobProvided(base64, mime) {
     try {
         const byteString = atob(base64);
         const arrayBuffer = new ArrayBuffer(byteString.length);
@@ -1435,237 +2483,13 @@ function base64ToBlob(base64, mime) {
         }
         return new Blob([uint8Array], { type: mime });
     } catch (err) {
-        console.error("Error al convertir Base64 a Blob:", err);
+        console.error('Error al convertir Base64 a Blob:', err);
         return null;
     }
 }
 
-function logout() {
-    console.log("Iniciando cierre de sesión...");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "logout" }));
-        // No cerrar WebSocket inmediatamente, esperar logout_success
-    } else {
-        // Si no hay WebSocket, limpiar directamente
-        completeLogout();
-    }
-}
-
-function completeLogout() {
-    console.log("Completando cierre de sesión...");
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    if (groupMediaRecorder) {
-        groupMediaRecorder.stop();
-        groupMediaRecorder = null;
-    }
-    localStorage.removeItem("sessionToken");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userFunction");
-    localStorage.removeItem("userLegajo");
-    localStorage.removeItem("groupId");
-    localStorage.removeItem("lastSearchQuery");
-    currentGroup = null;
-    mutedUsers.clear();
-    clearInterval(reconnectInterval);
-    stopPing();
-    document.getElementById("register").style.display = "block";
-    document.getElementById("main").style.display = "none";
-    document.getElementById("group-screen").style.display = "none";
-    document.getElementById("radar-screen").style.display = "none";
-    document.getElementById("history-screen").style.display = "none";
-    console.log("Sesión cerrada completamente");
-}
-
-// Funciones de notificaciones
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        fetch('/templates/sw.js', { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    navigator.serviceWorker.register('/templates/sw.js')
-                        .then(() => console.log('Service Worker registrado'))
-                        .catch(err => console.error('Error al registrar Service Worker:', err));
-                } else {
-                    console.warn('Archivo sw.js no encontrado.');
-                }
-            })
-            .catch(err => {
-                console.warn('No se pudo verificar sw.js:', err);
-            });
-    } else {
-        console.warn('Service Worker no soportado.');
-    }
-}
-
-function subscribeToPush() {
-    // Comentar esta función hasta que tengas una clave VAPID
-    /*
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array('YOUR_PUBLIC_VAPID_KEY')
-            }).then(subscription => {
-                console.log("Suscripción a push exitosa:", subscription);
-                fetch('/subscribe', {
-                    method: 'POST',
-                    body: JSON.stringify(subscription),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }).catch(err => {
-                    console.error("Error al enviar suscripción al servidor:", err);
-                });
-            }).catch(err => {
-                console.error("Error al suscribirse a push:", err);
-            });
-        }).catch(err => {
-            console.error("Error al obtener el Service Worker:", err);
-        });
-    } else {
-        console.warn('Notificaciones push no soportadas.');
-    }
-    */
-}
-
-function urlBase64ToUint8Array(base64String) {
-    try {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-    } catch (err) {
-        console.error("Error al convertir Base64 a Uint8Array:", err);
-        throw err;
-    }
-}
-
-// Event listeners
+// -------------------- SECCIÓN: Event listeners adicionales (Versión del usuario) --------------------
 document.addEventListener('click', unlockAudio, { once: true });
 
-let lastVolumeUpTime = 0;
-let volumeUpCount = 0;
-
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'VolumeUp') {
-        event.preventDefault();
-        const currentTime = Date.now();
-        const timeDiff = currentTime - lastVolumeUpTime;
-
-        if (timeDiff < 500) {
-            volumeUpCount++;
-            if (volumeUpCount === 2) {
-                toggleTalk();
-                volumeUpCount = 0;
-            }
-        } else {
-            volumeUpCount = 1;
-        }
-        lastVolumeUpTime = currentTime;
-    }
-});
-
-document.addEventListener('touchstart', e => {
-    if (!isSwiping) {
-        startX = e.touches[0].clientX;
-    }
-});
-
-document.addEventListener('touchmove', e => {
-    if (!isSwiping) {
-        currentX = e.touches[0].clientX;
-    }
-});
-
-document.addEventListener('touchend', e => {
-    if (isSwiping) return;
-    const deltaX = currentX - startX;
-    if (Math.abs(deltaX) > 50) {
-        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
-            backToMainFromGroup();
-        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
-            returnToGroup();
-        }
-    }
-});
-
-// Verificar permisos de notificación
-function checkNotificationPermission() {
-    if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-            console.log('Permiso de notificación ya concedido');
-            subscribeToPush();
-        } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                    console.log('Permiso de notificación concedido');
-                    subscribeToPush();
-                } else {
-                    console.warn('Permiso de notificación denegado');
-                }
-            }).catch(err => {
-                console.error('Error al solicitar permiso de notificación:', err);
-            });
-        } else {
-            console.warn('Permiso de notificación denegado previamente');
-        }
-    } else {
-        console.warn('Notificaciones no soportadas en este navegador');
-    }
-}
-
-// Función para cargar historial
-function loadHistory() {
-    fetch('/history')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error al cargar historial: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            const historyList = document.getElementById("history-list");
-            if (!historyList) {
-                console.error("Elemento #history-list no encontrado en el DOM");
-                return;
-            }
-            historyList.innerHTML = "";
-            data.forEach(msg => {
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const utcTime = msg.timestamp.split(":");
-                const utcDate = new Date();
-                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const text = msg.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
-                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
-                if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob);
-                } else {
-                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
-                }
-                historyList.appendChild(msgDiv);
-            });
-            console.log("Historial cargado con", data.length, "mensajes");
-        })
-        .catch(err => {
-            console.error("Error al cargar historial:", err);
-            const historyList = document.getElementById("history-list");
-            if (historyList) {
-                historyList.innerHTML = "<div>Error al cargar el historial</div>";
-            }
-        });
-}
-
+// -------------------- SECCIÓN: Event listeners adicionales (Versión proporcionada) --------------------
+document.addEventListener('click', unlockAudioProvided, { once: true });
