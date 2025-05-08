@@ -57,6 +57,14 @@ async def read_root():
     response.headers["Expires"] = "0"
     return response
 
+@app.get("/register-form", response_class=HTMLResponse)
+async def read_register_form():
+    response = HTMLResponse(content=INDEX_HTML)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 # Diccionario ICAO para pronunciación fonética
 ICAO_ALPHABET = {
     'Alfa': 'A', 'Bravo': 'B', 'Charlie': 'C', 'Delta': 'D', 'Echo': 'E',
@@ -299,168 +307,6 @@ def remove_duplicates(flights):
             unique_flights.append(flight)
     return unique_flights
 
-# Actualizar vuelos FlightRadar24
-async def update_fr24_flights():
-    """Actualiza el caché de FlightRadar24 y lo envía a los clientes."""
-    global fr24_cache
-    while True:
-        fr24_data = await get_flightradar24_data()
-        fr24_cache = fr24_data
-        if fr24_cache:
-            for user in users.values():
-                if user["logged_in"] and user["websocket"]:
-                    try:
-                        await user["websocket"].send_json({
-                            "type": "fr24_update",
-                            "flights": fr24_cache
-                        })
-                        logger.info(f"Actualización FlightRadar24 enviada a {user['name']}")
-                    except Exception as e:
-                        logger.error(f"Error al enviar vuelos FR24: {e}")
-                        user["websocket"] = None
-        else:
-            logger.warning("No se encontraron vuelos FlightRadar24")
-        await asyncio.sleep(60)  # 1 minuto
-
-@app.get("/opensky")
-async def get_opensky_data():
-    """Obtiene datos combinados de Airplanes.Live y AviationStack."""
-    airplanes_data = await get_airplanes_live_data()
-    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
-    departures = await fetch_aviationstack_flights(flight_type="partidas")
-    tams_data = arrivals + departures
-
-    combined_data = []
-    for plane in airplanes_data:
-        flight = plane.get("flight", "").strip()
-        registration = plane.get("r", "").strip()
-        if flight and flight.startswith("ARG"):
-            plane_info = {
-                "flight": flight,
-                "registration": registration,
-                "lat": plane.get("lat"),
-                "lon": plane.get("lon"),
-                "alt_geom": plane.get("alt_geom"),
-                "gs": plane.get("gs"),
-                "vert_rate": plane.get("vert_rate"),
-                "origin_dest": f"{plane.get('orig', 'N/A')}-{plane.get('dest', 'N/A')}"
-            }
-            for tams_flight in tams_data:
-                if tams_flight["Vuelo"] == flight:
-                    plane_info.update({
-                        "scheduled": tams_flight["STD"],
-                        "position": tams_flight["Posicion"],
-                        "destination": tams_flight["Destino"],
-                        "status": tams_flight["Estado"]
-                    })
-                    break
-            combined_data.append(plane_info)
-
-    for tams_flight in tams_data:
-        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
-            combined_data.append({
-                "flight": tams_flight["Vuelo"],
-                "registration": tams_flight["Matricula"],
-                "scheduled": tams_flight["STD"],
-                "position": tams_flight["Posicion"],
-                "destination": tams_flight["Destino"],
-                "status": tams_flight["Estado"],
-                "lat": None,
-                "lon": None,
-                "alt_geom": None,
-                "gs": None,
-                "vert_rate": None,
-                "origin_dest": None
-            })
-
-    logger.info(f"Datos combinados: {len(combined_data)} vuelos")
-    return combined_data
-
-@app.get("/flightradar24")
-async def get_flightradar24_flights():
-    data = await get_flightradar24_data()
-    logger.info(f"Datos FlightRadar24: {len(data)} vuelos")
-    return data
-
-def init_db():
-    """Inicializa la base de datos para mensajes y sesiones."""
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
-                  muted_users TEXT, last_active TIMESTAMP)''')
-    conn.commit()
-    conn.close()
-
-def save_session(token, user_id, name, function, group_id=None, muted_users=None):
-    """Guarda o actualiza una sesión en la base de datos."""
-    muted_users_str = json.dumps(list(muted_users or set()))
-    last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''INSERT OR REPLACE INTO sessions 
-                 (token, user_id, name, function, group_id, muted_users, last_active) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
-              (token, user_id, name, function, group_id, muted_users_str, last_active))
-    conn.commit()
-    conn.close()
-    logger.info(f"Sesión guardada para token={token}")
-
-def load_session(token):
-    """Carga una sesión desde la base de datos."""
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
-              (token,))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        user_id, name, function, group_id, muted_users_str, last_active = row
-        try:
-            muted_users = set(json.loads(muted_users_str))
-        except json.JSONDecodeError:
-            muted_users = set()
-        return {
-            "user_id": user_id,
-            "name": name,
-            "function": function,
-            "group_id": group_id,
-            "muted_users": muted_users,
-            "last_active": last_active
-        }
-    return None
-
-def delete_session(token):
-    """Elimina una sesión de la base de datos."""
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    conn.commit()
-    conn.close()
-    logger.info(f"Sesión eliminada para token={token}")
-
-def save_message(user_id, audio_data, text, timestamp):
-    """Guarda un mensaje en la base de datos."""
-    date = datetime.utcnow().strftime("%Y-%m-%d")
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
-              (user_id, audio_data, text, timestamp, date))
-    conn.commit()
-    conn.close()
-    logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
-
-def get_history():
-    """Obtiene el historial de mensajes."""
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
-    rows = c.fetchall()
-    conn.close()
-    return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
-
 # Nueva función para consultar la API oficial de FlightRadar24
 async def fetch_fr24_flights_official():
     token = os.getenv("FLIGHTRADAR24_API_TOKEN")
@@ -471,19 +317,21 @@ async def fetch_fr24_flights_official():
     url = "https://api.flightradar24.com/v1/flights/summary"
     headers = {"Authorization": f"Bearer {token}"}
     params = {
-        "airline": "ARG",  # Filtrar por Aerolíneas Argentinas (ICAO: ARG)
-        "limit": 100  # Límite de resultados
+        "airline": "ARG",
+        "limit": 100
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, params=params) as response:
+                if response.status == 401:
+                    logger.error("Error de autenticación en FlightRadar24 API: Token inválido")
+                    return []
                 if response.status != 200:
                     logger.error(f"Error en FlightRadar24 API: {response.status} {await response.text()}")
                     return []
                 data = await response.json()
                 flights = data.get("data", [])
-                # Filtrar y formatear los vuelos
                 formatted_flights = [
                     {
                         "flight_number": flight.get("flight", {}).get("number", ""),
@@ -505,7 +353,6 @@ async def fetch_fr24_flights_official():
 async def update_fr24_flights():
     while True:
         try:
-            # Usar la API oficial para Aerolíneas Argentinas
             flights = await fetch_fr24_flights_official()
             if flights:
                 flight_cache["fr24_flights"] = flights
@@ -521,17 +368,22 @@ async def get_aa2000_flights():
     flights = flight_cache.get("fr24_flights", [])
     return {"flights": flights}
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()  # Asegúrate de que esta función esté definida
-    asyncio.create_task(clear_messages())
-    asyncio.create_task(process_audio_queue())
-    asyncio.create_task(update_flights())
-    asyncio.create_task(update_fr24_flights())
-    asyncio.create_task(clean_expired_sessions())
-    logger.info(f"Archivos en templates: {os.listdir('templates')}")
-    logger.info("Aplicación iniciada")
-    
+# Definir clear_messages
+async def clear_messages():
+    while True:
+        try:
+            conn = sqlite3.connect("chat_history.db")
+            c = conn.cursor()
+            c.execute("DELETE FROM messages WHERE date < ?", (datetime.utcnow().strftime("%Y-%m-%d"),))
+            conn.commit()
+            deleted = c.rowcount
+            if deleted > 0:
+                logger.info(f"Eliminados {deleted} mensajes antiguos")
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error al limpiar mensajes: {e}")
+        await asyncio.sleep(86400)  # 24 horas
+
 async def process_audio_queue():
     """Procesa la cola de audio para transcripción y difusión."""
     while True:
@@ -616,11 +468,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     global global_mute_active
 
     try:
-        # Validar y cargar sesión
         session = load_session(token)
         user_id = base64.b64decode(token).decode('utf-8', errors='ignore')
         if session:
-            # Restaurar sesión existente
             users[token] = {
                 "user_id": session["user_id"],
                 "name": session["name"],
@@ -637,7 +487,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 groups[session["group_id"]].append(token)
             logger.info(f"Sesión restaurada para {session['name']} ({token})")
         else:
-            # Nueva sesión
             users[token] = {
                 "user_id": user_id,
                 "name": "Anónimo",
@@ -666,7 +515,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             if message["type"] == "ping":
                 await websocket.send_json({"type": "pong"})
                 logger.debug(f"Ping recibido de {token}, enviado pong")
-                # Actualizar last_active
                 save_session(
                     token,
                     users[token]["user_id"],
@@ -873,7 +721,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
-            # Mantener sesión en la base de datos para reconexión
             save_session(
                 token,
                 users[token]["user_id"],
@@ -888,7 +735,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
             await broadcast_users()
-            # Mantener sesión en la base de datos
             save_session(
                 token,
                 users[token]["user_id"],
@@ -938,7 +784,7 @@ async def broadcast_users():
                 logger.error(f"Error al enviar usuarios: {e}")
                 user["websocket"] = None
                 user["logged_in"] = False
-                
+
 @app.get("/history")
 async def get_history_endpoint():
     """Obtiene el historial de mensajes."""
@@ -946,14 +792,144 @@ async def get_history_endpoint():
     logger.info(f"Historial: {len(history)} mensajes")
     return history
 
-async def clear_messages():
-    """Programa la limpieza de mensajes (no modificada)."""
-    while True:
-        now = datetime.utcnow()
-        start_time = datetime.utcnow().replace(hour=5, minute=30, second=0, microsecond=0)
-        if now.hour >= 14 or (now.hour == 5 and now.minute >= 30):
-            start_time += timedelta(days=1)
-        await asyncio.sleep((start_time - now).total_seconds())
+@app.get("/opensky")
+async def get_opensky_data():
+    """Obtiene datos combinados de Airplanes.Live y AviationStack."""
+    airplanes_data = await get_airplanes_live_data()
+    arrivals = await fetch_aviationstack_flights(flight_type="llegadas")
+    departures = await fetch_aviationstack_flights(flight_type="partidas")
+    tams_data = arrivals + departures
+
+    combined_data = []
+    for plane in airplanes_data:
+        flight = plane.get("flight", "").strip()
+        registration = plane.get("r", "").strip()
+        if flight and flight.startswith("ARG"):
+            plane_info = {
+                "flight": flight,
+                "registration": registration,
+                "lat": plane.get("lat"),
+                "lon": plane.get("lon"),
+                "alt_geom": plane.get("alt_geom"),
+                "gs": plane.get("gs"),
+                "vert_rate": plane.get("vert_rate"),
+                "origin_dest": f"{plane.get('orig', 'N/A')}-{plane.get('dest', 'N/A')}"
+            }
+            for tams_flight in tams_data:
+                if tams_flight["Vuelo"] == flight:
+                    plane_info.update({
+                        "scheduled": tams_flight["STD"],
+                        "position": tams_flight["Posicion"],
+                        "destination": tams_flight["Destino"],
+                        "status": tams_flight["Estado"]
+                    })
+                    break
+            combined_data.append(plane_info)
+
+    for tams_flight in tams_data:
+        if not any(plane["flight"] == tams_flight["Vuelo"] for plane in combined_data):
+            combined_data.append({
+                "flight": tams_flight["Vuelo"],
+                "registration": tams_flight["Matricula"],
+                "scheduled": tams_flight["STD"],
+                "position": tams_flight["Posicion"],
+                "destination": tams_flight["Destino"],
+                "status": tams_flight["Estado"],
+                "lat": None,
+                "lon": None,
+                "alt_geom": None,
+                "gs": None,
+                "vert_rate": None,
+                "origin_dest": None
+            })
+
+    logger.info(f"Datos combinados: {len(combined_data)} vuelos")
+    return combined_data
+
+@app.get("/flightradar24")
+async def get_flightradar24_flights():
+    data = await get_flightradar24_data()
+    logger.info(f"Datos FlightRadar24: {len(data)} vuelos")
+    return data
+
+def init_db():
+    """Inicializa la base de datos para mensajes y sesiones."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS messages 
+                 (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                 (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                  muted_users TEXT, last_active TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+
+def save_session(token, user_id, name, function, group_id=None, muted_users=None):
+    """Guarda o actualiza una sesión en la base de datos."""
+    muted_users_str = json.dumps(list(muted_users or set()))
+    last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute('''INSERT OR REPLACE INTO sessions 
+                 (token, user_id, name, function, group_id, muted_users, last_active) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
+              (token, user_id, name, function, group_id, muted_users_str, last_active))
+    conn.commit()
+    conn.close()
+    logger.info(f"Sesión guardada para token={token}")
+
+def load_session(token):
+    """Carga una sesión desde la base de datos."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
+              (token,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        user_id, name, function, group_id, muted_users_str, last_active = row
+        try:
+            muted_users = set(json.loads(muted_users_str))
+        except json.JSONDecodeError:
+            muted_users = set()
+        return {
+            "user_id": user_id,
+            "name": name,
+            "function": function,
+            "group_id": group_id,
+            "muted_users": muted_users,
+            "last_active": last_active
+        }
+    return None
+
+def delete_session(token):
+    """Elimina una sesión de la base de datos."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+    logger.info(f"Sesión eliminada para token={token}")
+
+def save_message(user_id, audio_data, text, timestamp):
+    """Guarda un mensaje en la base de datos."""
+    date = datetime.utcnow().strftime("%Y-%m-%d")
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
+              (user_id, audio_data, text, timestamp, date))
+    conn.commit()
+    conn.close()
+    logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
+
+def get_history():
+    """Obtiene el historial de mensajes."""
+    conn = sqlite3.connect("chat_history.db")
+    c = conn.cursor()
+    c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
+    rows = c.fetchall()
+    conn.close()
+    return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
 @app.on_event("startup")
 async def startup_event():
@@ -964,6 +940,7 @@ async def startup_event():
     asyncio.create_task(update_flights())
     asyncio.create_task(update_fr24_flights())
     asyncio.create_task(clean_expired_sessions())
+    logger.info(f"Archivos en templates: {os.listdir('templates')}")
     logger.info("Aplicación iniciada")
 
 if __name__ == "__main__":
