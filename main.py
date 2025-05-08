@@ -10,12 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import logging
 import aiohttp
+import requests
 import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
 from FlightRadar24 import FlightRadar24API
 import math
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from cachetools import TTLCache
 
@@ -32,6 +34,10 @@ load_dotenv()
 # Inicializar FastAPI
 app = FastAPI()
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+
+logger = logging.getLogger("uvicorn")
+fr_api = FlightRadar24API()
+flight_cache = TTLCache(maxsize=1000, ttl=300)
 
 # Validar clave de AviationStack
 AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
@@ -455,6 +461,77 @@ def get_history():
     conn.close()
     return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
+# Nueva función para consultar la API oficial de FlightRadar24
+async def fetch_fr24_flights_official():
+    token = os.getenv("FLIGHTRADAR24_API_TOKEN")
+    if not token:
+        logger.error("FLIGHTRADAR24_API_TOKEN no configurado")
+        return []
+
+    url = "https://api.flightradar24.com/v1/flights/summary"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {
+        "airline": "ARG",  # Filtrar por Aerolíneas Argentinas (ICAO: ARG)
+        "limit": 100  # Límite de resultados
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    logger.error(f"Error en FlightRadar24 API: {response.status} {await response.text()}")
+                    return []
+                data = await response.json()
+                flights = data.get("data", [])
+                # Filtrar y formatear los vuelos
+                formatted_flights = [
+                    {
+                        "flight_number": flight.get("flight", {}).get("number", ""),
+                        "origin": flight.get("origin", {}).get("airport", {}).get("iata", ""),
+                        "destination": flight.get("destination", {}).get("airport", {}).get("iata", ""),
+                        "status": flight.get("status", {}).get("text", ""),
+                        "aircraft": flight.get("aircraft", {}).get("model", ""),
+                        "registration": flight.get("aircraft", {}).get("registration", "")
+                    }
+                    for flight in flights
+                    if flight.get("flight", {}).get("airline", {}).get("icao", "") == "ARG"
+                ]
+                return formatted_flights
+    except Exception as e:
+        logger.error(f"Error al consultar FlightRadar24 API: {str(e)}")
+        return []
+
+# Actualizar la tarea existente para incluir datos oficiales
+async def update_fr24_flights():
+    while True:
+        try:
+            # Usar la API oficial para Aerolíneas Argentinas
+            flights = await fetch_fr24_flights_official()
+            if flights:
+                flight_cache["fr24_flights"] = flights
+                logger.info(f"Actualizados {len(flights)} vuelos de Aerolíneas Argentinas")
+            else:
+                logger.warning("No se obtuvieron vuelos de Aerolíneas Argentinas")
+        except Exception as e:
+            logger.error(f"Error en update_fr24_flights: {str(e)}")
+        await asyncio.sleep(300)  # Actualizar cada 5 minutos
+
+@app.get("/aa2000_flights")
+async def get_aa2000_flights():
+    flights = flight_cache.get("fr24_flights", [])
+    return {"flights": flights}
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()  # Asegúrate de que esta función esté definida
+    asyncio.create_task(clear_messages())
+    asyncio.create_task(process_audio_queue())
+    asyncio.create_task(update_flights())
+    asyncio.create_task(update_fr24_flights())
+    asyncio.create_task(clean_expired_sessions())
+    logger.info(f"Archivos en templates: {os.listdir('templates')}")
+    logger.info("Aplicación iniciada")
+    
 async def process_audio_queue():
     """Procesa la cola de audio para transcripción y difusión."""
     while True:
