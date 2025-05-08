@@ -1,0 +1,41 @@
+{
+  "name": "Handyhandle",
+  "short_name": "Handyhandle",
+  "start_url": "/templates/index.html", // Actualizado para alinearse con el scope del Service Worker
+  "scope": "/templates/", // Actualizado para coincidir con el Service Worker
+  "display": "standalone",
+  "background_color": "#87CEEB", // Actualizado para coincidir con el fondo de style.css
+  "theme_color": "#2196f3",
+  "orientation": "portrait",
+  "description": "Aplicación de comunicación aeronáutica para coordinar operaciones en aeropuertos", // Nuevo: Descripción de la aplicación
+  "lang": "es", // Nuevo: Especifica el idioma español
+  "icons": [
+    {
+      "src": "/templates/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/templates/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/templates/icon-180x180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable" // Actualizado: Añadido maskable para mayor compatibilidad
+    },
+    {
+      "src": "/templates/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/templates/icon-384x384.png", // Nuevo: Ícono para tamaños intermedios
+      "sizes": "384x384",
+      "type": "image/png"
+    }
+  ]
+    }
