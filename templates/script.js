@@ -107,6 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    initializeApp();
 });
 
 // -------------------- SECCIÓN: Manejar visibilidad de pestaña --------------------
@@ -289,12 +291,20 @@ async function connectWebSocket(sessionToken, retryCount = 0) {
                 case 'mute_non_group_success':
                     message.user_ids.forEach(id => mutedUsers.add(id));
                     updateUsers(message.count, message.list);
-                    document.getElementById('mute-non-group')?.classList.add('muted').textContent = 'Desmutear no grupo';
+                    const muteNonGroupButton = document.getElementById('mute-non-group');
+                    if (muteNonGroupButton) {
+                        muteNonGroupButton.classList.add('muted');
+                        muteNonGroupButton.textContent = 'Desmutear no grupo';
+                    }
                     break;
                 case 'unmute_non_group_success':
                     message.user_ids.forEach(id => mutedUsers.delete(id));
                     updateUsers(message.count, message.list);
-                    document.getElementById('mute-non-group')?.classList.remove('muted').textContent = 'Mutear no grupo';
+                    const muteNonGroupButton = document.getElementById('mute-non-group');
+                    if (muteNonGroupButton) {
+                        muteNonGroupButton.classList.remove('muted');
+                        muteNonGroupButton.textContent = 'Mutear no grupo';
+                    }
                     break;
                 case 'group_joined':
                 case 'create_group_success':
@@ -788,29 +798,44 @@ function addChatMessage(message, chatListId) {
 // -------------------- SECCIÓN: Muteo --------------------
 function toggleMute() {
     const muteButton = document.getElementById('mute');
+    if (!muteButton) return;
     if (muteButton.classList.contains('unmuted')) {
         ws.send(JSON.stringify({ type: 'mute_all' }));
-        muteButton.classList.remove('unmuted').add('muted');
+        muteButton.classList.remove('unmuted');
+        muteButton.classList.add('muted');
     } else {
         ws.send(JSON.stringify({ type: 'unmute_all' }));
-        muteButton.classList.remove('muted').add('unmuted');
+        muteButton.classList.remove('muted');
+        muteButton.classList.add('unmuted');
     }
 }
 
 function updateMuteButton(isMuted) {
     const muteButton = document.getElementById('mute');
     const groupMuteButton = document.getElementById('group-mute');
-    if (isMuted) {
-        muteButton.classList.remove('unmuted').add('muted');
-        if (groupMuteButton) groupMuteButton.classList.remove('unmuted').add('muted');
-    } else {
-        muteButton.classList.remove('muted').add('unmuted');
-        if (groupMuteButton) groupMuteButton.classList.remove('muted').add('unmuted');
+    if (muteButton) {
+        if (isMuted) {
+            muteButton.classList.remove('unmuted');
+            muteButton.classList.add('muted');
+        } else {
+            muteButton.classList.remove('muted');
+            muteButton.classList.add('unmuted');
+        }
+    }
+    if (groupMuteButton) {
+        if (isMuted) {
+            groupMuteButton.classList.remove('unmuted');
+            groupMuteButton.classList.add('muted');
+        } else {
+            groupMuteButton.classList.remove('muted');
+            groupMuteButton.classList.add('unmuted');
+        }
     }
 }
 
 function toggleMuteNonGroup() {
     const muteNonGroupButton = document.getElementById('mute-non-group');
+    if (!muteNonGroupButton) return;
     if (muteNonGroupButton.classList.contains('muted')) {
         ws.send(JSON.stringify({ type: 'unmute_non_group' }));
     } else {
@@ -1067,7 +1092,29 @@ function base64ToBlob(base64, mime) {
     }
 }
 
-// -------------------- SECCIÓN: Event listeners adicionales --------------------
+// -------------------- SECCIÓN: Inicialización final --------------------
+function initializeApp() {
+    // Verificar soporte para APIs necesarias
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Este navegador no soporta grabación de audio.');
+        document.getElementById('talk').disabled = true;
+        document.getElementById('group-talk').disabled = true;
+    }
+
+    // Inicializar mapa si está en la pantalla de radar
+    if (document.getElementById('radar-screen').style.display === 'block') {
+        initMap();
+    }
+
+    // Restaurar estado de muteo desde localStorage
+    const storedMutedUsers = localStorage.getItem('mutedUsers');
+    if (storedMutedUsers) {
+        mutedUsers = new Set(JSON.parse(storedMutedUsers));
+    }
+
+    console.log('Aplicación inicializada');
+}
+
 // -------------------- SECCIÓN: Event listeners adicionales --------------------
 document.addEventListener('click', unlockAudio, { once: true });
 
@@ -1099,7 +1146,7 @@ window.addEventListener('offline', () => {
 
 // Atajos de teclado para acciones comunes
 document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; // Ignorar si está en un input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 't' && document.getElementById('main').style.display === 'block') {
         toggleTalk();
         e.preventDefault();
@@ -1130,7 +1177,7 @@ document.addEventListener('keydown', (e) => {
 // Prevenir acciones predeterminadas en gestos táctiles para evitar zooms no deseados
 document.addEventListener('touchstart', (e) => {
     if (e.touches.length > 1 && map) {
-        e.preventDefault(); // Evitar zoom con dos dedos en el mapa
+        e.preventDefault();
     }
 }, { passive: false });
 
@@ -1142,7 +1189,7 @@ function updateClock() {
     }
 }
 setInterval(updateClock, 60000);
-updateClock(); // Ejecutar inmediatamente
+updateClock();
 
 // Limpiar recursos al cerrar la ventana
 window.addEventListener('beforeunload', () => {
@@ -1160,32 +1207,4 @@ window.addEventListener('beforeunload', () => {
         ws.close();
     }
     stopPing();
-});
-
-// -------------------- SECCIÓN: Inicialización final --------------------
-function initializeApp() {
-    // Verificar soporte para APIs necesarias
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert('Este navegador no soporta grabación de audio.');
-        document.getElementById('talk').disabled = true;
-        document.getElementById('group-talk').disabled = true;
-    }
-
-    // Inicializar mapa si está en la pantalla de radar
-    if (document.getElementById('radar-screen').style.display === 'block') {
-        initMap();
-    }
-
-    // Restaurar estado de muteo desde localStorage (opcional)
-    const storedMutedUsers = localStorage.getItem('mutedUsers');
-    if (storedMutedUsers) {
-        mutedUsers = new Set(JSON.parse(storedMutedUsers));
-    }
-
-    console.log('Aplicación inicializada');
-}
-
-// Ejecutar inicialización después de cargar el DOM
-document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
 });
