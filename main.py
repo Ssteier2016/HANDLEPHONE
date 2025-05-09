@@ -18,6 +18,7 @@ from pydub import AudioSegment
 from dotenv import load_dotenv
 from cachetools import TTLCache
 from pydantic import BaseModel, validator
+from passlib.context import CryptContext
 
 # Configurar logging
 logging.basicConfig(
