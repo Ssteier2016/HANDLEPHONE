@@ -55,7 +55,7 @@ app.add_middleware(
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
 # Validar clave de API de Flightradar24
-FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN")
+FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN", "0196b02d-c431-730e-9568-2818c63dfffb|rBcckwvouhadeFZ6MZ6BhySk6inLiOawDaOF1kSC759904ca")
 if not FLIGHTRADAR24_API_TOKEN:
     logger.error("Falta el token de API de Flightradar24 en las variables de entorno")
     raise ValueError("FLIGHTRADAR24_API_TOKEN no está configurada")
@@ -284,8 +284,8 @@ async def get_flightradar24_flights(query: Optional[str] = None):
         time_max_str = time_max.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         headers = {
-            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-            'Accept': 'application/json'
+    'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
+    'Accept': 'application/json'
         }
         params = {
             'airline': 'AR',  # Aerolíneas Argentinas
@@ -366,8 +366,8 @@ async def get_flight_details(flight_number: str):
 
     try:
         headers = {
-            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-            'Accept': 'application/json'
+    'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
+    'Accept': 'application/json'
         }
         params = {
             'flight_number': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
