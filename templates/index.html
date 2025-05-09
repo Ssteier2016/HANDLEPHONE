@@ -14,7 +14,6 @@
     <link rel="manifest" href="/templates/manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <script>
-        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/templates/sw.js', { scope: '/templates/' })
@@ -30,7 +29,7 @@
     </script>
 </head>
 <body>
-    <!-- Pantalla de registro (unificada) -->
+    <!-- Pantalla de registro -->
     <div id="register" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
         <h1>Registro</h1>
@@ -53,7 +52,7 @@
         <button id="register-button">Registrarse</button>
     </div>
 
-    <!-- Pantalla principal (unificada) -->
+    <!-- Pantalla principal -->
     <div id="main" style="display: none;">
         <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
@@ -67,7 +66,11 @@
         </div>
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
-            <div id="flight-details"></div>
+            <div class="flight-controls">
+                <button id="flight-up" class="nav-button" aria-label="Subir en la lista de vuelos">▲</button>
+                <div id="flight-details" class="flight-details-scroll"></div>
+                <button id="flight-down" class="nav-button" aria-label="Bajar en la lista de vuelos">▼</button>
+            </div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
@@ -88,7 +91,7 @@
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
-    <!-- Pantalla de grupo (unificada) -->
+    <!-- Pantalla de grupo -->
     <div id="group-screen" style="display: none;">
         <button id="back-to-main" onclick="backToMainFromGroup()">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
@@ -98,7 +101,11 @@
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
-            <div id="group-flight-details"></div>
+            <div class="flight-controls">
+                <button id="group-flight-up" class="nav-button" aria-label="Subir en la lista de vuelos">▲</button>
+                <div id="group-flight-details" class="flight-details-scroll"></div>
+                <button id="group-flight-down" class="nav-button" aria-label="Bajar en la lista de vuelos">▼</button>
+            </div>
         </div>
         <div id="group-chat-window">
             <h3>Conversación</h3>
@@ -113,7 +120,7 @@
         <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
-    <!-- Pantalla de radar (unificada) -->
+    <!-- Pantalla de radar -->
     <div id="radar-screen" style="display: none;">
         <div class="radar-header">
             <h2>Radar</h2>
@@ -123,7 +130,7 @@
         <div id="map" style="height: 400px;"></div>
     </div>
 
-    <!-- Pantalla de historial (unificada) -->
+    <!-- Pantalla de historial -->
     <div id="history-screen" style="display: none;">
         <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <button onclick="backToMain()">Volver</button>
@@ -132,6 +139,6 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/script.js"></script> <!-- Cambiado de /templates/script.js a /script.js -->
+    <script src="/script.js"></script>
 </body>
-</html>
+        </html>
