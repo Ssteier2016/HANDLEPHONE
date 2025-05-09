@@ -1687,7 +1687,59 @@ function checkNotificationPermission() {
         console.warn('Notificaciones no soportadas en este navegador');
     }
 }
+// Agregar al final de script.js
 
+function setupFlightNavigation() {
+    const flightDetails = document.getElementById('flight-details');
+    const groupFlightDetails = document.getElementById('group-flight-details');
+    const flightUp = document.getElementById('flight-up');
+    const flightDown = document.getElementById('flight-down');
+    const groupFlightUp = document.getElementById('group-flight-up');
+    const groupFlightDown = document.getElementById('group-flight-down');
+
+    if (!flightDetails || !groupFlightDetails || !flightUp || !flightDown || !groupFlightUp || !groupFlightDown) {
+        console.error("Elementos de navegación de vuelos no encontrados en el DOM");
+        return;
+    }
+
+    function updateButtonStates(container, upButton, downButton) {
+        upButton.disabled = container.scrollTop === 0;
+        downButton.disabled = container.scrollTop + container.clientHeight >= container.scrollHeight;
+    }
+
+    flightDetails.addEventListener('scroll', () => updateButtonStates(flightDetails, flightUp, flightDown));
+    groupFlightDetails.addEventListener('scroll', () => updateButtonStates(groupFlightDetails, groupFlightUp, groupFlightDown));
+
+    flightUp.addEventListener('click', () => {
+        flightDetails.scrollBy({ top: -50, behavior: 'smooth' });
+        updateButtonStates(flightDetails, flightUp, flightDown);
+    });
+
+    flightDown.addEventListener('click', () => {
+        flightDetails.scrollBy({ top: 50, behavior: 'smooth' });
+        updateButtonStates(flightDetails, flightUp, flightDown);
+    });
+
+    groupFlightUp.addEventListener('click', () => {
+        groupFlightDetails.scrollBy({ top: -50, behavior: 'smooth' });
+        updateButtonStates(groupFlightDetails, groupFlightUp, groupFlightDown);
+    });
+
+    groupFlightDown.addEventListener('click', () => {
+        groupFlightDetails.scrollBy({ top: 50, behavior: 'smooth' });
+        updateButtonStates(groupFlightDetails, groupFlightUp, groupFlightDown);
+    });
+
+    // Inicializar estados de los botones
+    updateButtonStates(flightDetails, flightUp, flightDown);
+    updateButtonStates(groupFlightDetails, groupFlightUp, groupFlightDown);
+}
+
+// Llamar a la función al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    // ... código existente ...
+    setupFlightNavigation();
+});
 // Función para cargar historial
 function loadHistory() {
     fetch('/history')
