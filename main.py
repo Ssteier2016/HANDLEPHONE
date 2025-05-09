@@ -54,12 +54,8 @@ app.add_middleware(
 # Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
-# Validar claves de API
-GOFLIGHTLABS_API_KEY = os.getenv("GOFLIGHTLABS_API_KEY")
+# Validar clave de API de Flightradar24
 FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN")
-if not GOFLIGHTLABS_API_KEY:
-    logger.error("Falta la clave de API de GoFlightLabs en las variables de entorno")
-    raise ValueError("GOFLIGHTLABS_API_KEY no está configurada")
 if not FLIGHTRADAR24_API_TOKEN:
     logger.error("Falta el token de API de Flightradar24 en las variables de entorno")
     raise ValueError("FLIGHTRADAR24_API_TOKEN no está configurada")
@@ -69,9 +65,8 @@ with open("templates/index.html", "r") as f:
     INDEX_HTML = f.read()
 
 # Crear cachés
-flight_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /aep_flights
-flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
 flightradar24_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flightradar24_flights
+flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
 
 # Lista de usuarios permitidos (apellido: legajo o None si no se especifica)
 ALLOWED_USERS = {
@@ -271,87 +266,6 @@ async def login_user(request: LoginRequest):
 
     return {"token": token, "message": "Inicio de sesión exitoso"}
 
-# Endpoint para obtener vuelos de Aeroparque (GoFlightLabs)
-@app.get("/aep_flights")
-async def get_aep_flights(query: Optional[str] = None):
-    """Obtiene vuelos de Aeroparque filtrados por consulta opcional."""
-    cache_key = f'aep_flights_ar_{query or "all"}'
-    if cache_key in flight_cache:
-        logger.info(f'Sirviendo desde caché: {cache_key}')
-        return flight_cache[cache_key]
-
-    try:
-        params = {
-            'access_key': GOFLIGHTLABS_API_KEY,
-            'airline_iata': 'AR',
-            'dep_iata': 'AEP',
-            'arr_iata': 'AEP',
-            'flight_status': 'scheduled,active,landed'
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get('https://api.goflightlabs.com/v1/flights', params=params, timeout=15) as response:
-                if response.status != 200:
-                    logger.error(f"Error GoFlightLabs: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
-                data = await response.json()
-
-        if not data.get('success', False):
-            logger.error(f"Error GoFlightLabs: {data.get('error', 'Unknown')}")
-            raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
-
-        now = datetime.utcnow()
-        time_min = now - timedelta(hours=12)
-        time_max = now + timedelta(hours=12)
-
-        filtered_flights = []
-        for flight in data.get('data', []):
-            departure_time = flight.get('departure', {}).get('scheduled', '')
-            arrival_time = flight.get('arrival', {}).get('scheduled', '')
-            try:
-                dep_dt = datetime.fromisoformat(departure_time.replace('Z', '+00:00')) if departure_time else None
-                arr_dt = datetime.fromisoformat(arrival_time.replace('Z', '+00:00')) if arrival_time else None
-            except ValueError:
-                logger.warning(f"Formato de fecha inválido: {departure_time}, {arrival_time}")
-                continue
-            if (dep_dt and time_min <= dep_dt <= time_max) or (arr_dt and time_min <= arr_dt <= time_max):
-                flight_data = {
-                    'flight_number': flight.get('flight', {}).get('number', ''),
-                    'departure_airport': flight.get('departure', {}).get('airport', ''),
-                    'departure_time': departure_time,
-                    'arrival_airport': flight.get('arrival', {}).get('airport', ''),
-                    'arrival_time': arrival_time,
-                    'status': flight.get('flight_status', ''),
-                    'gate': flight.get('departure', {}).get('gate', 'N/A'),
-                    'delay': flight.get('departure', {}).get('delay', 0),
-                    'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
-                    'destination': flight.get('arrival', {}).get('airport', ''),
-                    'origin': flight.get('departure', {}).get('airport', ''),
-                    'source': 'goflightlabs'
-                }
-                filtered_flights.append(flight_data)
-
-        if query:
-            query = query.lower()
-            filtered_flights = [
-                f for f in filtered_flights
-                if query in f['flight_number'].lower() or
-                   query in f['departure_airport'].lower() or
-                   query in f['arrival_airport'].lower() or
-                   query in f['status'].lower()
-            ]
-
-        response_data = {'flights': filtered_flights}
-        flight_cache[cache_key] = response_data
-        logger.info(f'Respuesta cacheada: {cache_key}, {len(filtered_flights)} vuelos')
-        return response_data
-
-    except aiohttp.ClientError as e:
-        logger.error(f"Error al consultar GoFlightLabs: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error interno en /aep_flights: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-
 # Endpoint para obtener vuelos de Aerolíneas Argentinas desde Flightradar24
 @app.get("/flightradar24_flights")
 async def get_flightradar24_flights(query: Optional[str] = None):
@@ -433,42 +347,23 @@ async def get_flightradar24_flights(query: Optional[str] = None):
 # Endpoint combinado para compatibilidad con frontend
 @app.get("/api/flights")
 async def get_flights(query: Optional[str] = None):
-    """Obtiene vuelos combinando GoFlightLabs y Flightradar24."""
+    """Obtiene vuelos de Flightradar24."""
     try:
-        goflightlabs_data = await get_aep_flights(query)
         flightradar24_data = await get_flightradar24_flights(query)
-
-        # Combinar vuelos, eliminando duplicados por flight_number
-        combined_flights = []
-        flight_numbers = set()
-        
-        # Priorizar Flightradar24 para vuelos recientes
-        for flight in flightradar24_data['flights']:
-            if flight['flight_number'] not in flight_numbers:
-                combined_flights.append(flight)
-                flight_numbers.add(flight['flight_number'])
-        
-        # Añadir vuelos de GoFlightLabs no duplicados
-        for flight in goflightlabs_data['flights']:
-            if flight['flight_number'] not in flight_numbers:
-                combined_flights.append(flight)
-                flight_numbers.add(flight['flight_number'])
-
-        return {'flights': combined_flights}
+        return {'flights': flightradar24_data['flights']}
     except Exception as e:
-        logger.error(f"Error al combinar vuelos: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al combinar datos de vuelos: {str(e)}")
+        logger.error(f"Error al obtener vuelos: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener datos de vuelos: {str(e)}")
 
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
 async def get_flight_details(flight_number: str):
-    """Obtiene detalles de un vuelo específico, intentando primero Flightradar24."""
+    """Obtiene detalles de un vuelo específico desde Flightradar24."""
     cache_key = f'flight_details_{flight_number}'
     if cache_key in flight_details_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flight_details_cache[cache_key]
 
-    # Intentar con Flightradar24 primero
     try:
         headers = {
             'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
@@ -480,72 +375,36 @@ async def get_flight_details(flight_number: str):
         }
         async with aiohttp.ClientSession() as session:
             async with session.get('https://fr24api.flightradar24.com/v1/flight/summary/full', headers=headers, params=params, timeout=15) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get('success', False) and data.get('data'):
-                        flight = data['data'][0]
-                        flight_data = {
-                            'flight_number': flight.get('flight_number', ''),
-                            'departure_airport': flight.get('departure_airport', {}).get('name', ''),
-                            'departure_time': flight.get('departure_time', ''),
-                            'arrival_airport': flight.get('arrival_airport', {}).get('name', ''),
-                            'arrival_time': flight.get('arrival_time', ''),
-                            'status': flight.get('status', ''),
-                            'gate': flight.get('departure_gate', 'N/A'),
-                            'delay': flight.get('departure_delay', 0),
-                            'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
-                            'destination': flight.get('arrival_airport', {}).get('name', ''),
-                            'origin': flight.get('departure_airport', {}).get('name', ''),
-                            'source': 'flightradar24'
-                        }
-                        flight_details_cache[cache_key] = flight_data
-                        logger.info(f'Detalles cacheados: {cache_key} (Flightradar24)')
-                        return flight_data
-    except aiohttp.ClientError as e:
-        logger.warning(f"Falló Flightradar24 para {flight_number}: {e}, intentando GoFlightLabs")
-
-    # Fallback a GoFlightLabs
-    try:
-        params = {
-            'access_key': GOFLIGHTLABS_API_KEY,
-            'flight_iata': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
-            'dep_iata': 'AEP',
-            'arr_iata': 'AEP'
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get('https://api.goflightlabs.com/v1/flights', params=params, timeout=15) as response:
                 if response.status != 200:
-                    logger.error(f"Error GoFlightLabs: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de GoFlightLabs")
+                    logger.error(f"Error Flightradar24: {response.status}")
+                    raise HTTPException(status_code=500, detail="Error en la API de Flightradar24")
                 data = await response.json()
 
-        flights = data.get('data', [])
-        if not flights:
+        if not data.get('success', False) or not data.get('data'):
             logger.warning(f"No se encontró el vuelo: {flight_number}")
             raise HTTPException(status_code=404, detail="Vuelo no encontrado")
 
-        flight = flights[0]
+        flight = data['data'][0]
         flight_data = {
-            'flight_number': flight.get('flight', {}).get('number', ''),
-            'departure_airport': flight.get('departure', {}).get('iata', ''),
-            'departure_time': flight.get('departure', {}).get('scheduled', ''),
-            'arrival_airport': flight.get('arrival', {}).get('iata', ''),
-            'arrival_time': flight.get('arrival', {}).get('scheduled', ''),
-            'status': flight.get('flight_status', ''),
-            'gate': flight.get('departure', {}).get('gate', 'N/A'),
-            'delay': flight.get('departure', {}).get('delay', 0),
+            'flight_number': flight.get('flight_number', ''),
+            'departure_airport': flight.get('departure_airport', {}).get('name', ''),
+            'departure_time': flight.get('departure_time', ''),
+            'arrival_airport': flight.get('arrival_airport', {}).get('name', ''),
+            'arrival_time': flight.get('arrival_time', ''),
+            'status': flight.get('status', ''),
+            'gate': flight.get('departure_gate', 'N/A'),
+            'delay': flight.get('departure_delay', 0),
             'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
-            'destination': flight.get('arrival', {}).get('airport', ''),
-            'origin': flight.get('departure', {}).get('airport', ''),
-            'source': 'goflightlabs'
+            'destination': flight.get('arrival_airport', {}).get('name', ''),
+            'origin': flight.get('departure_airport', {}).get('name', ''),
+            'source': 'flightradar24'
         }
-
         flight_details_cache[cache_key] = flight_data
-        logger.info(f'Detalles cacheados: {cache_key} (GoFlightLabs)')
+        logger.info(f'Detalles cacheados: {cache_key} (Flightradar24)')
         return flight_data
 
     except aiohttp.ClientError as e:
-        logger.error(f"Error al consultar GoFlightLabs: {e}")
+        logger.error(f"Error al consultar Flightradar24: {e}")
         raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
     except Exception as e:
         logger.error(f"Error interno en /flight_details: {e}")
@@ -556,7 +415,7 @@ async def update_flights():
     """Actualiza el caché de vuelos y lo difunde a los clientes conectados."""
     while True:
         try:
-            response = await get_flights()  # Usar endpoint combinado
+            response = await get_flights()  # Usar endpoint /api/flights
             logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
             disconnected_users = []
             for token, user in users.items():
