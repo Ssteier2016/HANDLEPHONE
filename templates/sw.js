@@ -1,9 +1,11 @@
 const CACHE_NAME = 'handyhandle-cache-v3';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'handyhandle-sync';
+const API_CACHE = 'api-cache';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
 
 const urlsToCache = [
+    '/',
     '/templates/index.html',
     '/templates/style.css',
     '/templates/script.js',
@@ -24,14 +26,23 @@ const urlsToCache = [
 // Instalar el Service Worker y cachear los recursos
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
+        Promise.all([
+            caches.open(CACHE_NAME).then(cache => {
                 console.log('Cache abierto:', CACHE_NAME);
                 return cache.addAll(urlsToCache);
+            }),
+            caches.open('v1').then(cache => {
+                console.log('Cache v1 abierto para compatibilidad');
+                return cache.addAll([
+                    '/',
+                    '/templates/index.html',
+                    '/templates/style.css',
+                    '/templates/script.js'
+                ]);
             })
-            .catch(err => {
-                console.error('Error al abrir cache:', err);
-            })
+        ]).catch(err => {
+            console.error('Error al abrir caches:', err);
+        })
     );
     self.skipWaiting();
 });
@@ -42,7 +53,7 @@ self.addEventListener('activate', event => {
         caches.keys().then(cacheNames => {
             return Promise.all(
                 cacheNames.map(cacheName => {
-                    if (cacheName !== CACHE_NAME) {
+                    if (cacheName !== CACHE_NAME && cacheName !== API_CACHE && cacheName !== 'v1') {
                         console.log('Eliminando cache antiguo:', cacheName);
                         return caches.delete(cacheName);
                     }
@@ -57,7 +68,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const requestUrl = new URL(event.request.url);
 
-    // No cachear WebSocket ni rutas dinámicas
+    // No cachear WebSocket ni rutas dinámicas específicas
     if (requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
         requestUrl.pathname === '/aa2000_flights' ||
@@ -72,6 +83,28 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // Manejar solicitudes a la API de Flightradar24
+    if (requestUrl.href.includes('api.flightradar24.com')) {
+        event.respondWith(
+            caches.open(API_CACHE).then(cache => {
+                return fetch(event.request).then(response => {
+                    if (response.status === 200) {
+                        cache.put(event.request, response.clone());
+                        console.log('Cacheando respuesta de Flightradar24:', requestUrl.href);
+                    }
+                    return response;
+                }).catch(() => {
+                    console.log('Sirviendo Flightradar24 desde caché:', requestUrl.href);
+                    return cache.match(event.request).then(cachedResponse => {
+                        return cachedResponse || new Response('Offline', { status: 503 });
+                    });
+                });
+            })
+        );
+        return;
+    }
+
+    // Manejar otras solicitudes (estáticas y dinámicas)
     event.respondWith(
         caches.match(event.request)
             .then(response => {
@@ -204,7 +237,7 @@ function openDB() {
     });
 }
 
-// Manejo de notificaciones push (descomentar cuando tengas VAPID)
+// Manejo de notificaciones push
 self.addEventListener('push', event => {
     const data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje recibido' };
     event.waitUntil(
