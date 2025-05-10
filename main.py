@@ -257,7 +257,7 @@ async def login_user(request: LoginRequest):
 @app.get("/flightradar24_flights")
 async def get_flightradar24_flights(query: Optional[str] = None):
     cache_key = f'flightradar24_flights_ar_{query or "all"}'
-    if cache_key in flightradar24_cache:
+    if cache_key in flightradar24_cache
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flightradar24_cache[cache_key]
 
@@ -271,13 +271,14 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "airport": "AEP",  # Filtrar por Aeroparque
+        "airports": "AEP",  # Cambiado de 'airport' a 'airports' según el mensaje de error
+        # Alternativa: usar "routes": "SAEZ" (código ICAO) si 'airports: AEP' falla
         "limit": 10  # Reducido para evitar restricciones
     }
     headers = {
         "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
         "Accept": "application/json",
-        "Accept-Version": "v1",  # Reincorporado como requerido por la API
+        "Accept-Version": "v1",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
 
@@ -434,14 +435,15 @@ async def get_flight_details(flight_number: str):
         params = {
             "flight_datetime_from": flight_datetime_from,
             "flight_datetime_to": flight_datetime_to,
-            "airport": "AEP",  # Filtrar por Aeroparque
+            "airports": "AEP",  # Cambiado de 'airport' a 'airports' según el mensaje de error
+            # Alternativa: usar "routes": "SAEZ" (código ICAO) si 'airports: AEP' falla
             "flight_number": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             "limit": 1
         }
         headers = {
             "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
             "Accept": "application/json",
-            "Accept-Version": "v1",  # Reincorporado como requerido por la API
+            "Accept-Version": "v1",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
 
