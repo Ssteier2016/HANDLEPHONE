@@ -290,7 +290,8 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "limit": 100  # Obtener hasta 100 vuelos
+        "airports": "AEP",  # Filtro necesario para la API
+        "limit": 100
     }
 
     # Intentar con cada token en orden
@@ -373,6 +374,7 @@ async def get_flight_details(flight_number: str):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
+        "airports": "AEP",  # Filtro necesario para la API
         "limit": 100
     }
 
@@ -636,13 +638,15 @@ async def process_audio_queue():
             if disconnected_users:
                 await broadcast_users()
 
+            # Llamar task_done() solo después de procesar exitosamente
+            audio_queue.task_done()
+
         except asyncio.CancelledError:
             logger.info("Tarea de audio queue cancelada")
             break
         except Exception as e:
             logger.error(f"Error procesando audio queue: {e}")
-        finally:
-            audio_queue.task_done()
+            # No llamar task_done() en caso de error
 
 # Limpiar sesiones expiradas
 async def clean_expired_sessions():
