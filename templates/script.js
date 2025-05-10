@@ -19,6 +19,8 @@ let startX = 0;
 let currentX = 0;
 let flightData = [];
 let reconnectInterval = null;
+let announcementsEnabled = false; // Estado de los anuncios
+let announcedFlights = []; // Lista de vuelos ya anunciados
 const PING_INTERVAL = 30000; // Ping cada 30 segundos
 const RECONNECT_BASE_DELAY = 5000; // Reintento base cada 5 segundos
 const SYNC_TAG = 'sync-messages'; // Tag para sincronización
@@ -122,6 +124,18 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('register-form').style.display = 'block';
             document.getElementById('login-form').style.display = 'none';
         });
+    }
+
+    // Listener para el botón de anuncios
+    const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
+    if (toggleAnnouncementsBtn) {
+        toggleAnnouncementsBtn.addEventListener('click', () => {
+            announcementsEnabled = !announcementsEnabled;
+            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de vuelos' : 'Activar anuncios de vuelos';
+            console.log("Anuncios de vuelos:", announcementsEnabled ? "activados" : "desactivados");
+        });
+    } else {
+        console.error("Botón #toggle-announcements no encontrado");
     }
 
     checkNotificationPermission();
@@ -666,20 +680,18 @@ async function updateOpenSkyData() {
         if (response.ok) {
             const data = await response.json();
             console.log("Datos recibidos de /api/flights:", data);
-            flightData = data.flights;
+            flightData = data.flights || [];
 
             const flightDetails = document.getElementById("flight-details");
             const groupFlightDetails = document.getElementById("group-flight-details");
+
             if (!flightDetails || !groupFlightDetails) {
-                console.error("Elementos #flight-details o #group-flight-details no encontrados en el DOM");
+                console.error("Contenedores #flight-details o #group-flight-details no encontrados");
                 return;
             }
-            flightDetails.innerHTML = "";
-            groupFlightDetails.innerHTML = "";
 
-            if (map) {
-                markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
-            }
+            flightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
+            groupFlightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
 
             flightData.forEach(flight => {
                 const flightNumber = flight.flight_number || "N/A";
@@ -702,26 +714,41 @@ async function updateOpenSkyData() {
                 groupFlightDetails.appendChild(flightDiv.cloneNode(true));
             });
 
+            // Anunciar vuelos próximos a aterrizar
+            if (announcementsEnabled) {
+                const approachingFlights = flightData.filter(flight => flight.status === "En zona");
+                approachingFlights.forEach(flight => {
+                    if (!announcedFlights.includes(flight.flight_number)) {
+                        announceFlight(flight);
+                        announcedFlights.push(flight.flight_number);
+                    }
+                });
+            }
+
             flightDetails.scrollTop = flightDetails.scrollHeight;
             groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
         } else {
             console.warn("Error al cargar /api/flights:", response.status);
-            const flightDetails = document.getElementById("flight-details");
-            const groupFlightDetails = document.getElementById("group-flight-details");
-            if (flightDetails) flightDetails.innerHTML = "<div>Error al cargar datos de vuelos</div>";
-            if (groupFlightDetails) groupFlightDetails.innerHTML = "<div>Error al cargar datos de vuelos</div>";
+            throw new Error("Respuesta no OK");
         }
     } catch (err) {
         console.error("Error al cargar datos de vuelos:", err);
         const flightDetails = document.getElementById("flight-details");
         const groupFlightDetails = document.getElementById("group-flight-details");
-        if (flightDetails) flightDetails.innerHTML = "<div>Error al conectar con los servidores de vuelos</div>";
-        if (groupFlightDetails) groupFlightDetails.innerHTML = "<div>Error al conectar con los servidores de vuelos</div>";
-        if (map) {
-            markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
-        }
+        if (flightDetails) flightDetails.innerHTML = "<p>Error al cargar datos de vuelos</p>";
+        if (groupFlightDetails) groupFlightDetails.innerHTML = "<p>Error al cargar datos de vuelos</p>";
     }
     setTimeout(updateOpenSkyData, 15000);
+}
+
+function announceFlight(flight) {
+    const utterance = new SpeechSynthesisUtterance();
+    const eta = flight.lat && flight.lon && flight.speed 
+        ? estimateArrivalTime(flight.lat, flight.lon, flight.speed) 
+        : "aproximadamente 10 minutos";
+    utterance.text = `Vuelo ${flight.flight_number} procedente de ${flight.origin} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
+    utterance.lang = 'es-ES';
+    speechSynthesis.speak(utterance);
 }
 
 // Funciones de mapa
@@ -1391,7 +1418,7 @@ function showHistory() {
                 msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
                 const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
                 if (audioBlob) {
-                    msgDiv.onclick = () => playbehAudio(audioBlob);
+                    msgDiv.onclick = () => playAudio(audioBlob);
                 } else {
                     console.error("No se pudo crear Blob para mensaje del historial:", msg);
                 }
@@ -1648,7 +1675,7 @@ function loadHistory() {
                 msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
                 const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
                 if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob); // Corregido: playAudio en lugar de playbehAudio
+                    msgDiv.onclick = () => playAudio(audioBlob);
                 } else {
                     console.error("No se pudo crear Blob para mensaje del historial:", msg);
                 }
