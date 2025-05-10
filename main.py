@@ -54,13 +54,12 @@ app.add_middleware(
 # Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
-# Configuración
+# Configuración de Flightradar24
 API_KEY = "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3"  # Nuevo token
-CACHE_FILE = "flights_cache.json"
 BASE_URL = "https://fr24api.flightradar24.com/api/flight-summary/light"
 
 # Validar clave de API de Flightradar24
-FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN", "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3)
+FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN", API_KEY)
 if not FLIGHTRADAR24_API_TOKEN:
     logger.error("Falta el token de API de Flightradar24 en las variables de entorno")
     raise ValueError("FLIGHTRADAR24_API_TOKEN no está configurada")
@@ -252,105 +251,123 @@ async def get_flightradar24_flights(query: Optional[str] = None):
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flightradar24_cache[cache_key]
 
-    try:
-        now = datetime.utcnow()
-        time_min = now - timedelta(hours=12)
-        time_max = now + timedelta(hours=12)
-        time_min_str = time_min.strftime("%Y-%m-%dT%H:%M:%SZ")
-        time_max_str = time_max.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Configuración de la solicitud
+    now = datetime.utcnow()
+    date_from = now - timedelta(hours=24)
+    date_to = now
+    flight_datetime_from = date_from.strftime("%Y-%m-%d %H:%M:%S")
+    flight_datetime_to = date_to.strftime("%Y-%m-%d %H:%M:%S")
 
-        headers = {
-            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-            'Accept': 'application/json'
-        }
-        params = {
-            'airline': 'AR',  # Aerolíneas Argentinas
-            'airport': 'AEP',  # Aeroparque
-            'flight_datetime_from': time_min_str,
-            'flight_datetime_to': time_max_str
-        }
+    params = {
+        "flight_datetime_from": flight_datetime_from,
+        "flight_datetime_to": flight_datetime_to,
+        "routes": "AEP",  # Filtra por Aeroparque
+        "limit": 50
+    }
+    headers = {
+        "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
+        "Accept": "application/json",
+        "Accept-Version": "v1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    try:
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://api.flightradar24.com/v1/flights', headers=headers, params=params, timeout=15) as response:
+            async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error Flightradar24: {response.status}")
-                    raise HTTPException(status_code=500, detail=f"Error en la API de Flightradar24: {response.status}")
+                    if response.status == 451:
+                        cached_data = flightradar24_cache.get(cache_key)
+                        if cached_data:
+                            logger.info(f"Sirviendo datos desde caché debido a error 451: {cache_key}")
+                            return cached_data
+                        raise HTTPException(
+                            status_code=451,
+                            detail={
+                                "error": "Acceso denegado por razones legales",
+                                "details": await response.text() or "Error desconocido en la API de Flightradar24",
+                                "status_code": 451
+                            }
+                        )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error en la API de Flightradar24: {response.status}"
+                    )
                 data = await response.json()
 
-        if not data.get('success', False):
-            logger.error(f"Error Flightradar24: {data.get('error', 'Unknown')}")
-            raise HTTPException(status_code=500, detail="Error en la API de Flightradar24")
-
-        filtered_flights = []
-        for flight in data.get('data', []):
+        # Transformar datos al formato esperado por el frontend
+        flights = []
+        for flight in data.get("data", []):
+            status = "Landed" if flight.get("flight_ended", False) else "En vuelo"
+            if flight.get("datetime_landed") and not flight.get("flight_ended"):
+                status = "En tierra"
             flight_data = {
-                'flight_number': flight.get('flight_number', ''),
-                'departure_airport': flight.get('departure_airport', {}).get('name', ''),
-                'departure_time': flight.get('departure_time', ''),
-                'arrival_airport': flight.get('arrival_airport', {}).get('name', ''),
-                'arrival_time': flight.get('arrival_time', ''),
-                'status': flight.get('status', 'N/A'),
-                'gate': flight.get('departure_gate', 'N/A'),
-                'delay': flight.get('departure_delay', 0),
-                'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
-                'destination': flight.get('arrival_airport', {}).get('name', ''),
-                'origin': flight.get('departure_airport', {}).get('name', ''),
-                'source': 'flightradar24'
+                "flight_number": flight.get("flight", "N/A"),
+                "departure_time": flight.get("datetime_takeoff", "N/A"),
+                "arrival_airport": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
+                "status": status,
+                "gate": "N/A",  # No disponible en /flight-summary/light
+                "origin": flight.get("orig_icao", flight.get("orig_iata", "N/A")),
+                "destination": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
+                "registration": flight.get("reg", "N/A"),
+                "source": "flightradar24"
             }
-            filtered_flights.append(flight_data)
+            # Filtrar por Aerolíneas Argentinas (AR)
+            if flight_data["flight_number"].startswith("AR"):
+                flights.append(flight_data)
 
         if query:
             query = query.lower()
-            filtered_flights = [
-                f for f in filtered_flights
-                if query in f['flight_number'].lower() or
-                   query in f['departure_airport'].lower() or
-                   query in f['arrival_airport'].lower() or
-                   query in f['status'].lower()
+            flights = [
+                f for f in flights
+                if query in f["flight_number"].lower() or
+                   query in f["destination"].lower() or
+                   query in f["status"].lower()
             ]
 
-        response_data = {'flights': filtered_flights}
+        response_data = {"flights": flights}
         flightradar24_cache[cache_key] = response_data
-        logger.info(f'Respuesta cacheada: {cache_key}, {len(filtered_flights)} vuelos')
+        logger.info(f"Respuesta cacheada: {cache_key}, {len(flights)} vuelos")
         return response_data
 
     except aiohttp.ClientError as e:
         logger.error(f"Error al consultar Flightradar24: {e}")
+        cached_data = flightradar24_cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Sirviendo datos desde caché debido a error de conexión: {cache_key}")
+            return cached_data
         raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
     except Exception as e:
         logger.error(f"Error interno en /flightradar24_flights: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 # Endpoint combinado para compatibilidad con frontend
-@app.route("/api/flights")
-def get_flights():
+@app.get("/api/flights")
+async def get_flights():
     try:
-        response = requests.get("http://localhost:5000/flightradar24_flights")  # Ajusta la URL si es necesario
-        response.raise_for_status()
-        return jsonify(response.json())
-    except requests.exceptions.HTTPError as e:
-        status_code = e.response.status_code
-        try:
-            error_data = e.response.json()
-        except ValueError:
-            error_data = {"error": "Respuesta no JSON", "details": e.response.text}
-        print(f"Error en /api/flights: {status_code} - {error_data}")
-        if status_code == 451:
-            return jsonify({
-                "error": "No se pudieron obtener vuelos debido a restricciones legales",
-                "details": error_data.get("details", "Verifica tu suscripción o ubicación"),
-                "status_code": 451
-            }), 451
-        return jsonify({
-            "error": "Error al obtener vuelos",
-            "details": error_data.get("details", str(e)),
-            "status_code": status_code
-        }), 500
-    except requests.exceptions.RequestException as e:
-        print(f"Error de conexión en /api/flights: {e}")
-        return jsonify({
-            "error": "Error de conexión con el servicio de vuelos",
-            "details": str(e)
-        }), 500
+        flights_data = await get_flightradar24_flights()
+        return flights_data
+    except HTTPException as e:
+        if e.status_code == 451:
+            raise HTTPException(
+                status_code=451,
+                detail={
+                    "error": "No se pudieron obtener vuelos debido a restricciones legales",
+                    "details": e.detail.get("details", "Verifica tu suscripción o ubicación"),
+                    "status_code": 451
+                }
+            )
+        raise
+    except Exception as e:
+        logger.error(f"Error en /api/flights: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Error al obtener vuelos",
+                "details": str(e),
+                "status_code": 500
+            }
+        )
 
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
@@ -361,39 +378,67 @@ async def get_flight_details(flight_number: str):
         return flight_details_cache[cache_key]
 
     try:
-        headers = {
-            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-            'Accept': 'application/json'
-        }
+        now = datetime.utcnow()
+        date_from = now - timedelta(hours=24)
+        date_to = now
+        flight_datetime_from = date_from.strftime("%Y-%m-%d %H:%M:%S")
+        flight_datetime_to = date_to.strftime("%Y-%m-%d %H:%M:%S")
+
         params = {
-            'flight_number': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
-            'airport': 'AEP'
+            "flight_datetime_from": flight_datetime_from,
+            "flight_datetime_to": flight_datetime_to,
+            "routes": "AEP",
+            "flight_number": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
+            "limit": 1
         }
+        headers = {
+            "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
+            "Accept": "application/json",
+            "Accept-Version": "v1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://api.flightradar24.com/v1/flights', headers=headers, params=params, timeout=15) as response:
+            async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error Flightradar24: {response.status}")
-                    raise HTTPException(status_code=500, detail=f"Error en la API de Flightradar24: {response.status}")
+                    if response.status == 451:
+                        cached_data = flight_details_cache.get(cache_key)
+                        if cached_data:
+                            logger.info(f"Sirviendo datos desde caché debido a error 451: {cache_key}")
+                            return cached_data
+                        raise HTTPException(
+                            status_code=451,
+                            detail={
+                                "error": "Acceso denegado por razones legales",
+                                "details": await response.text() or "Error desconocido en la API de Flightradar24",
+                                "status_code": 451
+                            }
+                        )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error en la API de Flightradar24: {response.status}"
+                    )
                 data = await response.json()
 
-        if not data.get('success', False) or not data.get('data'):
+        if not data.get("data"):
             logger.warning(f"No se encontró el vuelo: {flight_number}")
             raise HTTPException(status_code=404, detail="Vuelo no encontrado")
 
-        flight = data['data'][0]
+        flight = data["data"][0]
+        status = "Landed" if flight.get("flight_ended", False) else "En vuelo"
+        if flight.get("datetime_landed") and not flight.get("flight_ended"):
+            status = "En tierra"
         flight_data = {
-            'flight_number': flight.get('flight_number', ''),
-            'departure_airport': flight.get('departure_airport', {}).get('name', ''),
-            'departure_time': flight.get('departure_time', ''),
-            'arrival_airport': flight.get('arrival_airport', {}).get('name', ''),
-            'arrival_time': flight.get('arrival_time', ''),
-            'status': flight.get('status', ''),
-            'gate': flight.get('departure_gate', 'N/A'),
-            'delay': flight.get('departure_delay', 0),
-            'registration': flight.get('aircraft', {}).get('registration', 'N/A'),
-            'destination': flight.get('arrival_airport', {}).get('name', ''),
-            'origin': flight.get('departure_airport', {}).get('name', ''),
-            'source': 'flightradar24'
+            "flight_number": flight.get("flight", "N/A"),
+            "departure_time": flight.get("datetime_takeoff", "N/A"),
+            "arrival_airport": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
+            "status": status,
+            "gate": "N/A",
+            "origin": flight.get("orig_icao", flight.get("orig_iata", "N/A")),
+            "destination": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
+            "registration": flight.get("reg", "N/A"),
+            "source": "flightradar24"
         }
         flight_details_cache[cache_key] = flight_data
         logger.info(f'Detalles cacheados: {cache_key} (Flightradar24)')
@@ -401,6 +446,10 @@ async def get_flight_details(flight_number: str):
 
     except aiohttp.ClientError as e:
         logger.error(f"Error al consultar Flightradar24: {e}")
+        cached_data = flight_details_cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Sirviendo datos desde caché debido a error de conexión: {cache_key}")
+            return cached_data
         raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
     except Exception as e:
         logger.error(f"Error interno en /flight_details: {e}")
@@ -410,7 +459,7 @@ async def get_flight_details(flight_number: str):
 async def update_flights():
     while True:
         try:
-            response = await get_flights()
+            response = await get_flightradar24_flights()
             logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
             disconnected_users = []
             for token, user in users.items():
@@ -435,7 +484,7 @@ async def update_flights():
                     await broadcast_users()
         except Exception as e:
             logger.error(f"Error actualizando vuelos: {e}")
-        await asyncio.sleep(300)
+        await asyncio.sleep(300)  # Actualizar cada 5 minutos
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data: str) -> str:
