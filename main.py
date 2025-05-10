@@ -143,7 +143,11 @@ async def read_root():
     response.headers["Expires"] = "0"
     return response
 
-# Endpoint de salud para evitar errores 405
+@app.head("/")
+async def root_head():
+    return {"status": "healthy"}
+
+# Endpoint de salud
 @app.head("/health")
 @app.get("/health")
 async def health_check():
@@ -267,14 +271,14 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "airport": "AEP",  # Cambiado de 'routes' a 'airport'
-        "limit": 10  # Reducido para evitar posibles restricciones
+        "airport": "AEP",  # Filtrar por Aeroparque
+        "limit": 10  # Reducido para evitar restricciones
     }
     headers = {
         "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
         "Accept": "application/json",
+        "Accept-Version": "v1",  # Reincorporado como requerido por la API
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        # Eliminado 'Accept-Version' para probar compatibilidad
     }
 
     try:
@@ -430,13 +434,14 @@ async def get_flight_details(flight_number: str):
         params = {
             "flight_datetime_from": flight_datetime_from,
             "flight_datetime_to": flight_datetime_to,
-            "airport": "AEP",  # Cambiado de 'routes' a 'airport'
+            "airport": "AEP",  # Filtrar por Aeroparque
             "flight_number": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             "limit": 1
         }
         headers = {
             "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
             "Accept": "application/json",
+            "Accept-Version": "v1",  # Reincorporado como requerido por la API
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
 
