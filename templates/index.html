@@ -29,27 +29,41 @@
     </script>
 </head>
 <body>
-    <!-- Pantalla de registro -->
-    <div id="register" style="display: block;">
+    <!-- Pantalla de autenticación -->
+    <div id="auth-section" style="display: block;">
         <img src="/templates/walkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
-        <h1>Registro</h1>
-        <input id="name" placeholder="Apellido">
-        <input id="legajo" placeholder="Legajo" type="number" maxlength="5">
-        <select id="function">
-            <option value="" disabled selected>Selecciona una función</option>
-            <option value="Maletero">Maletero</option>
-            <option value="Cintero">Cintero</option>
-            <option value="Tractorista">Tractorista</option>
-            <option value="Equipo">Equipo</option>
-            <option value="Micro">Micro</option>
-            <option value="Mobilero">Movilero</option>
-            <option value="Jefatura">Jefatura</option>
-            <option value="Supervisor">Supervisor</option>
-            <option value="Señalero">Señalero</option>
-            <option value="Pañolero">Pañolero</option>
-            <option value="Combustible">Combustible</option>
-        </select>
-        <button id="register-button">Registrarse</button>
+        <!-- Formulario de registro -->
+        <form id="register-form" style="display: block;">
+            <h1>Registro</h1>
+            <input id="surname" placeholder="Apellido" required>
+            <input id="employee_id" placeholder="Legajo" type="number" maxlength="5" required>
+            <select id="sector" required>
+                <option value="" disabled selected>Selecciona una función</option>
+                <option value="Maletero">Maletero</option>
+                <option value="Cintero">Cintero</option>
+                <option value="Tractorista">Tractorista</option>
+                <option value="Equipo">Equipo</option>
+                <option value="Micro">Micro</option>
+                <option value="Mobilero">Movilero</option>
+                <option value="Jefatura">Jefatura</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Señalero">Señalero</option>
+                <option value="Pañolero">Pañolero</option>
+                <option value="Combustible">Combustible</option>
+            </select>
+            <input id="password" type="password" placeholder="Contraseña" required>
+            <button type="submit">Registrarse</button>
+            <p><a href="#" id="show-login">¿Ya tienes cuenta? Inicia sesión</a></p>
+        </form>
+        <!-- Formulario de inicio de sesión -->
+        <form id="login-form" style="display: none;">
+            <h1>Iniciar Sesión</h1>
+            <input id="surname-login" placeholder="Apellido" required>
+            <input id="employee_id-login" placeholder="Legajo" type="number" maxlength="5" required>
+            <input id="password-login" type="password" placeholder="Contraseña" required>
+            <button type="submit">Iniciar Sesión</button>
+            <p><a href="#" id="show-register">¿No tienes cuenta? Regístrate</a></p>
+        </form>
     </div>
 
     <!-- Pantalla principal -->
@@ -57,6 +71,7 @@
         <button id="logout-button" class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
         <h1>HandyHandle</h1>
+        <div id="user-profile" style="font-size: 16px; color: #4682B4; margin-bottom: 10px;"></div>
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
         <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()">Volver al Grupo</button>
@@ -66,11 +81,7 @@
         </div>
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
-            <div class="flight-controls">
-                <button id="flight-up" class="nav-button" aria-label="Subir en la lista de vuelos">▲</button>
-                <div id="flight-details" class="flight-details-scroll"></div>
-                <button id="flight-down" class="nav-button" aria-label="Bajar en la lista de vuelos">▼</button>
-            </div>
+            <div id="flight-details" class="flight-details-scroll"></div>
         </div>
         <div id="chat-window">
             <h3>Conversación</h3>
@@ -101,11 +112,7 @@
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
-            <div class="flight-controls">
-                <button id="group-flight-up" class="nav-button" aria-label="Subir en la lista de vuelos">▲</button>
-                <div id="group-flight-details" class="flight-details-scroll"></div>
-                <button id="group-flight-down" class="nav-button" aria-label="Bajar en la lista de vuelos">▼</button>
-            </div>
+            <div id="group-flight-details" class="flight-details-scroll"></div>
         </div>
         <div id="group-chat-window">
             <h3>Conversación</h3>
@@ -141,4 +148,4 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/templates/script.js"></script>
 </body>
-        </html>
+</html>
