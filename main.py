@@ -52,10 +52,14 @@ app.add_middleware(
 )
 
 # Montar archivos estáticos
-app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+try:
+    app.mount("/templates", StaticFiles(directory="templates"), name="templates")
+    logger.info("Directorio 'templates' montado correctamente")
+except Exception as e:
+    logger.error(f"Error al montar directorio 'templates': {e}")
 
 # Configuración de Flightradar24
-API_KEY = "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3"  # Nuevo token
+API_KEY = "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3"
 BASE_URL = "https://fr24api.flightradar24.com/api/flight-summary/light"
 
 # Validar clave de API de Flightradar24
@@ -65,12 +69,17 @@ if not FLIGHTRADAR24_API_TOKEN:
     raise ValueError("FLIGHTRADAR24_API_TOKEN no está configurada")
 
 # Cargar index.html
-with open("templates/index.html", "r") as f:
-    INDEX_HTML = f.read()
+try:
+    with open("templates/index.html", "r") as f:
+        INDEX_HTML = f.read()
+    logger.info("Archivo index.html cargado correctamente")
+except Exception as e:
+    logger.error(f"Error al cargar index.html: {e}")
+    INDEX_HTML = "<html><body><h1>Error: No se pudo cargar index.html</h1></body></html>"
 
 # Crear cachés
-flightradar24_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flightradar24_flights
-flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
+flightradar24_cache = TTLCache(maxsize=100, ttl=300)
+flight_details_cache = TTLCache(maxsize=100, ttl=300)
 
 # Lista de usuarios permitidos
 ALLOWED_USERS = {
@@ -168,16 +177,20 @@ def to_icao(text: str) -> str:
 
 # Inicializar base de datos
 def init_db():
-    with sqlite3.connect("chat_history.db") as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                     (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                     (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
-                      muted_users TEXT, last_active TIMESTAMP)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS users 
-                     (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
-        conn.commit()
+    try:
+        with sqlite3.connect("chat_history.db") as conn:
+            c = conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS messages 
+                         (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+            c.execute('''CREATE TABLE IF NOT EXISTS sessions 
+                         (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+                          muted_users TEXT, last_active TIMESTAMP)''')
+            c.execute('''CREATE TABLE IF NOT EXISTS users 
+                         (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
+            conn.commit()
+        logger.info("Base de datos inicializada correctamente")
+    except Exception as e:
+        logger.error(f"Error al inicializar la base de datos: {e}")
 
 # Estructuras de datos
 users: Dict[str, Dict[str, any]] = {}
@@ -257,7 +270,7 @@ async def login_user(request: LoginRequest):
 @app.get("/flightradar24_flights")
 async def get_flightradar24_flights(query: Optional[str] = None):
     cache_key = f'flightradar24_flights_ar_{query or "all"}'
-    if cache_key in flightradar24_cache
+    if cache_key in flightradar24_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flightradar24_cache[cache_key]
 
@@ -271,9 +284,8 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "airports": "AEP",  # Cambiado de 'airport' a 'airports' según el mensaje de error
-        # Alternativa: usar "routes": "SAEZ" (código ICAO) si 'airports: AEP' falla
-        "limit": 10  # Reducido para evitar restricciones
+        "callsigns": "AR*",  # Filtrar por Aerolíneas Argentinas
+        "limit": 100  # Aumentado para obtener más vuelos
     }
     headers = {
         "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
@@ -331,15 +343,13 @@ async def get_flightradar24_flights(query: Optional[str] = None):
                 "departure_time": flight.get("datetime_takeoff", "N/A"),
                 "arrival_airport": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
                 "status": status,
-                "gate": "N/A",  # No disponible en /flight-summary/light
+                "gate": "N/A",
                 "origin": flight.get("orig_icao", flight.get("orig_iata", "N/A")),
                 "destination": flight.get("dest_icao", flight.get("dest_iata", "N/A")),
                 "registration": flight.get("reg", "N/A"),
                 "source": "flightradar24"
             }
-            # Filtrar por Aerolíneas Argentinas (AR)
-            if flight_data["flight_number"].startswith("AR"):
-                flights.append(flight_data)
+            flights.append(flight_data)
 
         if query:
             query = query.lower()
@@ -435,9 +445,7 @@ async def get_flight_details(flight_number: str):
         params = {
             "flight_datetime_from": flight_datetime_from,
             "flight_datetime_to": flight_datetime_to,
-            "airports": "AEP",  # Cambiado de 'airport' a 'airports' según el mensaje de error
-            # Alternativa: usar "routes": "SAEZ" (código ICAO) si 'airports: AEP' falla
-            "flight_number": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
+            "callsigns": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             "limit": 1
         }
         headers = {
@@ -559,8 +567,10 @@ async def update_flights():
                     logger.info(f"Usuario {token} marcado como desconectado")
                 if disconnected_users:
                     await broadcast_users()
+        except HTTPException as e:
+            logger.error(f"Error HTTP en update_flights: {e.detail}")
         except Exception as e:
-            logger.error(f"Error actualizando vuelos: {e}")
+            logger.error(f"Error general en update_flights: {e}")
         await asyncio.sleep(300)  # Actualizar cada 5 minutos
 
 # Función para transcribir audio
@@ -723,8 +733,8 @@ async def process_audio_queue():
 
             for user_token in disconnected_users:
                 if user_token in users:
-                    users[user_token]["websocket"] = None
-                    users[user_token]["logged_in"] = False
+                    users[token]["websocket"] = None
+                    users[token]["logged_in"] = False
                     logger.info(f"Usuario {user_token} marcado como desconectado")
             if disconnected_users:
                 await broadcast_users()
@@ -1229,14 +1239,29 @@ async def get_api_history_endpoint():
 
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    asyncio.create_task(clear_messages())
-    asyncio.create_task(process_audio_queue())
-    asyncio.create_task(update_flights())
-    asyncio.create_task(clean_expired_sessions())
-    logger.info("Aplicación iniciada")
+    try:
+        logger.info("Iniciando aplicación...")
+        init_db()
+        logger.info("Tarea init_db completada")
+        asyncio.create_task(clear_messages())
+        logger.info("Tarea clear_messages programada")
+        asyncio.create_task(process_audio_queue())
+        logger.info("Tarea process_audio_queue programada")
+        asyncio.create_task(update_flights())
+        logger.info("Tarea update_flights programada")
+        asyncio.create_task(clean_expired_sessions())
+        logger.info("Tarea clean_expired_sessions programada")
+        logger.info("Aplicación iniciada correctamente")
+    except Exception as e:
+        logger.error(f"Error durante el inicio de la aplicación: {e}")
+        raise
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    try:
+        logger.info(f"Iniciando Uvicorn en puerto {port}")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except Exception as e:
+        logger.error(f"Error al iniciar Uvicorn: {e}")
+        raise
