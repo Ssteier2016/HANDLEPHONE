@@ -35,7 +35,7 @@ app = FastAPI()
 
 # Estado de la aplicación
 app_state = {
-    "global_mute_active": False  # Estado de muteo global
+    "global_mute_active": False
 }
 
 # Configurar hash de contraseñas
@@ -68,23 +68,12 @@ with open("templates/index.html", "r") as f:
 flightradar24_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flightradar24_flights
 flight_details_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutos para /flight_details
 
-# Lista de usuarios permitidos (apellido: legajo o None si no se especifica)
+# Lista de usuarios permitidos
 ALLOWED_USERS = {
-    "Souto": "35127",
-    "Vázquez": "35806",
-    "Giménez": "35145",
-    "Gómez": "35128",
-    "Benítez": "33366",
-    "Contartese": "38818",
-    "Leites": "38880",
-    "Duartero": "36000",
-    "Arena": "35596",
-    "Brandariz": "35417",
-    "Fossati": "35152",
-    "Test": "12345",
-    "Bot": "00000",
-    "Test2": "12345",
-    "Binda": "38530"
+    "Souto": "35127", "Vázquez": "35806", "Giménez": "35145", "Gómez": "35128",
+    "Benítez": "33366", "Contartese": "38818", "Leites": "38880", "Duartero": "36000",
+    "Arena": "35596", "Brandariz": "35417", "Fossati": "35152", "Test": "12345",
+    "Bot": "00000", "Test2": "12345", "Binda": "38530"
 }
 
 # Sectores disponibles
@@ -161,7 +150,6 @@ ICAO_ALPHABET = {
 }
 
 def to_icao(text: str) -> str:
-    """Convierte texto a pronunciación ICAO (ej. 'Foxtrot Uniform Alfa' -> 'FUA')."""
     return ' '.join(ICAO_ALPHABET.get(char.upper(), char) for char in text if char.isalpha())
 
 # Inicializar base de datos
@@ -178,31 +166,27 @@ def init_db():
         conn.commit()
 
 # Estructuras de datos
-users: Dict[str, Dict[str, any]] = {}  # Almacena info de usuarios
-audio_queue: asyncio.Queue = asyncio.Queue()  # Cola para procesar audio
-groups: Dict[str, List[str]] = {}  # Grupos de usuarios
+users: Dict[str, Dict[str, any]] = {}
+audio_queue: asyncio.Queue = asyncio.Queue()
+groups: Dict[str, List[str]] = {}
 
 # Endpoint de registro
 @app.post("/register")
 async def register_user(request: RegisterRequest):
-    """Registra un nuevo usuario en el sistema."""
     surname = request.surname
     employee_id = request.employee_id
     sector = request.sector
     password = request.password
 
-    # Validar usuario permitido
     if surname not in ALLOWED_USERS:
         logger.error(f"Intento de registro con apellido no permitido: {surname}")
         raise HTTPException(status_code=403, detail="Usuario no permitido")
     
-    # Validar legajo
     expected_employee_id = ALLOWED_USERS[surname]
     if expected_employee_id and expected_employee_id != employee_id:
-        logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
+        logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
         raise HTTPException(status_code=403, detail="Legajo incorrecto")
 
-    # Verificar si ya está registrado
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("SELECT surname FROM users WHERE surname = ?", (surname,))
@@ -210,10 +194,7 @@ async def register_user(request: RegisterRequest):
             logger.error(f"Usuario ya registrado: {surname}")
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
-        # Hashear la contraseña
         hashed_password = pwd_context.hash(password)
-
-        # Registrar usuario
         c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
                   (surname, employee_id, sector, hashed_password))
         conn.commit()
@@ -224,23 +205,19 @@ async def register_user(request: RegisterRequest):
 # Endpoint de inicio de sesión
 @app.post("/login")
 async def login_user(request: LoginRequest):
-    """Inicia sesión de un usuario registrado."""
     surname = request.surname
     employee_id = request.employee_id
     password = request.password
 
-    # Validar usuario permitido
     if surname not in ALLOWED_USERS:
         logger.error(f"Intento de login con apellido no permitido: {surname}")
         raise HTTPException(status_code=403, detail="Usuario no permitido")
 
-    # Validar legajo
     expected_employee_id = ALLOWED_USERS[surname]
     if expected_employee_id and expected_employee_id != employee_id:
-        logger.error(f"Legajo incorrecto para {surname}: {employee_id}, esperado: {expected_employee_id}")
+        logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
         raise HTTPException(status_code=403, detail="Legajo incorrecto")
 
-    # Verificar credenciales
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("SELECT surname, employee_id, sector, password FROM users WHERE surname = ? AND employee_id = ?",
@@ -251,32 +228,26 @@ async def login_user(request: LoginRequest):
         logger.error(f"Credenciales inválidas para {surname}: {employee_id}")
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    stored_password = user[3]  # Hash de la contraseña almacenada
+    stored_password = user[3]
     if not pwd_context.verify(password, stored_password):
         logger.error(f"Contraseña incorrecta para {surname}: {employee_id}")
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
-    # Obtener sector desde la base de datos
     sector = user[2]
-
-    # Generar token
     token_data = f"{employee_id}_{surname}_{sector}"
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
-    logger.info(f"Login exitoso: {surname} ({employee_id}, {sector}), token: {token}")
-
+    logger.info(f"Login exitoso: {surname} ({employee_id}, {sector})")
     return {"token": token, "message": "Inicio de sesión exitoso"}
 
-# Endpoint para obtener vuelos de Aerolíneas Argentinas desde Flightradar24
+# Endpoint para vuelos de Aerolíneas Argentinas desde Flightradar24
 @app.get("/flightradar24_flights")
 async def get_flightradar24_flights(query: Optional[str] = None):
-    """Obtiene vuelos de Aerolíneas Argentinas desde Flightradar24."""
     cache_key = f'flightradar24_flights_ar_{query or "all"}'
     if cache_key in flightradar24_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flightradar24_cache[cache_key]
 
     try:
-        # Obtener fechas para el rango de búsqueda (12 horas atrás y adelante)
         now = datetime.utcnow()
         time_min = now - timedelta(hours=12)
         time_max = now + timedelta(hours=12)
@@ -284,8 +255,8 @@ async def get_flightradar24_flights(query: Optional[str] = None):
         time_max_str = time_max.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         headers = {
-    'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-    'Accept': 'application/json'
+            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
+            'Accept': 'application/json'
         }
         params = {
             'airline': 'AR',  # Aerolíneas Argentinas
@@ -294,10 +265,10 @@ async def get_flightradar24_flights(query: Optional[str] = None):
             'flight_datetime_to': time_max_str
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://fr24api.flightradar24.com/v1/flight/summary/light', headers=headers, params=params, timeout=15) as response:
+            async with session.get('https://api.flightradar24.com/v1/flights', headers=headers, params=params, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error Flightradar24: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de Flightradar24")
+                    raise HTTPException(status_code=500, detail=f"Error en la API de Flightradar24: {response.status}")
                 data = await response.json()
 
         if not data.get('success', False):
@@ -347,7 +318,6 @@ async def get_flightradar24_flights(query: Optional[str] = None):
 # Endpoint combinado para compatibilidad con frontend
 @app.get("/api/flights")
 async def get_flights(query: Optional[str] = None):
-    """Obtiene vuelos de Flightradar24."""
     try:
         flightradar24_data = await get_flightradar24_flights(query)
         return {'flights': flightradar24_data['flights']}
@@ -358,7 +328,6 @@ async def get_flights(query: Optional[str] = None):
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
 async def get_flight_details(flight_number: str):
-    """Obtiene detalles de un vuelo específico desde Flightradar24."""
     cache_key = f'flight_details_{flight_number}'
     if cache_key in flight_details_cache:
         logger.info(f'Sirviendo desde caché: {cache_key}')
@@ -366,18 +335,18 @@ async def get_flight_details(flight_number: str):
 
     try:
         headers = {
-    'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
-    'Accept': 'application/json'
+            'Authorization': f'Bearer {FLIGHTRADAR24_API_TOKEN}',
+            'Accept': 'application/json'
         }
         params = {
             'flight_number': f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             'airport': 'AEP'
         }
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://fr24api.flightradar24.com/v1/flight/summary/full', headers=headers, params=params, timeout=15) as response:
+            async with session.get('https://api.flightradar24.com/v1/flights', headers=headers, params=params, timeout=15) as response:
                 if response.status != 200:
                     logger.error(f"Error Flightradar24: {response.status}")
-                    raise HTTPException(status_code=500, detail="Error en la API de Flightradar24")
+                    raise HTTPException(status_code=500, detail=f"Error en la API de Flightradar24: {response.status}")
                 data = await response.json()
 
         if not data.get('success', False) or not data.get('data'):
@@ -412,10 +381,9 @@ async def get_flight_details(flight_number: str):
 
 # Actualizar vuelos periódicamente
 async def update_flights():
-    """Actualiza el caché de vuelos y lo difunde a los clientes conectados."""
     while True:
         try:
-            response = await get_flights()  # Usar endpoint /api/flights
+            response = await get_flights()
             logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
             disconnected_users = []
             for token, user in users.items():
@@ -444,7 +412,6 @@ async def update_flights():
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data: str) -> str:
-    """Transcribe audio en formato WebM a texto usando Google Speech Recognition."""
     try:
         audio_bytes = base64.b64decode(audio_data)
         with io.BytesIO(audio_bytes) as audio_file:
@@ -472,7 +439,6 @@ async def transcribe_audio(audio_data: str) -> str:
 
 # Función para procesar consultas de búsqueda
 async def process_search_query(query: str, flights: List[Dict]) -> str:
-    """Busca vuelos que coincidan con la consulta."""
     query = query.lower().strip()
     results = []
     for flight in flights:
@@ -487,7 +453,6 @@ async def process_search_query(query: str, flights: List[Dict]) -> str:
 
 # Funciones de base de datos
 def save_session(token: str, user_id: str, name: str, function: str, group_id: Optional[str] = None, muted_users: Optional[Set[str]] = None):
-    """Guarda una sesión de usuario en la base de datos."""
     muted_users_str = json.dumps(list(muted_users or set()))
     last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     with sqlite3.connect("chat_history.db") as conn:
@@ -500,7 +465,6 @@ def save_session(token: str, user_id: str, name: str, function: str, group_id: O
     logger.info(f"Sesión guardada para token={token}")
 
 def load_session(token: str) -> Optional[Dict]:
-    """Carga una sesión de usuario desde la base de datos."""
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
@@ -523,7 +487,6 @@ def load_session(token: str) -> Optional[Dict]:
     return None
 
 def delete_session(token: str):
-    """Elimina una sesión de usuario de la base de datos."""
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("DELETE FROM sessions WHERE token = ?", (token,))
@@ -531,7 +494,6 @@ def delete_session(token: str):
     logger.info(f"Sesión eliminada para token={token}")
 
 def save_message(user_id: str, audio_data: str, text: str, timestamp: str):
-    """Guarda un mensaje en la base de datos."""
     date = datetime.utcnow().strftime("%Y-%m-%d")
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
@@ -541,7 +503,6 @@ def save_message(user_id: str, audio_data: str, text: str, timestamp: str):
     logger.info(f"Mensaje guardado: user_id={user_id}, timestamp={timestamp}")
 
 def get_history() -> List[Dict]:
-    """Obtiene el historial de mensajes."""
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
@@ -550,13 +511,11 @@ def get_history() -> List[Dict]:
 
 # Procesar cola de audio
 async def process_audio_queue():
-    """Procesa la cola de audio para transcripción y difusión."""
     while True:
         try:
             item = await audio_queue.get()
             if not isinstance(item, tuple) or len(item) != 3:
                 logger.error(f"Elemento mal formado en audio_queue: {item}")
-                audio_queue.task_done()
                 continue
             token, audio_data, message = item
 
@@ -573,7 +532,6 @@ async def process_audio_queue():
                     "type": "mute_notification",
                     "message": "Muteo global activo, audio no transmitido"
                 })
-                audio_queue.task_done()
                 continue
 
             if text == "Sin transcripción" or text == "Pendiente de transcripción":
@@ -620,7 +578,7 @@ async def process_audio_queue():
 
         except asyncio.CancelledError:
             logger.info("Tarea de audio queue cancelada")
-            raise
+            break
         except Exception as e:
             logger.error(f"Error procesando audio queue: {e}")
         finally:
@@ -628,7 +586,6 @@ async def process_audio_queue():
 
 # Limpiar sesiones expiradas
 async def clean_expired_sessions():
-    """Elimina sesiones con más de 24 horas de inactividad."""
     while True:
         try:
             with sqlite3.connect("chat_history.db") as conn:
@@ -645,7 +602,6 @@ async def clean_expired_sessions():
 
 # Limpiar mensajes antiguos
 async def clear_messages():
-    """Elimina mensajes con más de 24 horas diariamente a las 5:30 AM."""
     while True:
         try:
             now = datetime.utcnow()
@@ -668,12 +624,10 @@ async def clear_messages():
 # Endpoint WebSocket
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
-    """Maneja conexiones WebSocket para comunicación en tiempo real."""
     await websocket.accept()
     logger.info(f"Cliente conectado: {token}")
 
     try:
-        # Validar formato del token
         try:
             decoded_token = base64.b64decode(token).decode('utf-8')
             employee_id, surname, sector = decoded_token.split('_')
@@ -683,7 +637,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await websocket.close()
             return
 
-        # Verificar que el token corresponde a un usuario registrado
         with sqlite3.connect("chat_history.db") as conn:
             c = conn.cursor()
             c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
@@ -1047,7 +1000,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         await websocket.close()
 
 async def broadcast_global_mute_state(message_type: str, message_text: str):
-    """Difunde el estado de muteo global a todos los clientes."""
     disconnected_users = []
     for user in list(users.values()):
         if user["logged_in"] and user["websocket"]:
@@ -1063,7 +1015,6 @@ async def broadcast_global_mute_state(message_type: str, message_text: str):
         await broadcast_users()
 
 async def broadcast_users():
-    """Difunde la lista de usuarios conectados."""
     user_list = []
     for token in users:
         if users[token]["logged_in"] and users[token]["websocket"]:
@@ -1097,7 +1048,6 @@ async def broadcast_users():
         await broadcast_users()
 
 async def broadcast_message(message: Dict):
-    """Difunde un mensaje a todos los usuarios conectados."""
     disconnected_users = []
     for token, user in list(users.items()):
         if not user["logged_in"] or not user["websocket"]:
@@ -1118,17 +1068,14 @@ async def broadcast_message(message: Dict):
 
 @app.get("/history")
 async def get_history_endpoint():
-    """Obtiene el historial de mensajes."""
     return get_history()
 
 @app.get("/api/history")
 async def get_api_history_endpoint():
-    """Alias para /history para compatibilidad con el frontend."""
     return get_history()
 
 @app.on_event("startup")
 async def startup_event():
-    """Inicializa la aplicación y tareas en segundo plano."""
     init_db()
     asyncio.create_task(clear_messages())
     asyncio.create_task(process_audio_queue())
