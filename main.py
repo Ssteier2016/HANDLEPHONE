@@ -54,8 +54,13 @@ app.add_middleware(
 # Montar archivos estáticos
 app.mount("/templates", StaticFiles(directory="templates"), name="templates")
 
+# Configuración
+API_KEY = "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3"  # Nuevo token
+CACHE_FILE = "flights_cache.json"
+BASE_URL = "https://fr24api.flightradar24.com/api/flight-summary/light"
+
 # Validar clave de API de Flightradar24
-FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN", "0196b02d-c431-730e-9568-2818c63dfffb|rBcckwvouhadeFZ6MZ6BhySk6inLiOawDaOF1kSC759904ca")
+FLIGHTRADAR24_API_TOKEN = os.getenv("FLIGHTRADAR24_API_TOKEN", "0196bbf3-6f6b-724e-9f55-2d133a569225|KvaPf2rP7ZOeuV9xSS0ggJ8ZUsWd29mgGOuHU8zX59d2f2d3)
 if not FLIGHTRADAR24_API_TOKEN:
     logger.error("Falta el token de API de Flightradar24 en las variables de entorno")
     raise ValueError("FLIGHTRADAR24_API_TOKEN no está configurada")
@@ -316,14 +321,36 @@ async def get_flightradar24_flights(query: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 # Endpoint combinado para compatibilidad con frontend
-@app.get("/api/flights")
-async def get_flights(query: Optional[str] = None):
+@app.route("/api/flights")
+def get_flights():
     try:
-        flightradar24_data = await get_flightradar24_flights(query)
-        return {'flights': flightradar24_data['flights']}
-    except Exception as e:
-        logger.error(f"Error al obtener vuelos: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al obtener datos de vuelos: {str(e)}")
+        response = requests.get("http://localhost:5000/flightradar24_flights")  # Ajusta la URL si es necesario
+        response.raise_for_status()
+        return jsonify(response.json())
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code
+        try:
+            error_data = e.response.json()
+        except ValueError:
+            error_data = {"error": "Respuesta no JSON", "details": e.response.text}
+        print(f"Error en /api/flights: {status_code} - {error_data}")
+        if status_code == 451:
+            return jsonify({
+                "error": "No se pudieron obtener vuelos debido a restricciones legales",
+                "details": error_data.get("details", "Verifica tu suscripción o ubicación"),
+                "status_code": 451
+            }), 451
+        return jsonify({
+            "error": "Error al obtener vuelos",
+            "details": error_data.get("details", str(e)),
+            "status_code": status_code
+        }), 500
+    except requests.exceptions.RequestException as e:
+        print(f"Error de conexión en /api/flights: {e}")
+        return jsonify({
+            "error": "Error de conexión con el servicio de vuelos",
+            "details": str(e)
+        }), 500
 
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
