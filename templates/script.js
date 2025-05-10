@@ -57,6 +57,7 @@ function displayUserProfile() {
             console.error('Error al decodificar token:', error);
             localStorage.removeItem('sessionToken');
             profileDiv.textContent = '';
+            completeLogout();
         }
     } else if (profileDiv) {
         profileDiv.textContent = '';
@@ -84,13 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('main').style.display = 'none';
     }
 
-    const registerButton = document.getElementById('register-button');
-    if (registerButton) {
-        registerButton.addEventListener('click', register);
-    } else {
-        console.error("Botón de registro no encontrado en el DOM");
-    }
-
     const searchButton = document.getElementById('search-button');
     if (searchButton) {
         searchButton.addEventListener('click', sendSearchQuery);
@@ -103,22 +97,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('login-form');
     if (registerForm) {
         registerForm.addEventListener('submit', registerUser);
+    } else {
+        console.error("Formulario de registro no encontrado en el DOM");
     }
     if (loginForm) {
         loginForm.addEventListener('submit', loginUser);
+    } else {
+        console.error("Formulario de login no encontrado en el DOM");
     }
 
     // Botones para alternar formularios
     const showLogin = document.getElementById('show-login');
     const showRegister = document.getElementById('show-register');
     if (showLogin) {
-        showLogin.addEventListener('click', () => {
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
             document.getElementById('register-form').style.display = 'none';
             document.getElementById('login-form').style.display = 'block';
         });
     }
     if (showRegister) {
-        showRegister.addEventListener('click', () => {
+        showRegister.addEventListener('click', (e) => {
+            e.preventDefault();
             document.getElementById('register-form').style.display = 'block';
             document.getElementById('login-form').style.display = 'none';
         });
@@ -331,10 +331,24 @@ function parseFlightMessage(message) {
 // Funciones de registro y conexión
 async function registerUser(event) {
     event.preventDefault();
-    const surname = document.getElementById('surname').value;
-    const employee_id = document.getElementById('employee_id').value;
+    const surname = document.getElementById('surname').value.trim();
+    const employee_id = document.getElementById('employee_id').value.trim();
     const sector = document.getElementById('sector').value;
     const password = document.getElementById('password').value;
+
+    // Validación en el frontend
+    if (!surname || !employee_id || !sector || !password) {
+        alert('Por favor, completa todos los campos.');
+        return;
+    }
+    if (!/^\d{5}$/.test(employee_id)) {
+        alert('El legajo debe contener exactamente 5 números.');
+        return;
+    }
+    if (password.length < 6) {
+        alert('La contraseña debe tener al menos 6 caracteres.');
+        return;
+    }
 
     try {
         const response = await fetch('/register', {
@@ -344,23 +358,35 @@ async function registerUser(event) {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('Registro exitoso');
+            alert('Registro exitoso. Por favor, inicia sesión.');
             document.getElementById('register-form').style.display = 'none';
             document.getElementById('login-form').style.display = 'block';
         } else {
-            alert(`Error: ${data.detail}`);
+            const errorMessage = data.detail && typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+            alert(`Error al registrar: ${errorMessage}`);
+            console.error('Error en registro:', data);
         }
     } catch (error) {
         console.error('Error al registrar:', error);
-        alert('Error de conexión');
+        alert('Error de conexión con el servidor. Intenta de nuevo.');
     }
 }
 
 async function loginUser(event) {
     event.preventDefault();
-    const surname = document.getElementById('surname-login').value;
-    const employee_id = document.getElementById('employee_id-login').value;
+    const surname = document.getElementById('surname-login').value.trim();
+    const employee_id = document.getElementById('employee_id-login').value.trim();
     const password = document.getElementById('password-login').value;
+
+    // Validación en el frontend
+    if (!surname || !employee_id || !password) {
+        alert('Por favor, completa todos los campos.');
+        return;
+    }
+    if (!/^\d{5}$/.test(employee_id)) {
+        alert('El legajo debe contener exactamente 5 números.');
+        return;
+    }
 
     try {
         const response = await fetch('/login', {
@@ -384,36 +410,22 @@ async function loginUser(event) {
             displayUserProfile();
             updateOpenSkyData();
         } else {
-            alert(`Error: ${data.detail}`);
+            const errorMessage = data.detail && typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+            alert(`Error al iniciar sesión: ${errorMessage}`);
+            console.error('Error en login:', data);
         }
     } catch (error) {
         console.error('Error al iniciar sesión:', error);
-        alert('Error de conexión');
+        alert('Error de conexión con el servidor. Intenta de nuevo.');
     }
-}
-
-function register() {
-    const legajo = document.getElementById("legajo").value;
-    const name = document.getElementById("name").value;
-    const userFunction = document.getElementById("function").value;
-    if (!legajo || !name || !userFunction) {
-        alert("Por favor, ingresa un apellido, un legajo y una función.");
-        return;
-    }
-    if (!/^\d{5}$/.test(legajo)) {
-        alert("El legajo debe contener exactamente 5 números.");
-        return;
-    }
-    userId = `${legajo}_${name}_${userFunction}`;
-    const sessionToken = btoa(userId);
-    localStorage.setItem("sessionToken", sessionToken);
-    localStorage.setItem("userName", name);
-    localStorage.setItem("userFunction", userFunction);
-    localStorage.setItem("userLegajo", legajo);
-    connectWebSocket(sessionToken);
 }
 
 function connectWebSocket(sessionToken, retryCount = 0) {
+    if (!sessionToken) {
+        console.error("No hay sessionToken para conectar WebSocket");
+        completeLogout();
+        return;
+    }
     const wsUrl = `wss://${window.location.host}/ws/${encodeURIComponent(sessionToken)}`;
     console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1})`);
     try {
@@ -564,7 +576,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
             } else if (message.type === "error") {
                 console.error("Error del servidor:", message.message);
                 if (message.message === "Usuario no registrado") {
-                    alert("Usuario no registrado. Por favor, inicia sesión nuevamente.");
+                    alert("Sesión inválida. Por favor, inicia sesión nuevamente.");
                     completeLogout();
                 }
             } else {
@@ -583,15 +595,14 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         console.log("WebSocket cerrado");
         stopPing();
         const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken) {
+        if (sessionToken && retryCount < 3) { // Limitar a 3 intentos
             const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000);
             reconnectInterval = setTimeout(() => {
                 connectWebSocket(sessionToken, retryCount + 1);
             }, delay);
         } else {
-            console.error("No hay sessionToken para reconectar");
-            document.getElementById("main").style.display = "none";
-            document.getElementById("auth-section").style.display = "block";
+            console.error("No hay sessionToken o se alcanzó el límite de reconexiones");
+            completeLogout();
         }
     };
 }
@@ -695,13 +706,17 @@ async function updateOpenSkyData() {
             groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
         } else {
             console.warn("Error al cargar /api/flights:", response.status);
+            const flightDetails = document.getElementById("flight-details");
+            const groupFlightDetails = document.getElementById("group-flight-details");
+            if (flightDetails) flightDetails.innerHTML = "<div>Error al cargar datos de vuelos</div>";
+            if (groupFlightDetails) groupFlightDetails.innerHTML = "<div>Error al cargar datos de vuelos</div>";
         }
     } catch (err) {
         console.error("Error al cargar datos de vuelos:", err);
         const flightDetails = document.getElementById("flight-details");
         const groupFlightDetails = document.getElementById("group-flight-details");
-        if (flightDetails) flightDetails.textContent = "Error al conectar con los servidores de vuelos";
-        if (groupFlightDetails) groupFlightDetails.textContent = "Error al conectar con los servidores de vuelos";
+        if (flightDetails) flightDetails.innerHTML = "<div>Error al conectar con los servidores de vuelos</div>";
+        if (groupFlightDetails) groupFlightDetails.innerHTML = "<div>Error al conectar con los servidores de vuelos</div>";
         if (map) {
             markers = markers.filter(marker => marker.isFlightRadar24 || marker.getPopup().getContent() === "Aeroparque");
         }
@@ -1376,7 +1391,7 @@ function showHistory() {
                 msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
                 const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
                 if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob);
+                    msgDiv.onclick = () => playbehAudio(audioBlob);
                 } else {
                     console.error("No se pudo crear Blob para mensaje del historial:", msg);
                 }
@@ -1633,7 +1648,7 @@ function loadHistory() {
                 msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
                 const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
                 if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob);
+                    msgDiv.onclick = () => playAudio(audioBlob); // Corregido: playAudio en lugar de playbehAudio
                 } else {
                     console.error("No se pudo crear Blob para mensaje del historial:", msg);
                 }
