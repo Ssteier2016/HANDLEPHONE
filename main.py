@@ -143,6 +143,12 @@ async def read_root():
     response.headers["Expires"] = "0"
     return response
 
+# Endpoint de salud para evitar errores 405
+@app.head("/health")
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 # Diccionario ICAO para pronunciación fonética
 ICAO_ALPHABET = {
     'Alfa': 'A', 'Bravo': 'B', 'Charlie': 'C', 'Delta': 'D', 'Echo': 'E',
@@ -255,27 +261,37 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     now = datetime.utcnow()
     date_from = now - timedelta(hours=24)
     date_to = now
-    flight_datetime_from = date_from.strftime("%Y-%m-%d %H:%M:%S")
-    flight_datetime_to = date_to.strftime("%Y-%m-%d %H:%M:%S")
+    flight_datetime_from = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
+    flight_datetime_to = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "routes": "AEP",  # Filtra por Aeroparque
-        "limit": 50
+        "airport": "AEP",  # Cambiado de 'routes' a 'airport'
+        "limit": 10  # Reducido para evitar posibles restricciones
     }
     headers = {
         "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
         "Accept": "application/json",
-        "Accept-Version": "v1",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        # Eliminado 'Accept-Version' para probar compatibilidad
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                 if response.status != 200:
-                    logger.error(f"Error Flightradar24: {response.status}")
+                    error_details = await response.text() or "Error desconocido en la API de Flightradar24"
+                    logger.error(f"Error Flightradar24: {response.status}, Detalles: {error_details}")
+                    if response.status == 400:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "Solicitud inválida a la API de Flightradar24",
+                                "details": error_details,
+                                "status_code": 400
+                            }
+                        )
                     if response.status == 451:
                         cached_data = flightradar24_cache.get(cache_key)
                         if cached_data:
@@ -285,13 +301,17 @@ async def get_flightradar24_flights(query: Optional[str] = None):
                             status_code=451,
                             detail={
                                 "error": "Acceso denegado por razones legales",
-                                "details": await response.text() or "Error desconocido en la API de Flightradar24",
+                                "details": error_details,
                                 "status_code": 451
                             }
                         )
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Error en la API de Flightradar24: {response.status}"
+                        detail={
+                            "error": f"Error en la API de Flightradar24: {response.status}",
+                            "details": error_details,
+                            "status_code": response.status
+                        }
                     )
                 data = await response.json()
 
@@ -336,10 +356,24 @@ async def get_flightradar24_flights(query: Optional[str] = None):
         if cached_data:
             logger.info(f"Sirviendo datos desde caché debido a error de conexión: {cache_key}")
             return cached_data
-        raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Error al consultar la API de Flightradar24",
+                "details": str(e),
+                "status_code": 500
+            }
+        )
     except Exception as e:
         logger.error(f"Error interno en /flightradar24_flights: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Error interno en el servidor",
+                "details": str(e),
+                "status_code": 500
+            }
+        )
 
 # Endpoint combinado para compatibilidad con frontend
 @app.get("/api/flights")
@@ -348,6 +382,15 @@ async def get_flights():
         flights_data = await get_flightradar24_flights()
         return flights_data
     except HTTPException as e:
+        if e.status_code == 400:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Solicitud inválida a la API de Flightradar24",
+                    "details": e.detail.get("details", "Verifica los parámetros de la solicitud"),
+                    "status_code": 400
+                }
+            )
         if e.status_code == 451:
             raise HTTPException(
                 status_code=451,
@@ -381,27 +424,36 @@ async def get_flight_details(flight_number: str):
         now = datetime.utcnow()
         date_from = now - timedelta(hours=24)
         date_to = now
-        flight_datetime_from = date_from.strftime("%Y-%m-%d %H:%M:%S")
-        flight_datetime_to = date_to.strftime("%Y-%m-%d %H:%M:%S")
+        flight_datetime_from = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
+        flight_datetime_to = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         params = {
             "flight_datetime_from": flight_datetime_from,
             "flight_datetime_to": flight_datetime_to,
-            "routes": "AEP",
+            "airport": "AEP",  # Cambiado de 'routes' a 'airport'
             "flight_number": f'AR{flight_number}' if not flight_number.startswith('AR') else flight_number,
             "limit": 1
         }
         headers = {
             "Authorization": f"Bearer {FLIGHTRADAR24_API_TOKEN}",
             "Accept": "application/json",
-            "Accept-Version": "v1",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
 
         async with aiohttp.ClientSession() as session:
             async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                 if response.status != 200:
-                    logger.error(f"Error Flightradar24: {response.status}")
+                    error_details = await response.text() or "Error desconocido en la API de Flightradar24"
+                    logger.error(f"Error Flightradar24: {response.status}, Detalles: {error_details}")
+                    if response.status == 400:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "Solicitud inválida a la API de Flightradar24",
+                                "details": error_details,
+                                "status_code": 400
+                            }
+                        )
                     if response.status == 451:
                         cached_data = flight_details_cache.get(cache_key)
                         if cached_data:
@@ -411,13 +463,17 @@ async def get_flight_details(flight_number: str):
                             status_code=451,
                             detail={
                                 "error": "Acceso denegado por razones legales",
-                                "details": await response.text() or "Error desconocido en la API de Flightradar24",
+                                "details": error_details,
                                 "status_code": 451
                             }
                         )
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Error en la API de Flightradar24: {response.status}"
+                        detail={
+                            "error": f"Error en la API de Flightradar24: {response.status}",
+                            "details": error_details,
+                            "status_code": response.status
+                        }
                     )
                 data = await response.json()
 
@@ -450,10 +506,24 @@ async def get_flight_details(flight_number: str):
         if cached_data:
             logger.info(f"Sirviendo datos desde caché debido a error de conexión: {cache_key}")
             return cached_data
-        raise HTTPException(status_code=500, detail=f"Error al consultar la API: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Error al consultar la API de Flightradar24",
+                "details": str(e),
+                "status_code": 500
+            }
+        )
     except Exception as e:
         logger.error(f"Error interno en /flight_details: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Error interno en el servidor",
+                "details": str(e),
+                "status_code": 500
+            }
+        )
 
 # Actualizar vuelos periódicamente
 async def update_flights():
