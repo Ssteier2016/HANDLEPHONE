@@ -1,3 +1,11 @@
+/* Estilos para tablas y colores de vuelos */
+.flight-red { color: red; }
+.flight-yellow { color: yellow; }
+.flight-green { color: green; }
+.flight-details-scroll { max-height: 200px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+
 /* Estilos para el botón de cerrar sesión */
 .logout-btn {
     background: url('/templates/logoutred.png') no-repeat center / cover !important;
@@ -9,7 +17,7 @@
     width: 32px;
     position: absolute;
     top: 10px;
-    left: 10px; /* Cambiado de right a left */
+    left: 10px;
     margin: 0;
     padding: 0;
     transition: opacity 0.3s ease;
@@ -31,11 +39,11 @@
 }
 
 #back-to-main {
-    left: 50px; /* Mover para evitar solapamiento con logout-btn */
+    left: 50px;
 }
 
 .close-btn {
-    right: 10px; /* Mantener en la derecha para radar-screen */
+    right: 10px;
 }
 
 /* Estilos generales */
@@ -333,47 +341,32 @@ button:hover {
 #group-join {
     align-items: center;
     display: flex;
-    flex-wrap: wrap; /* Nuevo: Permite que los elementos se reorganicen en pantallas pequeñas */
+    flex-wrap: wrap;
     gap: 10px;
     margin: 10px 0;
 }
 
-/* Nuevo: Estilos para labels en #group-join */
 #group-join label {
     color: #4682B4;
     font-size: 14px;
     margin: 5px 0;
     text-align: left;
-    width: 100%; /* Asegura que los labels ocupen una línea completa */
+    width: 100%;
 }
 
-/* Nuevo: Estilos para el checkbox #group-private */
 #group-private {
-    width: auto; /* Anula width: 100% para checkboxes */
+    width: auto;
     margin: 5px 10px 5px 0;
-    cursor: default; /* El cursor pointer se maneja en el label */
+    cursor: default;
 }
 
-/* Nuevo: Estilos para el label de #group-private */
 #group-private + label {
     display: inline-block;
     cursor: pointer;
     vertical-align: middle;
 }
 
-#join-group-btn {
-    background-color: #4682B4;
-    border: 2px solid #4682B4;
-    border-radius: 5px;
-    color: #FFFFFF;
-    cursor: pointer;
-    font-family: 'Orbitron', 'Courier New', Courier, monospace;
-    font-size: 14px;
-    padding: 8px;
-    transition: background-color 0.3s;
-}
-
-/* Nuevo: Estilos para #create-group-btn */
+#join-group-btn,
 #create-group-btn {
     background-color: #4682B4;
     border: 2px solid #4682B4;
@@ -711,11 +704,11 @@ h3 {
         height: 24px;
         width: 24px;
         top: 5px;
-        left: 5px; /* Ajustado para móviles */
+        left: 5px;
     }
 
     #back-to-main {
-        left: 35px; /* Ajustado para móviles */
+        left: 35px;
     }
 
     button,
@@ -760,7 +753,6 @@ h3 {
         width: 100%;
     }
 
-    /* Nuevo: Ajustes para #group-join en móviles */
     #group-join {
         flex-direction: column;
         align-items: stretch;
@@ -839,7 +831,7 @@ h3 {
 
     #talk,
     #group-talk {
-        height: 65px; /* Corrección: typo de "hight" a "height" */
+        height: 65px;
         max-width: 65px;
         width: 65px;
     }
@@ -933,7 +925,6 @@ h3 {
         width: 30%;
     }
 
-    /* Nuevo: Ajustes para #group-join en pantallas grandes */
     #group-join {
         flex-direction: row;
         align-items: center;
@@ -962,4 +953,4 @@ h3 {
         width: auto;
         margin-right: 10px;
     }
-        }
+}
