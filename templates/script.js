@@ -1638,4 +1638,201 @@ function showHistory() {
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "block";
-    const logoutButton = document.getElementBy
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'none';
+    loadHistory();
+}
+
+function backToMain() {
+    document.getElementById("history-screen").style.display = "none";
+    document.getElementById("main").style.display = "block";
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.style.display = 'block';
+    updateSwipeHint();
+    console.log("Volviendo a la pantalla principal desde historial");
+}
+
+// Funciones auxiliares
+function base64ToBlob(base64, mime) {
+    try {
+        const byteString = atob(base64);
+        const arrayBuffer = new ArrayBuffer(byteString.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < byteString.length; i++) {
+            uint8Array[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([uint8Array], { type: mime });
+    } catch (err) {
+        console.error("Error al convertir Base64 a Blob:", err);
+        return null;
+    }
+}
+
+function logout() {
+    console.log("Iniciando cierre de sesión...");
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "logout" }));
+    } else {
+        completeLogout();
+    }
+}
+
+function completeLogout() {
+    console.log("Completando cierre de sesión...");
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    localStorage.removeItem("sessionToken");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userFunction");
+    localStorage.removeItem("userLegajo");
+    localStorage.removeItem("groupId");
+    localStorage.removeItem("lastSearchQuery");
+    currentGroup = null;
+    mutedUsers.clear();
+    clearInterval(reconnectInterval);
+    stopPing();
+    document.getElementById("auth-section").style.display = "block";
+    document.getElementById("main").style.display = "none";
+}
+
+// Funciones de notificaciones
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        fetch('/templates/sw.js', { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    navigator.serviceWorker.register('/templates/sw.js')
+                        .then(() => console.log('Service Worker registrado'))
+                        .catch(err => console.error('Error al registrar Service Worker:', err));
+                } else {
+                    console.warn('Archivo sw.js no encontrado.');
+                }
+            })
+            .catch(err => {
+                console.warn('No se pudo verificar sw.js:', err);
+            });
+    } else {
+        console.warn('Service Worker no soportado.');
+    }
+}
+
+function checkNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+            console.log('Permiso de notificación ya concedido');
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('Permiso de notificación concedido');
+                } else {
+                    console.warn('Permiso de notificación denegado');
+                }
+            }).catch(err => {
+                console.error('Error al solicitar permiso de notificación:', err);
+            });
+        } else {
+            console.warn('Permiso de notificación denegado previamente');
+        }
+    } else {
+        console.warn('Notificaciones no soportadas en este navegador');
+    }
+}
+
+// Función para cargar historial
+function loadHistory() {
+    fetch('/history')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error al cargar historial: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const historyList = document.getElementById("history-list");
+            if (!historyList) {
+                console.error("Elemento #history-list no encontrado en el DOM");
+                return;
+            }
+            historyList.innerHTML = "";
+            data.forEach(msg => {
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "chat-message";
+                const utcTime = msg.timestamp.split(":");
+                const utcDate = new Date();
+                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
+                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const text = msg.text || "Sin transcripción";
+                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
+                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
+                if (audioBlob) {
+                    msgDiv.onclick = () => playAudio(audioBlob);
+                } else {
+                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
+                }
+                historyList.appendChild(msgDiv);
+            });
+            console.log("Historial cargado con", data.length, "mensajes");
+        })
+        .catch(err => {
+            console.error("Error al cargar historial:", err);
+            const historyList = document.getElementById("history-list");
+            if (historyList) {
+                historyList.innerHTML = "<div>Error al cargar el historial</div>";
+            }
+        });
+}
+
+// Event listeners
+document.addEventListener('click', unlockAudio, { once: true });
+
+let lastVolumeUpTime = 0;
+let volumeUpCount = 0;
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'VolumeUp') {
+        event.preventDefault();
+        const currentTime = Date.now();
+        const timeDiff = currentTime - lastVolumeUpTime;
+
+        if (timeDiff < 500) {
+            volumeUpCount++;
+            if (volumeUpCount === 2) {
+                toggleTalk();
+                volumeUpCount = 0;
+            }
+        } else {
+            volumeUpCount = 1;
+        }
+        lastVolumeUpTime = currentTime;
+    }
+});
+
+document.addEventListener('touchstart', e => {
+    if (!isSwiping) {
+        startX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchmove', e => {
+    if (!isSwiping) {
+        currentX = e.touches[0].clientX;
+    }
+});
+
+document.addEventListener('touchend', e => {
+    if (isSwiping) return;
+    const deltaX = currentX - startX;
+    if (Math.abs(deltaX) > 50) {
+        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
+            backToMainFromGroup();
+        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
+            returnToGroup();
+        }
+    }
+});
