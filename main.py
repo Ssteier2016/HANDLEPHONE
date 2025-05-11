@@ -13,6 +13,7 @@ import logging
 import aiohttp
 import speech_recognition as sr
 import io
+import requests
 import soundfile as sf
 from pydub import AudioSegment
 from dotenv import load_dotenv
