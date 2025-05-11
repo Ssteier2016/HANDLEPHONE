@@ -100,6 +100,12 @@ ALLOWED_SECTORS = [
     "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
     "Jefatura", "Movilero", "Señalero", "Pañolero"
 ]
+# Modelo para la solicitud de validación
+class TokenValidationRequest(BaseModel):
+    token: str
+
+# Simulación de almacenamiento de tokens válidos (en producción, usa una base de datos o Redis)
+valid_tokens = set()  # Ejemplo: almacenar tokens válidos
 
 # Modelos Pydantic para validación
 class RegisterRequest(BaseModel):
@@ -234,6 +240,34 @@ async def register_user(request: RegisterRequest):
     
     logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
     return {"message": "Registro exitoso"}
+
+@app.post("/validate-token")
+async def validate_token(request: TokenValidationRequest):
+    token = request.token
+    if not token:
+        logger.error("Token no proporcionado en la solicitud")
+        raise HTTPException(status_code=400, detail="Token no proporcionado")
+    
+    try:
+        # Decodificar el token
+        decoded = base64.b64decode(token).decode("utf-8")
+        employee_id, surname, sector = decoded.split("_")
+        if not all([employee_id, surname, sector]):
+            logger.error(f"Token inválido: {token}. Componentes incompletos")
+            raise HTTPException(status_code=401, detail="Token inválido")
+        
+        # Verificar si el token es válido (simulación)
+        if token not in valid_tokens:
+            logger.error(f"Token no registrado: {token}")
+            raise HTTPException(status_code=401, detail="Token no registrado")
+        
+        logger.info(f"Token validado exitosamente: {token}")
+        return {"status": "valid"}
+    
+    except Exception as e:
+        logger.error(f"Excepción al validar token {token}: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error al validar token: {str(e)}")
+        
 
 # Endpoint de inicio de sesión
 @app.post("/login")
@@ -430,14 +464,36 @@ async def get_flight_details(flight_number: str):
         detail="No se pudo obtener detalles del vuelo con ningún token"
     )
 
-# Endpoint combinado para compatibilidad con frontend
 @app.get("/api/flights")
 async def get_flights():
     try:
-        flights_data = await get_flightradar24_flights()
-        return flights_data
-    except HTTPException as e:
-        raise
+        # Ejemplo de llamada a FlightRadar24 (reemplazar con tu API real)
+        response = requests.get("https://api.flightradar24.com/flights", headers={
+            "Authorization": "Bearer YOUR_FLIGHTRADAR24_API_KEY"
+        })
+        if response.status_code == 200:
+            flights = response.json().get("flights", [])
+            logger.info(f"Vuelos obtenidos de FlightRadar24: {len(flights)}")
+            # Filtrar vuelos de Aerolíneas Argentinas (ejemplo)
+            filtered_flights = [
+                {
+                    "flight_number": f["flight_number"],
+                    "departure_time": f.get("departure_time", "N/A"),
+                    "arrival_airport": f.get("arrival_airport", "N/A"),
+                    "status": f.get("status", "Desconocido"),
+                    "gate": f.get("gate", "N/A")
+                }
+                for f in flights if f["flight_number"].startswith("AR")
+            ]
+            logger.info(f"Vuelos filtrados: {len(filtered_flights)}")
+            return {"flights": filtered_flights}
+        else:
+            logger.error(f"Error al consultar FlightRadar24: {response.status_code}")
+            return {"flights": []}
+    except Exception as e:
+        logger.error(f"Error al obtener vuelos: {str(e)}")
+        return {"flights": []}
+
 
 # Actualizar vuelos periódicamente
 async def update_flights():
