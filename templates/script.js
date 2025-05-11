@@ -20,25 +20,28 @@ let currentX = 0;
 let flightData = [];
 let reconnectInterval = null;
 let announcementsEnabled = false;
+let departureAnnouncementsEnabled = false; // Nuevo: Para anuncios de despegues
 let announcedFlights = [];
+let announcedDepartures = []; // Nuevo: Para rastrear despegues anunciados
 let groupRecording = false;
 let groupMediaRecorder = null;
-let updatesEnabled = true; // Para el interruptor de actualizaciones
-let dailyTokenCount = 0; // Para rastrear tokens de FlightRadar24
+let updatesEnabled = true;
+let dailyTokenCount = 0;
+let restrictTokens = localStorage.getItem('restrictTokens') !== 'false'; // Nuevo: Control de límite de tokens
 const PING_INTERVAL = 30000;
 const RECONNECT_BASE_DELAY = 5000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SYNC_TAG = 'sync-messages';
-const MAX_TOKENS_DAILY = 1000; // Límite de tokens de FlightRadar24
-const TOKENS_PER_FLIGHT = 3; // 3 tokens por vuelo
-const MAX_FLIGHTS_PER_REQUEST = 20; // Límite de vuelos por solicitud
+const MAX_TOKENS_DAILY = 2000; // Aumentado de 1000 a 2000
+const TOKENS_PER_FLIGHT = 3;
+const MAX_FLIGHTS_PER_REQUEST = 20;
 
 const AIRLINE_MAPPING = {
     "ARG": "Aerolíneas Argentinas",
     "AEP": "AEP"
 };
 
-// Mapeo de códigos OACI a nombres de aeropuertos
+// Mapeo de códigos OACI a IATA
 const AIRPORT_MAPPING = {
     // Argentina (Domésticos)
     "SABE": "AEP", // Aeroparque Jorge Newbery, Buenos Aires
@@ -74,7 +77,7 @@ const AIRPORT_MAPPING = {
     "SANC": "CTC", // Coronel Felipe Varela, Catamarca
     "SANL": "IRJ", // Capitán Vicente Almandos Almonacid, La Rioja
     "SAVB": "EHL", // El Bolsón, Río Negro
-    "SAVY": "PMY", // Puerto Madryn, Chubut (mismo IATA que SAWP, pero incluido por completitud)
+    "SAVY": "PMY", // Puerto Madryn, Chubut
 
     // Bolivia
     "SLVR": "VVI", // Viru Viru, Santa Cruz de la Sierra
@@ -102,6 +105,8 @@ const AIRPORT_MAPPING = {
 
     // Colombia
     "SKBO": "BOG", // El Dorado, Bogotá
+    "SKRG": "MDE", // José María Córdova, Medellín
+    "SKAR": "ADZ", // Gustavo Rojas Pinilla, San Andrés
 
     // Perú
     "SPJC": "LIM", // Jorge Chávez, Lima
@@ -115,9 +120,7 @@ const AIRPORT_MAPPING = {
     "MDPC": "PUJ", // Punta Cana International, Punta Cana, República Dominicana
     "MDSD": "SDQ", // Las Américas, Santo Domingo, República Dominicana
     "TNCM": "SXM", // Princess Juliana, Sint Maarten
-    "TBPB": "BGI", // Grantley Adams, Bridgetown, Barbados
-    "SKRG": "MDE", // José María Córdova, Medellín, Colombia
-    "SKAR": "ADZ", // Gustavo Rojas Pinilla, San Andrés, Colombia
+    "TBPB": "BGI" // Grantley Adams, Bridgetown, Barbados
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -187,6 +190,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userFunction = localStorage.getItem('userFunction');
     const userLegajo = localStorage.getItem('userLegajo');
 
+    // Restaurar estados desde localStorage
+    announcementsEnabled = localStorage.getItem('announcementsEnabled') === 'true';
+    departureAnnouncementsEnabled = localStorage.getItem('departureAnnouncementsEnabled') === 'true';
+    restrictTokens = localStorage.getItem('restrictTokens') !== 'false';
+
     let isAuthenticated = false;
     if (sessionToken && userName && userFunction && userLegajo) {
         isAuthenticated = await validateToken(sessionToken);
@@ -213,7 +221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     updateOpenSkyData();
-    initMap(); // Inicializar el mapa al cargar
+    initMap();
 
     const searchButton = document.getElementById('search-button');
     if (searchButton) {
@@ -254,13 +262,46 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
     if (toggleAnnouncementsBtn) {
+        toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
         toggleAnnouncementsBtn.addEventListener('click', () => {
             announcementsEnabled = !announcementsEnabled;
-            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de vuelos' : 'Activar anuncios de vuelos';
-            console.log("Anuncios de vuelos:", announcementsEnabled ? "activados" : "desactivados");
+            localStorage.setItem('announcementsEnabled', announcementsEnabled);
+            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
+            console.log("Anuncios de llegadas:", announcementsEnabled ? "activados" : "desactivados");
         });
     } else {
         console.error("Botón #toggle-announcements no encontrado");
+    }
+
+    const toggleDepartureAnnouncementsBtn = document.getElementById('toggle-departure-announcements');
+    if (toggleDepartureAnnouncementsBtn) {
+        toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
+        toggleDepartureAnnouncementsBtn.addEventListener('click', () => {
+            departureAnnouncementsEnabled = !departureAnnouncementsEnabled;
+            localStorage.setItem('departureAnnouncementsEnabled', departureAnnouncementsEnabled);
+            toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
+            console.log("Anuncios de despegues:", departureAnnouncementsEnabled ? "activados" : "desactivados");
+        });
+    } else {
+        console.error("Botón #toggle-departure-announcements no encontrado");
+    }
+
+    const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
+    if (toggleTokenLimitBtn) {
+        toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
+        toggleTokenLimitBtn.addEventListener('click', () => {
+            restrictTokens = !restrictTokens;
+            localStorage.setItem('restrictTokens', restrictTokens);
+            toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
+            console.log("Límite de tokens:", restrictTokens ? "activado" : "desactivado");
+            if (!restrictTokens) {
+                alert("El límite de tokens ha sido desactivado. Las solicitudes a FlightRadar24 no estarán restringidas, lo que puede generar costos adicionales.");
+            } else {
+                alert("El límite de tokens ha sido activado. Se respetará el límite diario de " + MAX_TOKENS_DAILY + " tokens.");
+            }
+        });
+    } else {
+        console.error("Botón #toggle-token-limit no encontrado");
     }
 
     const updatesToggleBtn = document.getElementById('updates-toggle');
@@ -401,7 +442,7 @@ function sendSearchQuery() {
         return;
     }
     localStorage.setItem('lastSearchQuery', query);
-    filterFlights(query); // Filtrar localmente
+    filterFlights(query);
     document.getElementById('search-input').value = '';
     console.log(`Consulta de búsqueda: ${query}`);
 }
@@ -410,7 +451,6 @@ function filterFlights(searchTerm = '') {
     searchTerm = searchTerm.toUpperCase().trim();
     console.log("Filtrando vuelos con término:", searchTerm);
 
-    // Filtrar tablas
     const tables = [
         document.getElementById('departures-table'),
         document.getElementById('arrivals-table'),
@@ -431,7 +471,6 @@ function filterFlights(searchTerm = '') {
         });
     });
 
-    // Filtrar marcadores en el mapa
     markers.forEach(marker => {
         const flight = marker.flight || {};
         const registration = flight.registration || '';
@@ -702,6 +741,14 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                         }
                     });
                 }
+                if (departureAnnouncementsEnabled) {
+                    flightData.filter(f => f.origin === 'SABE').forEach(flight => {
+                        if (!announcedDepartures.includes(flight.flight_number) && flight.status === "Despegando") {
+                            announceDepartureFlight(flight);
+                            announcedDepartures.push(flight.flight_number);
+                        }
+                    });
+                }
             } else if (message.type === "announcement") {
                 if (announcementsEnabled) {
                     playAnnouncement(message.audio_url);
@@ -792,16 +839,12 @@ function updateFlightInfo() {
         return;
     }
 
-    // Filtrar vuelos de Aerolíneas Argentinas
     const filteredFlights = flightData.filter(flight => flight.flight_number.startsWith('AR'));
-
-    // Clasificar en Salidas y Llegadas
     const departures = filteredFlights.filter(flight => flight.origin === 'SABE');
     const arrivals = filteredFlights.filter(flight => flight.destination === 'SABE');
 
-    // Actualizar tablas
     const updateTableBody = (tbody, flights, isArrival) => {
-        tbody.innerHTML = ''; // Limpiar solo el cuerpo de la tabla
+        tbody.innerHTML = '';
         flights.forEach(flight => {
             const row = document.createElement('tr');
             row.className = 'tams-row';
@@ -822,13 +865,11 @@ function updateFlightInfo() {
         });
     };
 
-    // Actualizar solo el <tbody> de cada tabla
     updateTableBody(departuresTable, departures, false);
     updateTableBody(arrivalsTable, arrivals, true);
     updateTableBody(groupDeparturesTable, departures, false);
     updateTableBody(groupArrivalsTable, arrivals, true);
 
-    // Aplicar filtro de búsqueda si existe
     filterFlights(localStorage.getItem('lastSearchQuery') || '');
 }
 
@@ -869,9 +910,9 @@ async function updateOpenSkyData() {
         return;
     }
 
-    if (dailyTokenCount >= MAX_TOKENS_DAILY) {
+    if (restrictTokens && dailyTokenCount >= MAX_TOKENS_DAILY) {
         console.warn("Límite de tokens diarios alcanzado:", dailyTokenCount);
-        alert("Se alcanzó el límite diario de consultas a FlightRadar24. Las actualizaciones se pausarán hasta mañana.");
+        alert("Se alcanzó el límite diario de " + MAX_TOKENS_DAILY + " tokens de FlightRadar24. Las actualizaciones se pausarán hasta mañana o hasta que desactives el límite.");
         updatesEnabled = false;
         const updatesToggleBtn = document.getElementById('updates-toggle');
         if (updatesToggleBtn) {
@@ -903,6 +944,14 @@ async function updateOpenSkyData() {
                     }
                 });
             }
+            if (departureAnnouncementsEnabled) {
+                flightData.filter(f => f.origin === 'SABE').forEach(flight => {
+                    if (!announcedDepartures.includes(flight.flight_number) && flight.status === "Despegando") {
+                        announceDepartureFlight(flight);
+                        announcedDepartures.push(flight.flight_number);
+                    }
+                });
+            }
         } else {
             console.warn("Error al cargar /api/flights:", response.status, response.statusText);
             throw new Error("Respuesta no OK");
@@ -925,8 +974,17 @@ async function updateOpenSkyData() {
 function announceFlight(flight) {
     const utterance = new SpeechSynthesisUtterance();
     const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
-    const originName = AIRPORT_MAPPING[flight.origin] || flight.origin || "Desconocido";
-    utterance.text = `Vuelo ${flight.flight_number} procedente de ${originName} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
+    const origin = AIRPORT_MAPPING[flight.origin] || flight.origin || "Desconocido";
+    utterance.text = `Vuelo ${flight.flight_number} procedente de ${origin} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
+    utterance.lang = 'es-ES';
+    speechSynthesis.speak(utterance);
+}
+
+function announceDepartureFlight(flight) {
+    const utterance = new SpeechSynthesisUtterance();
+    const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
+    const destination = AIRPORT_MAPPING[flight.destination] || flight.destination || "Desconocido";
+    utterance.text = `Vuelo ${flight.flight_number} con destino a ${destination} está próximo a despegar. Tiempo programado de salida: ${sta}. Estado: ${flight.status}.`;
     utterance.lang = 'es-ES';
     speechSynthesis.speak(utterance);
 }
@@ -965,11 +1023,9 @@ function initMap() {
 function updateMap() {
     if (!map) return;
 
-    // Limpiar marcadores existentes
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
 
-    // Filtrar vuelos con datos de posición
     const validFlights = flightData.filter(flight => flight.lat && flight.lon && flight.flight_number.startsWith('AR'));
 
     validFlights.forEach(flight => {
@@ -1582,201 +1638,4 @@ function showHistory() {
     document.getElementById("main").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'none';
-    loadHistory();
-}
-
-function backToMain() {
-    document.getElementById("history-screen").style.display = "none";
-    document.getElementById("main").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'block';
-    updateSwipeHint();
-    console.log("Volviendo a la pantalla principal desde historial");
-}
-
-// Funciones auxiliares
-function base64ToBlob(base64, mime) {
-    try {
-        const byteString = atob(base64);
-        const arrayBuffer = new ArrayBuffer(byteString.length);
-        const uint8Array = new Uint8Array(arrayBuffer);
-        for (let i = 0; i < byteString.length; i++) {
-            uint8Array[i] = byteString.charCodeAt(i);
-        }
-        return new Blob([uint8Array], { type: mime });
-    } catch (err) {
-        console.error("Error al convertir Base64 a Blob:", err);
-        return null;
-    }
-}
-
-function logout() {
-    console.log("Iniciando cierre de sesión...");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "logout" }));
-    } else {
-        completeLogout();
-    }
-}
-
-function completeLogout() {
-    console.log("Completando cierre de sesión...");
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    localStorage.removeItem("sessionToken");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userFunction");
-    localStorage.removeItem("userLegajo");
-    localStorage.removeItem("groupId");
-    localStorage.removeItem("lastSearchQuery");
-    currentGroup = null;
-    mutedUsers.clear();
-    clearInterval(reconnectInterval);
-    stopPing();
-    document.getElementById("auth-section").style.display = "block";
-    document.getElementById("main").style.display = "none";
-}
-
-// Funciones de notificaciones
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        fetch('/templates/sw.js', { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    navigator.serviceWorker.register('/templates/sw.js')
-                        .then(() => console.log('Service Worker registrado'))
-                        .catch(err => console.error('Error al registrar Service Worker:', err));
-                } else {
-                    console.warn('Archivo sw.js no encontrado.');
-                }
-            })
-            .catch(err => {
-                console.warn('No se pudo verificar sw.js:', err);
-            });
-    } else {
-        console.warn('Service Worker no soportado.');
-    }
-}
-
-function checkNotificationPermission() {
-    if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-            console.log('Permiso de notificación ya concedido');
-        } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                    console.log('Permiso de notificación concedido');
-                } else {
-                    console.warn('Permiso de notificación denegado');
-                }
-            }).catch(err => {
-                console.error('Error al solicitar permiso de notificación:', err);
-            });
-        } else {
-            console.warn('Permiso de notificación denegado previamente');
-        }
-    } else {
-        console.warn('Notificaciones no soportadas en este navegador');
-    }
-}
-
-// Función para cargar historial
-function loadHistory() {
-    fetch('/history')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error al cargar historial: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            const historyList = document.getElementById("history-list");
-            if (!historyList) {
-                console.error("Elemento #history-list no encontrado en el DOM");
-                return;
-            }
-            historyList.innerHTML = "";
-            data.forEach(msg => {
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const utcTime = msg.timestamp.split(":");
-                const utcDate = new Date();
-                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const text = msg.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
-                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
-                if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob);
-                } else {
-                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
-                }
-                historyList.appendChild(msgDiv);
-            });
-            console.log("Historial cargado con", data.length, "mensajes");
-        })
-        .catch(err => {
-            console.error("Error al cargar historial:", err);
-            const historyList = document.getElementById("history-list");
-            if (historyList) {
-                historyList.innerHTML = "<div>Error al cargar el historial</div>";
-            }
-        });
-}
-
-// Event listeners
-document.addEventListener('click', unlockAudio, { once: true });
-
-let lastVolumeUpTime = 0;
-let volumeUpCount = 0;
-
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'VolumeUp') {
-        event.preventDefault();
-        const currentTime = Date.now();
-        const timeDiff = currentTime - lastVolumeUpTime;
-
-        if (timeDiff < 500) {
-            volumeUpCount++;
-            if (volumeUpCount === 2) {
-                toggleTalk();
-                volumeUpCount = 0;
-            }
-        } else {
-            volumeUpCount = 1;
-        }
-        lastVolumeUpTime = currentTime;
-    }
-});
-
-document.addEventListener('touchstart', e => {
-    if (!isSwiping) {
-        startX = e.touches[0].clientX;
-    }
-});
-
-document.addEventListener('touchmove', e => {
-    if (!isSwiping) {
-        currentX = e.touches[0].clientX;
-    }
-});
-
-document.addEventListener('touchend', e => {
-    if (isSwiping) return;
-    const deltaX = currentX - startX;
-    if (Math.abs(deltaX) > 50) {
-        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
-            backToMainFromGroup();
-        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
-            returnToGroup();
-        }
-    }
-});
+    const logoutButton = document.getElementBy
