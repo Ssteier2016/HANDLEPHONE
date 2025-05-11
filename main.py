@@ -101,12 +101,13 @@ ALLOWED_SECTORS = [
     "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
     "Jefatura", "Movilero", "Señalero", "Pañolero"
 ]
+
 # Modelo para la solicitud de validación
 class TokenValidationRequest(BaseModel):
     token: str
 
-# Simulación de almacenamiento de tokens válidos (en producción, usa una base de datos o Redis)
-valid_tokens = set()  # Ejemplo: almacenar tokens válidos
+# Simulación de almacenamiento de tokens (en producción, usa una base de datos o Redis)
+valid_tokens = set()
 
 # Modelos Pydantic para validación
 class RegisterRequest(BaseModel):
@@ -210,6 +211,14 @@ users: Dict[str, Dict[str, any]] = {}
 audio_queue: asyncio.Queue = asyncio.Queue()
 groups: Dict[str, List[str]] = {}
 
+# Endpoint para limpiar caché
+@app.post("/clear-cache")
+async def clear_cache():
+    flightradar24_cache.clear()
+    flight_details_cache.clear()
+    logger.info("Caché de vuelos y detalles limpiado")
+    return {"status": "Cache cleared"}
+
 # Endpoint de registro
 @app.post("/register")
 async def register_user(request: RegisterRequest):
@@ -242,6 +251,7 @@ async def register_user(request: RegisterRequest):
     logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
     return {"message": "Registro exitoso"}
 
+# Endpoint de validación de token
 @app.post("/validate-token")
 async def validate_token(request: TokenValidationRequest):
     token = request.token
@@ -250,14 +260,21 @@ async def validate_token(request: TokenValidationRequest):
         raise HTTPException(status_code=400, detail="Token no proporcionado")
     
     try:
-        # Decodificar el token
         decoded = base64.b64decode(token).decode("utf-8")
-        employee_id, surname, sector = decoded.split("_")
-        if not all([employee_id, surname, sector]):
-            logger.error(f"Token inválido: {token}. Componentes incompletos")
+        if not decoded:
+            logger.error(f"Token vacío o inválido: {token}")
             raise HTTPException(status_code=401, detail="Token inválido")
         
-        # Verificar si el token es válido (simulación)
+        parts = decoded.split("_")
+        if len(parts) != 3:
+            logger.error(f"Token mal formateado: {token}. Esperado: employee_id_surname_sector")
+            raise HTTPException(status_code=401, detail="Formato de token inválido")
+        
+        employee_id, surname, sector = parts
+        if not all([employee_id, surname, sector]):
+            logger.error(f"Componentes del token incompletos: {token}")
+            raise HTTPException(status_code=401, detail="Componentes del token incompletos")
+        
         if token not in valid_tokens:
             logger.error(f"Token no registrado: {token}")
             raise HTTPException(status_code=401, detail="Token no registrado")
@@ -265,10 +282,12 @@ async def validate_token(request: TokenValidationRequest):
         logger.info(f"Token validado exitosamente: {token}")
         return {"status": "valid"}
     
+    except base64.binascii.Error:
+        logger.error(f"Error de decodificación Base64 para el token: {token}")
+        raise HTTPException(status_code=401, detail="Token inválido")
     except Exception as e:
         logger.error(f"Excepción al validar token {token}: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error al validar token: {str(e)}")
-        
 
 # Endpoint de inicio de sesión
 @app.post("/login")
@@ -304,15 +323,16 @@ async def login_user(request: LoginRequest):
     sector = user[2]
     token_data = f"{employee_id}_{surname}_{sector}"
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
+    valid_tokens.add(token)  # Agregar token a valid_tokens
     logger.info(f"Login exitoso: {surname} ({employee_id}, {sector})")
     return {"token": token, "message": "Inicio de sesión exitoso"}
 
 # Endpoint para vuelos de Aerolíneas Argentinas desde Flightradar24
-@app.get("/flightradar24_flights")
-async def get_flightradar24_flights(query: Optional[str] = None):
+@app.get("/api/flights")
+async def get_flights(query: Optional[str] = None):
     cache_key = f'flightradar24_flights_ar_{query or "all"}'
     if cache_key in flightradar24_cache:
-        logger.info(f'Sirviendo desde caché: {cache_key}')
+        logger.info(f'Sirviendo desde caché: {cache_key}, {len(flightradar24_cache[cache_key]["flights"])} vuelos')
         return flightradar24_cache[cache_key]
 
     # Configuración de la solicitud
@@ -325,7 +345,7 @@ async def get_flightradar24_flights(query: Optional[str] = None):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "airports": "AEP",  # Filtro necesario para la API
+        "airports": "AEP",
         "limit": 100
     }
 
@@ -342,7 +362,6 @@ async def get_flightradar24_flights(query: Optional[str] = None):
                 async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                     if response.status == 200:
                         data = await response.json()
-                        # Filtrar vuelos de Aerolíneas Argentinas
                         flights = []
                         for flight in data.get("data", []):
                             flight_number = flight.get("flight", "N/A")
@@ -371,25 +390,28 @@ async def get_flightradar24_flights(query: Optional[str] = None):
                                    query in f["status"].lower()
                             ]
                         response_data = {"flights": flights}
-                        flightradar24_cache[cache_key] = response_data
-                        logger.info(f"Respuesta cacheada: {cache_key}, {len(flights)} vuelos (usando token {token[:10]}...)")
+                        if flights:  # Solo cachear si hay vuelos
+                            flightradar24_cache[cache_key] = response_data
+                            logger.info(f"Respuesta cacheada: {cache_key}, {len(flights)} vuelos (usando token {token[:10]}...)")
+                        else:
+                            logger.warning(f"No se encontraron vuelos para {cache_key}, no se cachea")
                         return response_data
                     else:
                         error_details = await response.text() or "Error desconocido"
                         logger.error(f"Error con token {token[:10]}...: {response.status}, Detalles: {error_details}")
+                        if response.status == 451:
+                            logger.error("Error 451: Acceso denegado por razones legales. Verifica credenciales o restricciones de la API.")
         except Exception as e:
             logger.error(f"Excepción con token {token[:10]}...: {str(e)}")
-            continue  # Pasar al siguiente token
+            continue
 
     # Si ambos tokens fallan
     cached_data = flightradar24_cache.get(cache_key)
     if cached_data:
         logger.info(f"Sirviendo datos desde caché debido a fallo de todos los tokens: {cache_key}")
         return cached_data
-    raise HTTPException(
-        status_code=500,
-        detail="No se pudo obtener datos de Flightradar24 con ningún token"
-    )
+    logger.error("No se pudo obtener datos de Flightradar24 con ningún token")
+    return {"flights": []}  # Devolver vacío en lugar de lanzar excepción
 
 # Endpoint para detalles de un vuelo
 @app.get("/flight_details/{flight_number}")
@@ -399,7 +421,6 @@ async def get_flight_details(flight_number: str):
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flight_details_cache[cache_key]
 
-    # Configuración de la solicitud
     now = datetime.utcnow()
     date_from = now - timedelta(hours=24)
     date_to = now
@@ -409,11 +430,10 @@ async def get_flight_details(flight_number: str):
     params = {
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
-        "airports": "AEP",  # Filtro necesario para la API
+        "airports": "AEP",
         "limit": 100
     }
 
-    # Intentar con cada token en orden
     for token in TOKENS:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -426,7 +446,6 @@ async def get_flight_details(flight_number: str):
                 async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                     if response.status == 200:
                         data = await response.json()
-                        # Buscar el vuelo específico
                         flight = next((f for f in data.get("data", []) if f.get("flight") == flight_number), None)
                         if not flight:
                             logger.warning(f"No se encontró el vuelo: {flight_number}")
@@ -451,56 +470,24 @@ async def get_flight_details(flight_number: str):
                     else:
                         error_details = await response.text() or "Error desconocido"
                         logger.error(f"Error con token {token[:10]}...: {response.status}, Detalles: {error_details}")
+                        if response.status == 451:
+                            logger.error("Error 451: Acceso denegado por razones legales. Verifica credenciales o restricciones de la API.")
         except Exception as e:
             logger.error(f"Excepción con token {token[:10]}...: {str(e)}")
-            continue  # Pasar al siguiente token
+            continue
 
-    # Si ambos tokens fallan
     cached_data = flight_details_cache.get(cache_key)
     if cached_data:
         logger.info(f"Sirviendo datos desde caché debido a fallo de todos los tokens: {cache_key}")
         return cached_data
-    raise HTTPException(
-        status_code=500,
-        detail="No se pudo obtener detalles del vuelo con ningún token"
-    )
-
-@app.get("/api/flights")
-async def get_flights():
-    try:
-        # Ejemplo de llamada a FlightRadar24 (reemplazar con tu API real)
-        response = requests.get("https://api.flightradar24.com/flights", headers={
-            "Authorization": "Bearer YOUR_FLIGHTRADAR24_API_KEY"
-        })
-        if response.status_code == 200:
-            flights = response.json().get("flights", [])
-            logger.info(f"Vuelos obtenidos de FlightRadar24: {len(flights)}")
-            # Filtrar vuelos de Aerolíneas Argentinas (ejemplo)
-            filtered_flights = [
-                {
-                    "flight_number": f["flight_number"],
-                    "departure_time": f.get("departure_time", "N/A"),
-                    "arrival_airport": f.get("arrival_airport", "N/A"),
-                    "status": f.get("status", "Desconocido"),
-                    "gate": f.get("gate", "N/A")
-                }
-                for f in flights if f["flight_number"].startswith("AR")
-            ]
-            logger.info(f"Vuelos filtrados: {len(filtered_flights)}")
-            return {"flights": filtered_flights}
-        else:
-            logger.error(f"Error al consultar FlightRadar24: {response.status_code}")
-            return {"flights": []}
-    except Exception as e:
-        logger.error(f"Error al obtener vuelos: {str(e)}")
-        return {"flights": []}
-
+    logger.error("No se pudo obtener detalles del vuelo con ningún token")
+    raise HTTPException(status_code=500, detail="No se pudo obtener detalles del vuelo")
 
 # Actualizar vuelos periódicamente
 async def update_flights():
     while True:
         try:
-            response = await get_flightradar24_flights()
+            response = await get_flights()
             logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
             disconnected_users = []
             for token, user in users.items():
@@ -523,8 +510,6 @@ async def update_flights():
                     logger.info(f"Usuario {token} marcado como desconectado")
                 if disconnected_users:
                     await broadcast_users()
-        except HTTPException as e:
-            logger.error(f"Error HTTP en update_flights: {e.detail}")
         except Exception as e:
             logger.error(f"Error general en update_flights: {e}")
         await asyncio.sleep(300)  # Actualizar cada 5 minutos
@@ -695,7 +680,6 @@ async def process_audio_queue():
             if disconnected_users:
                 await broadcast_users()
 
-            # Llamar task_done() solo después de procesar exitosamente
             audio_queue.task_done()
 
         except asyncio.CancelledError:
@@ -703,7 +687,6 @@ async def process_audio_queue():
             break
         except Exception as e:
             logger.error(f"Error procesando audio queue: {e}")
-            # No llamar task_done() en caso de error
 
 # Limpiar sesiones expiradas
 async def clean_expired_sessions():
