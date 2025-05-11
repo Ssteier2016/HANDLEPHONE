@@ -38,6 +38,15 @@ const AIRLINE_MAPPING = {
     "AEP": "AEP"
 };
 
+// Mapeo de códigos OACI a nombres de aeropuertos
+const AIRPORT_MAPPING = {
+    "SABE": "Aeroparque Jorge Newbery, Buenos Aires",
+    "SACO": "Aeropuerto Internacional, Córdoba",
+    "SAWC": "Aeropuerto Internacional, El Calafate",
+    "SARI": "Aeropuerto Internacional, Iguazú",
+    // Agrega más aeropuertos según sea necesario
+};
+
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 // Inicializar SpeechRecognition
@@ -718,42 +727,35 @@ function updateFlightInfo() {
     const arrivals = filteredFlights.filter(flight => flight.destination === 'SABE');
 
     // Actualizar tablas
-    const updateTable = (table, flights, isArrival) => {
-        table.innerHTML = `
-            <tr>
-                <th>Matrícula</th>
-                <th>Número de Vuelo</th>
-                <th>STA</th>
-                <th>Posición</th>
-                <th>${isArrival ? 'Origen' : 'Destino'}</th>
-                <th>Hora Real</th>
-                <th>Acción</th>
-            </tr>
-        `;
+    const updateTableBody = (tbody, flights, isArrival) => {
+        tbody.innerHTML = ''; // Limpiar solo el cuerpo de la tabla
         flights.forEach(flight => {
             const row = document.createElement('tr');
             row.className = 'tams-row';
             row.style.color = flight.color || 'black';
             const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
             const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+            const originOrDestination = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
             row.innerHTML = `
                 <td>${flight.registration || 'N/A'}</td>
                 <td>${flight.flight_number || 'N/A'}</td>
                 <td>${sta}</td>
                 <td>${flight.position || 'N/A'}</td>
-                <td>${isArrival ? (flight.origin || 'N/A') : (flight.destination || 'N/A')}</td>
+                <td>${originOrDestination}</td>
                 <td>${eta}</td>
-                <td><button class="tams-details-btn" onclick="showFlightDetails(${JSON.stringify(flight).replace(/"/g, '&quot;')})">Ver Más</button></td>
+                <td><button class="tams-details-btn" onclick="showFlightDetails(${JSON.stringify(flight).replace(/"/g, '"')})">Ver Más</button></td>
             `;
-            table.appendChild(row);
+            tbody.appendChild(row);
         });
     };
 
-    updateTable(departuresTable, departures, false);
-    updateTable(arrivalsTable, arrivals, true);
-    updateTable(groupDeparturesTable, departures, false);
-    updateTable(groupArrivalsTable, arrivals, true);
+    // Actualizar solo el <tbody> de cada tabla
+    updateTableBody(departuresTable, departures, false);
+    updateTableBody(arrivalsTable, arrivals, true);
+    updateTableBody(groupDeparturesTable, departures, false);
+    updateTableBody(groupArrivalsTable, arrivals, true);
 
+    // Aplicar filtro de búsqueda si existe
     filterFlights(localStorage.getItem('lastSearchQuery') || '');
 }
 
@@ -850,7 +852,8 @@ async function updateOpenSkyData() {
 function announceFlight(flight) {
     const utterance = new SpeechSynthesisUtterance();
     const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
-    utterance.text = `Vuelo ${flight.flight_number} procedente de ${flight.origin} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
+    const originName = AIRPORT_MAPPING[flight.origin] || flight.origin || "Desconocido";
+    utterance.text = `Vuelo ${flight.flight_number} procedente de ${originName} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
     utterance.lang = 'es-ES';
     speechSynthesis.speak(utterance);
 }
@@ -910,8 +913,8 @@ function updateMap() {
             <b>Vuelo:</b> ${flight.flight_number}<br>
             <b>Matrícula:</b> ${flight.registration || 'N/A'}<br>
             <b>Estado:</b> ${flight.status || 'N/A'}<br>
-            <b>Origen:</b> ${flight.origin || 'N/A'}<br>
-            <b>Destino:</b> ${flight.destination || 'N/A'}<br>
+            <b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}<br>
+            <b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}<br>
             <b>ETA:</b> ${flight.eta ? new Date(flight.eta).toLocaleTimeString() : 'N/A'}
         `);
         marker.flight = flight;
