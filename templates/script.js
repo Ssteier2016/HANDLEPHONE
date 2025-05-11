@@ -1,472 +1,41 @@
-// Variables globales
 let ws = null;
-let pingInterval = null;
-let userId;
-let audioChunks = [];
-let audioContext = new (window.AudioContext || window.webkitAudioContext)();
-let mediaRecorder;
-let stream;
-let map;
-let audioQueue = [];
-let isPlaying = false;
-let markers = [];
-let recognition;
-let supportsSpeechRecognition = false;
-let mutedUsers = new Set();
+let userId = null;
 let currentGroup = null;
+let isRecording = false;
+let isGroupRecording = false;
+let isMuted = false;
+let isGroupMuted = false;
+let isNonGroupMuted = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let flightData = [];
+let map = null;
+let markers = [];
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
-let flightData = [];
-let reconnectInterval = null;
-let announcementsEnabled = false;
-let departureAnnouncementsEnabled = false;
-let announcedFlights = [];
-let announcedDepartures = [];
-let groupRecording = false;
-let groupMediaRecorder = null;
 let updatesEnabled = true;
-let dailyTokenCount = 0;
-let restrictTokens = localStorage.getItem('restrictTokens') !== 'false';
-const PING_INTERVAL = 30000;
-const RECONNECT_BASE_DELAY = 5000;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const SYNC_TAG = 'sync-messages';
+let departureAnnouncementsEnabled = false;
+let announcementsEnabled = false;
+let restrictTokens = JSON.parse(localStorage.getItem('restrictTokens') || 'true');
+let dailyTokenCount = parseInt(localStorage.getItem('dailyTokenCount') || '0', 10);
 const MAX_TOKENS_DAILY = 2000;
-const TOKENS_PER_FLIGHT = 3;
+const TOKENS_PER_FLIGHT = 1;
 const MAX_FLIGHTS_PER_REQUEST = 20;
-
-const AIRLINE_MAPPING = {
-    "ARG": "Aerolíneas Argentinas",
-    "AEP": "AEP"
-};
-
 const AIRPORT_MAPPING = {
-    "SABE": "AEP", "SAEZ": "EZE", "SACO": "COR", "SAWC": "FTE", "SARI": "IGR", "SASA": "SLA",
-    "SASJ": "JUJ", "SANT": "TUC", "SAZS": "BRC", "SAZM": "MDQ", "SAZN": "NQN", "SAZR": "RSA",
-    "SAZY": "CPC", "SAWH": "USH", "SAWG": "RGL", "SAWJ": "CRD", "SAWT": "RGA", "SAWP": "PMY",
-    "SAOU": "LGS", "SAME": "MDZ", "SANU": "UAQ", "SAOC": "RCQ", "SARP": "PSS", "SATR": "RCU",
-    "SAVC": "PMQ", "SAVT": "REL", "SAVV": "VDM", "SAAP": "PRA", "SAAV": "SFN", "SANR": "RLO",
-    "SANC": "CTC", "SANL": "IRJ", "SAVB": "EHL", "SAVY": "PMY", "SLVR": "VVI", "SBGR": "GRU",
-    "SBGL": "GIG", "SBFL": "FLN", "SBPA": "POA", "SBRF": "REC", "SBSV": "SSA", "SBFZ": "FOR",
-    "SBFI": "IGU", "SCEL": "SCL", "SCFA": "ANF", "SGAS": "ASU", "SUMU": "MVD", "SULS": "PDP",
-    "SKBO": "BOG", "SKRG": "MDE", "SKAR": "ADZ", "SPJC": "LIM", "KJFK": "JFK", "KMIA": "MIA",
-    "LEMD": "MAD", "LIRF": "FCO", "MMUN": "CUN", "MDPC": "PUJ", "MDSD": "SDQ", "TNCM": "SXM",
-    "TBPB": "BGI"
+    'SABE': 'Aeroparque',
+    'SAEZ': 'Ezeiza',
+    // Agrega más mapeos según sea necesario
 };
 
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-// Inicializar SpeechRecognition
-if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'es-ES';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    supportsSpeechRecognition = true;
-    console.log("SpeechRecognition soportado. Navegador:", navigator.userAgent);
-} else {
-    console.warn("SpeechRecognition no soportado. Navegador:", navigator.userAgent);
-    alert("Tu navegador no soporta speech-to-text en el cliente. El servidor transcribirá el audio.");
-}
-
-// Mostrar nombre del perfil
-function displayUserProfile() {
-    const sessionToken = localStorage.getItem('sessionToken');
-    const profileDiv = document.getElementById('user-profile');
-    if (sessionToken && profileDiv) {
-        try {
-            const decoded = atob(sessionToken);
-            const [employee_id, surname, sector] = decoded.split('_');
-            profileDiv.textContent = `Bienvenido, ${surname} (${employee_id}) - ${sector}`;
-        } catch (error) {
-            console.error('Error al decodificar token:', error);
-            localStorage.removeItem('sessionToken');
-            profileDiv.textContent = '';
-        }
-    } else if (profileDiv) {
-        profileDiv.textContent = '';
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
     }
-}
-
-// Validar token con el servidor
-async function validateToken(sessionToken) {
-    try {
-        const response = await fetch('/validate-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: sessionToken }),
-        });
-        if (response.ok) {
-            console.log("Token válido");
-            return true;
-        } else if (response.status === 404) {
-            console.warn("Endpoint /validate-token no encontrado. Continuando sin validación.");
-            return true;
-        } else {
-            console.warn("Token inválido o expirado:", response.status, response.statusText);
-            return false;
-        }
-    } catch (error) {
-        console.error("Error al validar token:", error);
-        return true;
-    }
-}
-
-// Restaurar sesión al cargar la página
-document.addEventListener('DOMContentLoaded', async () => {
-    registerServiceWorker();
-    displayUserProfile();
-    const sessionToken = localStorage.getItem('sessionToken');
-    const userName = localStorage.getItem('userName');
-    const userFunction = localStorage.getItem('userFunction');
-    const userLegajo = localStorage.getItem('userLegajo');
-
-    announcementsEnabled = localStorage.getItem('announcementsEnabled') === 'true';
-    departureAnnouncementsEnabled = localStorage.getItem('departureAnnouncementsEnabled') === 'true';
-    restrictTokens = localStorage.getItem('restrictTokens') !== 'false';
-
-    let isAuthenticated = false;
-    if (sessionToken && userName && userFunction && userLegajo) {
-        isAuthenticated = await validateToken(sessionToken);
-        if (isAuthenticated) {
-            userId = `${userLegajo}_${userName}_${userFunction}`;
-            connectWebSocket(sessionToken);
-            document.getElementById('auth-section').style.display = 'none';
-            document.getElementById('main').style.display = 'block';
-            checkGroupStatus();
-        } else {
-            console.warn("Token inválido, mostrando pantalla de login");
-            localStorage.removeItem('sessionToken');
-            localStorage.removeItem('userName');
-            localStorage.removeItem('userFunction');
-            localStorage.removeItem('userLegajo');
-            alert("Sesión inválida. Por favor, inicia sesión nuevamente.");
-            document.getElementById('auth-section').style.display = 'block';
-            document.getElementById('main').style.display = 'none';
-        }
-    } else {
-        console.log("No hay sesión activa, mostrando pantalla de login");
-        document.getElementById('auth-section').style.display = 'block';
-        document.getElementById('main').style.display = 'none';
-    }
-
-    updateOpenSkyData();
-    initMap();
-
-    const searchButton = document.getElementById('search-button');
-    if (searchButton) {
-        searchButton.addEventListener('click', sendSearchQuery);
-    } else {
-        console.error("Botón de búsqueda no encontrado en el DOM");
-    }
-
-    const registerForm = document.getElementById('register-form');
-    const loginForm = document.getElementById('login-form');
-    if (registerForm) {
-        registerForm.addEventListener('submit', registerUser);
-    } else {
-        console.error("Formulario de registro no encontrado en el DOM");
-    }
-    if (loginForm) {
-        loginForm.addEventListener('submit', loginUser);
-    } else {
-        console.error("Formulario de login no encontrado en el DOM");
-    }
-
-    const showLogin = document.getElementById('show-login');
-    const showRegister = document.getElementById('show-register');
-    if (showLogin) {
-        showLogin.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
-        });
-    }
-    if (showRegister) {
-        showRegister.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('register-form').style.display = 'block';
-            document.getElementById('login-form').style.display = 'none';
-        });
-    }
-
-    const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
-    if (toggleAnnouncementsBtn) {
-        toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
-        toggleAnnouncementsBtn.addEventListener('click', () => {
-            announcementsEnabled = !announcementsEnabled;
-            localStorage.setItem('announcementsEnabled', announcementsEnabled);
-            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
-            console.log("Anuncios de llegadas:", announcementsEnabled ? "activados" : "desactivados");
-        });
-    } else {
-        console.warn("Botón #toggle-announcements no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
-    const toggleDepartureAnnouncementsBtn = document.getElementById('toggle-departure-announcements');
-    if (toggleDepartureAnnouncementsBtn) {
-        toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
-        toggleDepartureAnnouncementsBtn.addEventListener('click', () => {
-            departureAnnouncementsEnabled = !departureAnnouncementsEnabled;
-            localStorage.setItem('departureAnnouncementsEnabled', departureAnnouncementsEnabled);
-            toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
-            console.log("Anuncios de despegues:", departureAnnouncementsEnabled ? "activados" : "desactivados");
-        });
-    } else {
-        console.warn("Botón #toggle-departure-announcements no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
-    const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
-    if (toggleTokenLimitBtn) {
-        toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
-        toggleTokenLimitBtn.addEventListener('click', () => {
-            restrictTokens = !restrictTokens;
-            localStorage.setItem('restrictTokens', restrictTokens);
-            toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
-            console.log("Límite de tokens:", restrictTokens ? "activado" : "desactivado");
-            if (!restrictTokens) {
-                alert("El límite de tokens ha sido desactivado. Las solicitudes a FlightRadar24 no estarán restringidas, lo que puede generar costos adicionales.");
-            } else {
-                alert("El límite de tokens ha sido activado. Se respetará el límite diario de " + MAX_TOKENS_DAILY + " tokens.");
-            }
-        });
-    } else {
-        console.warn("Botón #toggle-token-limit no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
-    const updatesToggleBtn = document.getElementById('updates-toggle');
-    if (updatesToggleBtn) {
-        updatesToggleBtn.addEventListener('click', () => {
-            updatesEnabled = !updatesEnabled;
-            updatesToggleBtn.classList.toggle('active', updatesEnabled);
-            updatesToggleBtn.textContent = updatesEnabled ? 'Pausar Actualizaciones' : 'Reanudar Actualizaciones';
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'toggle_updates', enabled: updatesEnabled }));
-            }
-            console.log("Actualizaciones de vuelos:", updatesEnabled ? "activadas" : "pausadas");
-        });
-    } else {
-        console.warn("Botón #updates-toggle no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
-    checkNotificationPermission();
-    navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data && event.data.type === 'SEND_MESSAGE' && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(event.data.message));
-            console.log('Mensaje sincronizado enviado:', event.data.message);
-        } else if (event.data && event.data.type === 'SYNC_COMPLETE') {
-            console.log('Sincronización completada');
-        }
-    });
-});
-
-// Manejar visibilidad de la pestaña
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        console.log('App en segundo plano');
-    } else {
-        console.log('App en primer plano');
-        if (ws && ws.readyState !== WebSocket.OPEN) {
-            const sessionToken = localStorage.getItem('sessionToken');
-            if (sessionToken) {
-                validateToken(sessionToken).then(isValid => {
-                    if (isValid) {
-                        connectWebSocket(sessionToken);
-                    } else {
-                        console.warn("Token inválido al intentar reconectar WebSocket");
-                        localStorage.removeItem('sessionToken');
-                    }
-                });
-            }
-        }
-    }
-});
-
-function queueMessageForSync(message) {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'QUEUE_MESSAGE',
-            message: message
-        });
-        console.log('Mensaje enviado al Service Worker para encolar');
-        navigator.serviceWorker.ready.then(registration => {
-            registration.sync.register(SYNC_TAG).catch(err => {
-                console.error('Error al registrar sync:', err);
-            });
-        });
-    } else {
-        console.error('Service Worker no está disponible para encolar mensaje');
-        alert('No se pudo guardar el mensaje. Por favor, verifica la conexión.');
-    }
-}
-
-// Funciones de audio
-function unlockAudio() {
-    if (audioContext.state === 'suspended') {
-        audioContext.resume().then(() => {
-            console.log("Contexto de audio desbloqueado");
-        }).catch(err => {
-            console.error("Error al desbloquear el contexto de audio:", err);
-        });
-    }
-}
-
-async function requestMicPermission() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log("Micrófono permitido");
-        return stream;
-    } catch (err) {
-        console.error("Error al solicitar permiso de micrófono:", err);
-        alert("No se pudo acceder al micrófono. Por favor, habilita los permisos.");
-        return null;
-    }
-}
-
-function playAudio(blob) {
-    if (!blob || blob.size === 0) {
-        console.error("Blob de audio inválido o vacío");
-        return;
-    }
-    const audio = new Audio(URL.createObjectURL(blob));
-    audioQueue.push(audio);
-    playNextAudio();
-    if ('mediaSession' in navigator && typeof MediaSessionMetadata !== 'undefined') {
-        navigator.mediaSession.metadata = new MediaSessionMetadata({
-            title: 'Mensaje de voz',
-            artist: 'HANDLEPHONE',
-            album: 'Comunicación Aeronáutica'
-        });
-        navigator.mediaSession.setActionHandler('play', () => audio.play());
-        navigator.mediaSession.setActionHandler('pause', () => audio.pause());
-    }
-}
-
-function playNextAudio() {
-    if (audioQueue.length === 0 || isPlaying) return;
-    isPlaying = true;
-    const audio = audioQueue.shift();
-    audio.play().then(() => {
-        console.log("Audio reproducido exitosamente");
-        isPlaying = false;
-        playNextAudio();
-    }).catch(err => {
-        console.error("Error reproduciendo audio:", err);
-        isPlaying = false;
-        playNextAudio();
-    });
-}
-
-function playAnnouncement(audioUrl) {
-    const audio = new Audio(audioUrl);
-    audio.play().catch(error => {
-        console.error('Error al reproducir anuncio:', error);
-    });
-}
-
-// Funciones de búsqueda
-function sendSearchQuery() {
-    const query = document.getElementById('search-input')?.value.trim().toUpperCase() || '';
-    if (!query) {
-        alert('Ingresá una consulta');
-        return;
-    }
-    localStorage.setItem('lastSearchQuery', query);
-    filterFlights(query);
-    document.getElementById('search-input').value = '';
-    console.log(`Consulta de búsqueda: ${query}`);
-}
-
-function filterFlights(searchTerm = '') {
-    searchTerm = searchTerm.toUpperCase().trim();
-    console.log("Filtrando vuelos con término:", searchTerm);
-
-    const tables = [
-        document.getElementById('departures-table'),
-        document.getElementById('arrivals-table'),
-        document.getElementById('group-departures-table'),
-        document.getElementById('group-arrivals-table')
-    ];
-
-    tables.forEach(table => {
-        if (!table) return;
-        const rows = table.querySelectorAll('tr.tams-row');
-        rows.forEach(row => {
-            const registration = row.cells[0].textContent.toUpperCase();
-            const flightNumber = row.cells[1].textContent.toUpperCase();
-            const matches = searchTerm === '' ||
-                           registration.includes(searchTerm) ||
-                           flightNumber.includes(searchTerm);
-            row.style.display = matches ? '' : 'none';
-        });
-    });
-
-    markers.forEach(marker => {
-        const flight = marker.flight || {};
-        const registration = flight.registration || '';
-        const flightNumber = flight.flight_number || '';
-        const matches = searchTerm === '' ||
-                       registration.toUpperCase().includes(searchTerm) ||
-                       flightNumber.toUpperCase().includes(searchTerm);
-        if (matches) {
-            if (!map.hasLayer(marker)) {
-                marker.addTo(map);
-            }
-        } else {
-            if (map.hasLayer(marker)) {
-                map.removeLayer(marker);
-            }
-        }
-    });
-
-    if (map) map.invalidateSize();
-    console.log("Vuelos filtrados, marcadores actualizados:", markers.length);
-}
-
-// Funciones de registro y conexión
-async function registerUser(event) {
-    event.preventDefault();
-    const surname = document.getElementById('surname')?.value.trim() || '';
-    const employee_id = document.getElementById('employee_id')?.value.trim() || '';
-    const sector = document.getElementById('sector')?.value || '';
-    const password = document.getElementById('password')?.value || '';
-
-    console.log("Intentando registrar:", { surname, employee_id, sector });
-
-    if (!surname || !employee_id || !sector || !password) {
-        alert('Por favor, completa todos los campos.');
-        return;
-    }
-    if (!/^\d{5}$/.test(employee_id)) {
-        alert('El legajo debe contener exactamente 5 números.');
-        return;
-    }
-    if (password.length < 6) {
-        alert('La contraseña debe tener al menos 6 caracteres.');
-        return;
-    }
-
-    try {
-        const response = await fetch('/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ surname, employee_id, sector, password }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-            alert('Registro exitoso. Por favor, inicia sesión.');
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
-        } else {
-            const errorMessage = data.detail && typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
-            alert(`Error al registrar: ${errorMessage}`);
-            console.error('Error en registro:', data);
-        }
-    } catch (error) {
-        console.error('Error al registrar:', error);
-        alert('Error de conexión con el servidor. Intenta de nuevo.');
-    }
+    console.error(message);
 }
 
 async function loginUser(event) {
@@ -474,18 +43,15 @@ async function loginUser(event) {
     const surname = document.getElementById('surname-login')?.value.trim() || '';
     const employee_id = document.getElementById('employee_id-login')?.value.trim() || '';
     const password = document.getElementById('password-login')?.value || '';
-
     console.log("Intentando login con:", { surname, employee_id });
-
     if (!surname || !employee_id || !password) {
-        alert('Por favor, completa todos los campos.');
+        showError('Por favor, completa todos los campos.');
         return;
     }
     if (!/^\d{5}$/.test(employee_id)) {
-        alert('El legajo debe contener exactamente 5 números.');
+        showError('El legajo debe contener exactamente 5 números.');
         return;
     }
-
     try {
         const response = await fetch('/login', {
             method: 'POST',
@@ -493,440 +59,519 @@ async function loginUser(event) {
             body: JSON.stringify({ surname, employee_id, password }),
         });
         const data = await response.json();
+        console.log("Respuesta de /login:", response.status, data);
         if (response.ok) {
             localStorage.setItem('sessionToken', data.token);
             const decoded = atob(data.token);
-            const [employee_id, surname, sector] = decoded.split('_');
-            localStorage.setItem('userName', surname);
+            const [emp_id, surn, sector] = decoded.split('_');
+            localStorage.setItem('userName', surn);
             localStorage.setItem('userFunction', sector);
-            localStorage.setItem('userLegajo', employee_id);
-            userId = `${employee_id}_${surname}_${sector}`;
+            localStorage.setItem('userLegajo', emp_id);
+            userId = `${emp_id}_${surn}_${sector}`;
             connectWebSocket(data.token);
-            alert('Inicio de sesión exitoso');
             document.getElementById('auth-section').style.display = 'none';
             document.getElementById('main').style.display = 'block';
             displayUserProfile();
             updateOpenSkyData();
         } else {
-            const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
-            alert(`Error al iniciar sesión: ${errorMessage}`);
-            console.error('Error en login:', data);
+            const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
+            showError(`Error al iniciar sesión: ${errorMessage}`);
         }
     } catch (error) {
+        showError('Error de conexión con el servidor.');
         console.error('Error al iniciar sesión:', error);
-        alert('Error de conexión con el servidor. Intenta de nuevo.');
     }
 }
 
-// Conectar WebSocket
-function connectWebSocket(sessionToken, retryCount = 0) {
-    if (!sessionToken) {
-        console.warn("No hay sessionToken, pero continuando para mostrar vuelos");
-        updateOpenSkyData();
+async function registerUser(event) {
+    event.preventDefault();
+    const surname = document.getElementById('surname')?.value.trim() || '';
+    const employee_id = document.getElementById('employee_id')?.value.trim() || '';
+    const sector = document.getElementById('sector')?.value || '';
+    const password = document.getElementById('password')?.value || '';
+    console.log("Intentando registro con:", { surname, employee_id, sector });
+    if (!surname || !employee_id || !sector || !password) {
+        showError('Por favor, completa todos los campos.');
         return;
     }
-    const wsUrl = `wss://${window.location.host}/ws/${encodeURIComponent(sessionToken)}`;
-    console.log(`Intentando conectar WebSocket a: ${wsUrl} (Intento ${retryCount + 1})`);
+    if (!/^\d{5}$/.test(employee_id)) {
+        showError('El legajo debe contener exactamente 5 números.');
+        return;
+    }
     try {
-        ws = new WebSocket(wsUrl);
-    } catch (err) {
-        console.error("Error al crear WebSocket:", err);
-        updateOpenSkyData();
-        return;
-    }
-
-    ws.onopen = function() {
-        console.log("WebSocket conectado exitosamente");
-        clearInterval(reconnectInterval);
-        ws.send(JSON.stringify({
-            type: "register",
-            legajo: localStorage.getItem("userLegajo"),
-            name: localStorage.getItem("userName"),
-            function: localStorage.getItem("userFunction")
-        }));
-        document.getElementById("auth-section").style.display = "none";
-        const mainDiv = document.getElementById("main");
-        if (mainDiv) {
-            mainDiv.style.display = "block";
+        const response = await fetch('/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ surname, employee_id, sector, password }),
+        });
+        const data = await response.json();
+        console.log("Respuesta de /register:", response.status, data);
+        if (response.ok) {
+            showError('Registro exitoso. Por favor, inicia sesión.');
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
         } else {
-            console.error("Elemento #main no encontrado en el DOM");
+            const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
+            showError(`Error al registrarse: ${errorMessage}`);
         }
-        updateUsers(0, []);
-        updateOpenSkyData();
+    } catch (error) {
+        showError('Error de conexión con el servidor.');
+        console.error('Error al registrarse:', error);
+    }
+}
+
+function connectWebSocket(token) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+    }
+    ws = new WebSocket(`wss://${window.location.host}/ws/${token}`);
+    ws.onopen = () => {
+        console.log("WebSocket conectado");
         startPing();
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.ready.then(registration => {
-                registration.sync.register(SYNC_TAG).catch(err => {
-                    console.error('Error al registrar sync al reconectar:', err);
-                });
-            });
-        }
     };
-
-    ws.onmessage = function(event) {
-        console.log("Datos recibidos del servidor:", event.data);
+    ws.onmessage = (event) => {
         try {
-            const message = JSON.parse(event.data);
-            console.log("Mensaje parseado:", message);
-
-            if (!message.type) {
-                console.error("Mensaje sin tipo:", message);
-                return;
-            }
-
-            if (message.type === "audio" || message.type === "group_message") {
-                if (!message.data) {
-                    console.error("Mensaje de audio sin datos de audio:", message);
-                    return;
+            const data = JSON.parse(event.data);
+            console.log("Mensaje WebSocket:", data);
+            if (data.type === 'message' || data.type === 'group_message') {
+                displayMessage(data);
+                if (data.audio) {
+                    playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
-                const senderId = `${message.sender}_${message.function}`;
-                if (mutedUsers.has(senderId)) {
-                    console.log(`Mensaje de ${senderId} ignorado porque está muteado`);
-                    return;
-                }
-                const audioBlob = base64ToBlob(message.data, 'audio/webm');
-                if (!audioBlob) {
-                    console.error("No se pudo crear el Blob para el mensaje de audio");
-                    return;
-                }
-                playAudio(audioBlob);
-                const chatListId = message.type === "group_message" ? "group-chat-list" : "chat-list";
-                const chatList = document.getElementById(chatListId);
-                if (!chatList) {
-                    console.error(`Elemento ${chatListId} no encontrado en el DOM`);
-                    return;
-                }
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = message.sender || "Anónimo";
-                const userFunction = message.function || "Desconocida";
-                const text = message.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${text}`;
-                msgDiv.onclick = () => playAudio(audioBlob);
-                chatList.appendChild(msgDiv);
-                chatList.scrollTop = chatList.scrollHeight;
-                console.log(`Mensaje de ${message.type} agregado al ${chatListId}`);
-            } else if (message.type === "users") {
-                updateUsers(message.count, message.list);
-            } else if (message.type === "mute_all_success") {
-                updateMuteButton(true);
-                console.log("Muteo global activado");
-            } else if (message.type === "unmute_all_success") {
-                updateMuteButton(false);
-                console.log("Muteo global desactivado");
-            } else if (message.type === "mute_non_group_success") {
-                message.user_ids.forEach(userId => mutedUsers.add(userId));
-                updateUsers(message.count, message.list);
-                document.getElementById("mute-non-group").classList.add("muted");
-                document.getElementById("mute-non-group").textContent = "Desmutear no grupo";
-                console.log("Usuarios fuera del grupo muteados");
-            } else if (message.type === "unmute_non_group_success") {
-                message.user_ids.forEach(userId => mutedUsers.delete(userId));
-                updateUsers(message.count, message.list);
-                document.getElementById("mute-non-group").classList.remove("muted");
-                document.getElementById("mute-non-group").textContent = "Mutear no grupo";
-                console.log("Usuarios fuera del grupo desmuteados");
-            } else if (message.type === "group_joined") {
-                currentGroup = message.group_id;
-                localStorage.setItem('groupId', currentGroup);
+            } else if (data.type === 'user_list') {
+                updateUserList(data.users);
+            } else if (data.type === 'group_joined') {
+                currentGroup = data.group_id;
                 document.getElementById('main').style.display = 'none';
                 document.getElementById('group-screen').style.display = 'block';
-                if (message.is_private) {
-                    const logoutButton = document.getElementById('logout-button');
-                    if (logoutButton) logoutButton.style.display = 'none';
-                }
                 updateSwipeHint();
-                console.log(`Unido al grupo: ${message.group_id}, privado: ${message.is_private}`);
-            } else if (message.type === "create_group_success") {
-                currentGroup = message.group_id;
-                localStorage.setItem('groupId', currentGroup);
-                document.getElementById('main').style.display = 'none';
-                document.getElementById('group-screen').style.display = 'block';
-                if (message.is_private) {
-                    const logoutButton = document.getElementById('logout-button');
-                    if (logoutButton) logoutButton.style.display = 'none';
-                }
+                updateFlightInfo();
+            } else if (data.type === 'group_left') {
+                currentGroup = null;
+                document.getElementById('group-screen').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
                 updateSwipeHint();
-                alert(`Grupo ${message.group_id} creado exitosamente`);
-                console.log(`Grupo creado: ${message.group_id}, privado: ${message.is_private}`);
-            } else if (message.type === "create_group_error") {
-                alert(`Error al crear el grupo: ${message.message}`);
-                console.error(`Error al crear grupo: ${message.message}`);
-            } else if (message.type === "check_group") {
-                if (!message.in_group) {
-                    currentGroup = null;
-                    localStorage.removeItem('groupId');
-                    updateSwipeHint();
-                    console.log("No estás en el grupo, currentGroup restablecido a null");
+            } else if (data.type === 'error') {
+                showError(data.message);
+                if (data.message.includes('Token no registrado') || data.message.includes('Sesión inválida')) {
+                    completeLogout();
                 }
-            } else if (message.type === "flight_update") {
-                flightData = message.flights || [];
+            } else if (data.type === 'flight_update') {
+                flightData = data.flights.filter(f => f && f.flight_number);
                 updateFlightInfo();
                 updateMap();
-                if (announcementsEnabled) {
-                    flightData.filter(f => f.destination === 'SABE').forEach(flight => {
-                        if (!announcedFlights.includes(flight.flight_number) && flight.status === "Próximo a aterrizar") {
-                            announceFlight(flight);
-                            announcedFlights.push(flight.flight_number);
-                        }
-                    });
-                }
-                if (departureAnnouncementsEnabled) {
-                    flightData.filter(f => f.origin === 'SABE').forEach(flight => {
-                        if (!announcedDepartures.includes(flight.flight_number) && flight.status === "Despegando") {
-                            announceDepartureFlight(flight);
-                            announcedDepartures.push(flight.flight_number);
-                        }
-                    });
-                }
-            } else if (message.type === "announcement") {
-                if (announcementsEnabled) {
-                    playAnnouncement(message.audio_url);
-                }
-            } else if (message.type === "register_success") {
-                console.log("Registro exitoso:", message.message);
-            } else if (message.type === "connection_success") {
-                console.log("Conexión exitosa");
-            } else if (message.type === "logout_success") {
-                console.log("Cierre de sesión exitoso");
-                completeLogout();
-            } else if (message.type === "pong") {
-                console.log("Pong recibido del servidor");
-            } else if (message.type === "error") {
-                console.error("Error del servidor:", message.message);
-                if (message.message === "Usuario no registrado") {
-                    console.warn("Sesión inválida, pero manteniendo vuelos visibles");
-                    localStorage.removeItem('sessionToken');
-                    document.getElementById('auth-section').style.display = 'block';
-                    document.getElementById('main').style.display = 'block';
-                    updateOpenSkyData();
-                }
-            } else {
-                console.warn("Tipo de mensaje desconocido:", message.type);
             }
         } catch (err) {
-            console.error("Error procesando mensaje:", err, "Datos recibidos:", event.data);
+            console.error("Error al procesar mensaje WebSocket:", err);
         }
     };
-
-    ws.onerror = function(error) {
-        console.error("Error en WebSocket:", error);
-        updateOpenSkyData();
-    };
-
-    ws.onclose = function() {
+    ws.onclose = () => {
         console.log("WebSocket cerrado");
         stopPing();
-        const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken && retryCount < MAX_RECONNECT_ATTEMPTS) {
-            const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000);
-            reconnectInterval = setTimeout(() => {
-                validateToken(sessionToken).then(isValid => {
-                    if (isValid) {
-                        connectWebSocket(sessionToken, retryCount + 1);
-                    } else {
-                        console.warn("Token inválido, manteniendo vuelos");
-                        document.getElementById('main').style.display = 'block';
-                        updateOpenSkyData();
-                    }
-                });
-            }, delay);
-        } else {
-            console.warn("No hay sessionToken o límite de reconexiones alcanzado, manteniendo vuelos");
-            document.getElementById('main').style.display = 'block';
-            updateOpenSkyData();
-        }
+        setTimeout(() => connectWebSocket(token), 5000);
+    };
+    ws.onerror = (error) => {
+        console.error("Error en WebSocket:", error);
     };
 }
 
-// Mantener conexión viva con ping
 function startPing() {
-    stopPing();
-    pingInterval = setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-            console.log("Ping enviado al servidor");
-        }
-    }, PING_INTERVAL);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'ping' }));
+    setTimeout(startPing, 30000);
 }
 
 function stopPing() {
-    if (pingInterval) {
-        clearInterval(pingInterval);
-        pingInterval = null;
+    // No se necesita implementación explícita para detener pings
+}
+
+function displayUserProfile() {
+    const profileDiv = document.getElementById('user-profile');
+    if (profileDiv) {
+        const name = localStorage.getItem('userName') || 'Usuario';
+        const role = localStorage.getItem('userFunction') || 'Rol desconocido';
+        profileDiv.textContent = `Usuario: ${name} | Rol: ${role}`;
     }
 }
 
-// Funciones de vuelos
-function updateFlightInfo() {
-    const departuresTable = document.getElementById('departures-table');
-    const arrivalsTable = document.getElementById('arrivals-table');
-    const groupDeparturesTable = document.getElementById('group-departures-table');
-    const groupArrivalsTable = document.getElementById('group-arrivals-table');
+function updateUserList(users) {
+    const usersDiv = document.getElementById('users');
+    const groupUsersDiv = document.getElementById('group-users');
+    if (usersDiv) {
+        usersDiv.textContent = `Usuarios conectados: ${users.length}`;
+    }
+    if (groupUsersDiv && currentGroup) {
+        groupUsersDiv.textContent = `Usuarios conectados: ${users.filter(u => u.group_id === currentGroup).length}`;
+    }
+}
 
-    if (!departuresTable || !arrivalsTable || !groupDeparturesTable || !groupArrivalsTable) {
-        console.error("Tablas de vuelos no encontradas en el DOM");
+function displayMessage(data) {
+    const chatList = data.type === 'group_message' ? document.getElementById('group-chat-list') : document.getElementById('chat-list');
+    if (!chatList) return;
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message';
+    messageDiv.innerHTML = `<span class="play-icon">▶</span>${data.sender}: ${data.text || 'Audio'}`;
+    messageDiv.onclick = () => {
+        if (data.audio) {
+            playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
+        }
+    };
+    chatList.appendChild(messageDiv);
+    chatList.scrollTop = chatList.scrollHeight;
+}
+
+async function playAudio(audioData, sender, groupId) {
+    try {
+        const audioBlob = base64ToBlob(audioData, 'audio/webm');
+        if (!audioBlob) throw new Error("No se pudo convertir el audio");
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play();
+        if ('mediaSession' in navigator && typeof MediaSessionMetadata !== 'undefined') {
+            navigator.mediaSession.metadata = new MediaSessionMetadata({
+                title: `Mensaje de ${sender}`,
+                artist: groupId ? `Grupo ${groupId}` : 'HandyHandle',
+                album: 'Comunicación Aeronáutica'
+            });
+        }
+        audio.onended = () => URL.revokeObjectURL(audioUrl);
+    } catch (err) {
+        console.error("Error al reproducir audio:", err);
+        showError("Error al reproducir el mensaje de audio.");
+    }
+}
+
+async function toggleTalk() {
+    const talkButton = document.getElementById('talk');
+    if (!talkButton) return;
+    if (!isRecording) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'message',
+                            audio: base64Audio,
+                            sender: userId,
+                            text: 'Mensaje de voz'
+                        }));
+                    } else {
+                        navigator.serviceWorker.controller?.postMessage({
+                            type: 'QUEUE_MESSAGE',
+                            message: {
+                                type: 'message',
+                                audio: base64Audio,
+                                sender: userId,
+                                text: 'Mensaje de voz'
+                            }
+                        });
+                    }
+                };
+                stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorder.start();
+            isRecording = true;
+            talkButton.classList.add('recording');
+        } catch (err) {
+            showError("Error al acceder al micrófono.");
+            console.error("Error al grabar:", err);
+        }
+    } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        talkButton.classList.remove('recording');
+    }
+}
+
+async function toggleGroupTalk() {
+    const groupTalkButton = document.getElementById('group-talk');
+    if (!groupTalkButton || !currentGroup) return;
+    if (!isGroupRecording) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'group_message',
+                            group_id: currentGroup,
+                            audio: base64Audio,
+                            sender: userId,
+                            text: 'Mensaje de voz'
+                        }));
+                    } else {
+                        navigator.serviceWorker.controller?.postMessage({
+                            type: 'QUEUE_MESSAGE',
+                            message: {
+                                type: 'group_message',
+                                group_id: currentGroup,
+                                audio: base64Audio,
+                                sender: userId,
+                                text: 'Mensaje de voz'
+                            }
+                        });
+                    }
+                };
+                stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorder.start();
+            isGroupRecording = true;
+            groupTalkButton.classList.add('recording');
+        } catch (err) {
+            showError("Error al acceder al micrófono.");
+            console.error("Error al grabar en grupo:", err);
+        }
+    } else {
+        mediaRecorder.stop();
+        isGroupRecording = false;
+        groupTalkButton.classList.remove('recording');
+    }
+}
+
+function toggleMute() {
+    const muteButton = document.getElementById('mute');
+    if (!muteButton) return;
+    isMuted = !isMuted;
+    muteButton.classList.toggle('muted', isMuted);
+    muteButton.classList.toggle('unmuted', !isMuted);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'mute', muted: isMuted }));
+    }
+}
+
+function toggleGroupMute() {
+    const groupMuteButton = document.getElementById('group-mute');
+    if (!groupMuteButton) return;
+    isGroupMuted = !isGroupMuted;
+    groupMuteButton.classList.toggle('muted', isGroupMuted);
+    groupMuteButton.classList.toggle('unmuted', !isGroupMuted);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'group_mute', group_id: currentGroup, muted: isGroupMuted }));
+    }
+}
+
+function toggleMuteNonGroup() {
+    const muteNonGroupButton = document.getElementById('mute-non-group');
+    if (!muteNonGroupButton) return;
+    isNonGroupMuted = !isNonGroupMuted;
+    muteNonGroupButton.classList.toggle('muted', isNonGroupMuted);
+    muteNonGroupButton.classList.toggle('unmuted', !isNonGroupMuted);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'mute_non_group', muted: isNonGroupMuted }));
+    }
+}
+
+function joinGroup() {
+    const groupId = document.getElementById('group-id')?.value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked;
+    if (!groupId) {
+        showError("Por favor, ingresa un nombre de grupo.");
         return;
     }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'join_group',
+            group_id: groupId,
+            private: isPrivate,
+            sessionToken: localStorage.getItem('sessionToken')
+        }));
+    } else {
+        showError("No hay conexión WebSocket. Intenta de nuevo.");
+    }
+}
 
-    const filteredFlights = flightData.filter(flight => flight.flight_number && typeof flight.flight_number === 'string' && flight.flight_number.startsWith('AR'));
-    const departures = filteredFlights.filter(flight => flight.origin === 'SABE');
-    const arrivals = filteredFlights.filter(flight => flight.destination === 'SABE');
+function createGroup() {
+    const groupId = document.getElementById('group-id')?.value.trim();
+    const isPrivate = document.getElementById('group-private')?.checked;
+    if (!groupId) {
+        showError("Por favor, ingresa un nombre de grupo.");
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'create_group',
+            group_id: groupId,
+            private: isPrivate,
+            sessionToken: localStorage.getItem('sessionToken')
+        }));
+    } else {
+        showError("No hay conexión WebSocket. Intenta de nuevo.");
+    }
+}
 
-    const updateTableBody = (tbody, flights, isArrival) => {
-        tbody.innerHTML = '';
-        flights.forEach(flight => {
-            const row = document.createElement('tr');
-            row.className = 'tams-row';
-            row.style.color = flight.color || 'black';
-            const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
-            const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
-            const originOrDestination = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
-            row.innerHTML = `
-                <td>${flight.registration || 'N/A'}</td>
-                <td>${flight.flight_number || 'N/A'}</td>
-                <td>${sta}</td>
-                <td>${flight.position || 'N/A'}</td>
-                <td>${originOrDestination}</td>
-                <td>${eta}</td>
-                <td><button class="tams-details-btn" onclick="showFlightDetails(${JSON.stringify(flight).replace(/"/g, '"')})">Ver Más</button></td>
-            `;
-            tbody.appendChild(row);
-        });
-    };
+function leaveGroup() {
+    if (currentGroup && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'leave_group',
+            group_id: currentGroup,
+            sessionToken: localStorage.getItem('sessionToken')
+        }));
+    }
+}
 
-    updateTableBody(departuresTable.querySelector('tbody') || departuresTable, departures, false);
-    updateTableBody(arrivalsTable.querySelector('tbody') || arrivalsTable, arrivals, true);
-    updateTableBody(groupDeparturesTable.querySelector('tbody') || groupDeparturesTable, departures, false);
-    updateTableBody(groupArrivalsTable.querySelector('tbody') || groupArrivalsTable, arrivals, true);
+function showRadar() {
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'block';
+    if (!map) {
+        initMap();
+    }
+    updateMap();
+}
 
-    filterFlights(localStorage.getItem('lastSearchQuery') || '');
+function showGroupRadar() {
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('radar-screen').style.display = 'block';
+    if (!map) {
+        initMap();
+    }
+    updateMap();
+}
+
+function backToMainFromRadar() {
+    document.getElementById('radar-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    updateSwipeHint();
+}
+
+function backToMainFromGroup() {
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    updateSwipeHint();
+}
+
+function showHistory() {
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('history-screen').style.display = 'block';
+    // Implementar lógica para cargar historial
+}
+
+function showGroupHistory() {
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('history-screen').style.display = 'block';
+    // Implementar lógica para cargar historial
 }
 
 function showFlightDetails(flight) {
     const modal = document.getElementById('flight-details-modal');
     const content = document.getElementById('flight-details-content');
-    if (!modal || !content) {
-        console.error("Modal de detalles no encontrado en el DOM");
-        return;
-    }
-
-    content.innerHTML = '<h3>Detalles del Vuelo</h3>';
-    if (flight.additional_data && Object.keys(flight.additional_data).length > 0) {
-        const list = document.createElement('ul');
-        for (const [key, value] of Object.entries(flight.additional_data)) {
-            const item = document.createElement('li');
-            item.textContent = `${key}: ${value}`;
-            list.appendChild(item);
-        }
-        content.appendChild(list);
-    } else {
-        content.innerHTML += '<p>No hay datos adicionales disponibles.</p>';
-    }
-
-    const closeButton = document.createElement('button');
-    closeButton.className = 'close-btn';
-    closeButton.textContent = '×';
-    closeButton.onclick = () => modal.style.display = 'none';
-    content.appendChild(closeButton);
-
+    if (!modal || !content) return;
+    content.innerHTML = `
+        <p><b>Número de Vuelo:</b> ${flight.flight_number || 'N/A'}</p>
+        <p><b>Matrícula:</b> ${flight.registration || 'N/A'}</p>
+        <p><b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}</p>
+        <p><b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}</p>
+        <p><b>Hora Programada:</b> ${flight.sta ? new Date(flight.sta).toLocaleString() : 'N/A'}</p>
+        <p><b>Hora Estimada:</b> ${flight.eta ? new Date(flight.eta).toLocaleString() : 'N/A'}</p>
+        <p><b>Estado:</b> ${flight.status || 'N/A'}</p>
+    `;
     modal.style.display = 'block';
+}
+
+function closeFlightDetails() {
+    const modal = document.getElementById('flight-details-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 async function updateOpenSkyData() {
     if (!updatesEnabled) {
-        console.log("Actualizaciones pausadas, omitiendo solicitud");
+        console.log("Actualizaciones pausadas");
         setTimeout(updateOpenSkyData, 15000);
         return;
     }
-
     if (restrictTokens && dailyTokenCount >= MAX_TOKENS_DAILY) {
-        console.warn("Límite de tokens diarios alcanzado:", dailyTokenCount);
-        alert("Se alcanzó el límite diario de " + MAX_TOKENS_DAILY + " tokens de FlightRadar24. Las actualizaciones se pausarán hasta mañana o hasta que desactives el límite.");
-        updatesEnabled = false;
-        const updatesToggleBtn = document.getElementById('updates-toggle');
-        if (updatesToggleBtn) {
-            updatesToggleBtn.classList.remove('active');
-            updatesToggleBtn.textContent = 'Reanudar Actualizaciones';
-        }
+        console.warn("Límite de tokens alcanzado:", dailyTokenCount);
+        showError("Límite diario de " + MAX_TOKENS_DAILY + " tokens alcanzado.");
         return;
     }
-
-    console.log("Ejecutando updateOpenSkyData...");
     try {
-        const response = await fetch(`/api/flights?limit=${MAX_FLIGHTS_PER_REQUEST}`);
+        const token = localStorage.getItem('sessionToken');
+        if (!token) {
+            showError("Sesión no válida. Por favor, inicia sesión nuevamente.");
+            completeLogout();
+            return;
+        }
+        const response = await fetch(`/api/flights?limit=${MAX_FLIGHTS_PER_REQUEST}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
         console.log("Respuesta de /api/flights:", response.status, response.statusText);
         if (response.ok) {
             const data = await response.json();
-            console.log("Datos recibidos de /api/flights:", JSON.stringify(data, null, 2));
-            flightData = Array.isArray(data.flights) ? data.flights.filter(flight => flight && flight.flight_number) : [];
+            console.log("Datos de /api/flights:", JSON.stringify(data, null, 2));
+            flightData = Array.isArray(data.flights) ? data.flights.filter(f => f && f.flight_number) : [];
+            console.log("flightData filtrado:", flightData);
             dailyTokenCount += flightData.length * TOKENS_PER_FLIGHT;
-            console.log("Tokens consumidos:", dailyTokenCount);
-
+            localStorage.setItem('dailyTokenCount', dailyTokenCount.toString());
             updateFlightInfo();
             updateMap();
-
-            if (announcementsEnabled) {
-                flightData.filter(f => f.destination === 'SABE').forEach(flight => {
-                    if (!announcedFlights.includes(flight.flight_number) && flight.status === "Próximo a aterrizar") {
-                        announceFlight(flight);
-                        announcedFlights.push(flight.flight_number);
+            // Verificar anuncios de llegadas y despegues
+            if (announcementsEnabled || departureAnnouncementsEnabled) {
+                flightData.forEach(flight => {
+                    if (flight.status === 'Landed' && flight.destination === 'SABE' && announcementsEnabled) {
+                        announceFlight(flight, 'llegada');
+                    } else if (flight.status === 'Departed' && flight.origin === 'SABE' && departureAnnouncementsEnabled) {
+                        announceFlight(flight, 'despegue');
                     }
                 });
             }
-            if (departureAnnouncementsEnabled) {
-                flightData.filter(f => f.origin === 'SABE').forEach(flight => {
-                    if (!announcedDepartures.includes(flight.flight_number) && flight.status === "Despegando") {
-                        announceDepartureFlight(flight);
-                        announcedDepartures.push(flight.flight_number);
-                    }
-                });
-            }
+        } else if (response.status === 401) {
+            showError("Sesión expirada. Por favor, inicia sesión nuevamente.");
+            completeLogout();
         } else {
-            console.warn("Error al cargar /api/flights:", response.status, response.statusText);
-            throw new Error("Respuesta no OK");
+            throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
     } catch (err) {
-        console.error("Error al cargar datos de vuelos:", err);
-        const tables = [
-            document.getElementById('departures-table'),
-            document.getElementById('arrivals-table'),
-            document.getElementById('group-departures-table'),
-            document.getElementById('group-arrivals-table')
-        ];
-        tables.forEach(table => {
+        showError("Error al cargar datos de vuelos: " + err.message);
+        console.error("Error al cargar vuelos:", err);
+        const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
+        tables.forEach(id => {
+            const table = document.getElementById(id);
             if (table) table.innerHTML = "<tr><td colspan='7'>Error al cargar datos</td></tr>";
         });
     }
     setTimeout(updateOpenSkyData, 15000);
 }
 
-function announceFlight(flight) {
-    const utterance = new SpeechSynthesisUtterance();
-    const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
-    const origin = AIRPORT_MAPPING[flight.origin] || flight.origin || "Desconocido";
-    utterance.text = `Vuelo ${flight.flight_number} procedente de ${origin} está próximo a aterrizar. Tiempo estimado de llegada: ${eta}. Estado: ${flight.status}.`;
-    utterance.lang = 'es-ES';
-    speechSynthesis.speak(utterance);
+function announceFlight(flight, type) {
+    const message = type === 'llegada' 
+        ? `El vuelo ${flight.flight_number} con origen en ${AIRPORT_MAPPING[flight.origin] || flight.origin} ha aterrizado en Aeroparque.`
+        : `El vuelo ${flight.flight_number} con destino a ${AIRPORT_MAPPING[flight.destination] || flight.destination} ha despegado de Aeroparque.`;
+    if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang = 'es-ES';
+        speechSynthesis.speak(utterance);
+    }
+    showNotification('Anuncio de Vuelo', { body: message });
 }
 
-function announceDepartureFlight(flight) {
-    const utterance = new SpeechSynthesisUtterance();
-    const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
-    const destination = AIRPORT_MAPPING[flight.destination] || flight.destination || "Desconocido";
-    utterance.text = `Vuelo ${flight.flight_number} con destino a ${destination} está próximo a despegar. Tiempo programado de salida: ${sta}. Estado: ${flight.status}.`;
-    utterance.lang = 'es-ES';
-    speechSynthesis.speak(utterance);
-}
-
-// Funciones de mapa
 function initMap() {
     console.log("Inicializando mapa...");
     const mapContainer = document.getElementById('map');
     if (!mapContainer) {
-        console.error("Contenedor #map no encontrado en el DOM");
-        alert("Error: No se puede cargar el mapa. Contenedor no encontrado.");
+        console.error("Contenedor #map no encontrado");
+        showError("No se puede cargar el mapa: contenedor no encontrado.");
+        return;
+    }
+    if (typeof L === 'undefined') {
+        console.error("Leaflet no está definido");
+        showError("Error al cargar el mapa: Leaflet no disponible.");
         return;
     }
     try {
@@ -937,17 +582,16 @@ function initMap() {
         }).addTo(map);
         const aeroparqueIcon = L.icon({
             iconUrl: '/templates/airport.png',
-            iconSize: [30, 30],
+            iconSize: [30, 30]
         });
         L.marker([-34.5597, -58.4116], { icon: aeroparqueIcon })
             .addTo(map)
-            .bindPopup("Aeroparque")
-            .openPopup();
-        console.log("Mapa inicializado correctamente");
+            .bindPopup("Aeroparque");
         map.invalidateSize();
-    } catch (error) {
-        console.error("Error al inicializar Leaflet:", error);
-        alert("Error al cargar el mapa. Verifica tu conexión o recarga la página.");
+        console.log("Mapa inicializado");
+    } catch (err) {
+        console.error("Error al inicializar Leaflet:", err);
+        showError("Error al inicializar el mapa.");
     }
 }
 
@@ -957,551 +601,134 @@ function updateMap() {
         initMap();
         if (!map) return;
     }
-
+    console.log("Actualizando mapa con flightData:", flightData);
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
-
-    const validFlights = flightData.filter(flight => 
-        flight.lat && flight.lon && 
-        flight.flight_number && 
-        typeof flight.flight_number === 'string' && 
-        flight.flight_number.startsWith('AR')
-    );
-
+    const validFlights = flightData.filter(f => f && f.lat && f.lon && f.flight_number && f.flight_number.startsWith('AR'));
+    console.log("Vuelos válidos para el mapa:", validFlights);
     validFlights.forEach(flight => {
-        const airplaneIcon = L.icon({
-            iconUrl: '/templates/airplane.png',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15],
-            popupAnchor: [0, -15]
-        });
-        const marker = L.marker([flight.lat, flight.lon], {
-            icon: airplaneIcon,
-            rotationAngle: flight.heading || 0
-        }).bindPopup(`
-            <b>Vuelo:</b> ${flight.flight_number}<br>
-            <b>Matrícula:</b> ${flight.registration || 'N/A'}<br>
-            <b>Estado:</b> ${flight.status || 'N/A'}<br>
-            <b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}<br>
-            <b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}<br>
-            <b>ETA:</b> ${flight.eta ? new Date(flight.eta).toLocaleTimeString() : 'N/A'}
-        `);
-        marker.flight = flight;
-        markers.push(marker);
-        marker.addTo(map);
+        try {
+            const airplaneIcon = L.icon({
+                iconUrl: '/templates/airplane.png',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15],
+                popupAnchor: [0, -15]
+            });
+            const marker = L.marker([flight.lat, flight.lon], {
+                icon: airplaneIcon,
+                rotationAngle: flight.heading || 0
+            }).bindPopup(`
+                <b>Vuelo:</b> ${flight.flight_number}<br>
+                <b>Matrícula:</b> ${flight.registration || 'N/A'}<br>
+                <b>Estado:</b> ${flight.status || 'N/A'}<br>
+                <b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}<br>
+                <b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}<br>
+                <b>ETA:</b> ${flight.eta ? new Date(flight.eta).toLocaleTimeString() : 'N/A'}
+            `);
+            marker.flight = flight;
+            markers.push(marker);
+            marker.addTo(map);
+        } catch (err) {
+            console.error("Error al agregar marcador para vuelo:", flight, err);
+        }
     });
-
     filterFlights(localStorage.getItem('lastSearchQuery') || '');
     map.invalidateSize();
-    console.log("Mapa actualizado con", validFlights.length, "vuelos válidos");
+    console.log("Mapa actualizado con", markers.length, "marcadores");
 }
 
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 3440.07;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
-function estimateArrivalTime(lat, lon, speed) {
-    const aeroparqueLat = -34.5597;
-    const aeroparqueLon = -58.4116;
-    const distance = calculateDistance(lat, lon, aeroparqueLat, aeroparqueLon);
-    if (!speed || speed <= 0) return "N/A";
-    const timeHours = distance / speed;
-    const now = new Date();
-    const arrivalTime = new Date(now.getTime() + timeHours * 60 * 60 * 1000);
-    return arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(":", "");
-}
-
-function getFlightStatus(altitude, speed, verticalRate) {
-    if (altitude < 100 && speed < 50) return "En tierra";
-    if (altitude >= 100 && altitude <= 2000 && speed > 50) return "Despegando";
-    if (altitude > 2000 && verticalRate < 0) return "En zona";
-    if (altitude > 2000) return "En vuelo";
-    return "Desconocido";
-}
-
-// Funciones de grabación
-async function toggleTalk() {
-    const talkButton = document.getElementById("talk");
-    if (!talkButton) {
-        console.error("Botón #talk no encontrado en el DOM");
-        return;
-    }
-
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        console.log("Iniciando grabación...");
-        stream = await requestMicPermission();
-        if (!stream) {
-            console.error("No se pudo obtener el stream del micrófono");
-            alert("No se pudo acceder al micrófono. Por favor, verifica los permisos.");
-            return;
-        }
-
-        try {
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            console.log("MediaRecorder creado con mimeType: audio/webm");
-        } catch (err) {
-            console.error("Error al crear MediaRecorder:", err);
-            alert("Error al iniciar la grabación: " + err.message);
-            stream.getTracks().forEach(track => track.stop());
-            return;
-        }
-
-        let audioChunks = [];
-        let transcript = supportsSpeechRecognition ? "" : "Procesando...";
-
-        if (supportsSpeechRecognition && recognition) {
-            recognition.onresult = (event) => {
-                transcript = "";
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript;
-                }
-                console.log("Transcripción parcial:", transcript);
-            };
-            recognition.onerror = (event) => {
-                console.error("Error en SpeechRecognition:", event.error);
-                transcript = "Error en transcripción: " + event.error;
-                alert("Error en speech-to-text: " + event.error);
-            };
-            try {
-                recognition.start();
-                console.log("SpeechRecognition iniciado");
-            } catch (err) {
-                console.error("Error al iniciar SpeechRecognition:", err);
-            }
-        }
-
-        mediaRecorder.ondataavailable = function(event) {
-            console.log("Datos de audio disponibles:", event.data.size, "bytes");
-            if (event.data.size > 0) {
-                audioChunks.push(event.data);
-            } else {
-                console.warn("Fragmento de audio vacío recibido");
-            }
-        };
-
-        mediaRecorder.onstop = function() {
-            console.log("Grabación detenida");
-            console.log("Tamaño de audioChunks:", audioChunks.length);
-            if (audioChunks.length === 0) {
-                console.error("No se capturaron fragmentos de audio");
-                alert("No se grabó ningún audio. Verifica tu micrófono.");
-                return;
-            }
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            console.log("Audio Blob creado, tamaño:", audioBlob.size, "bytes");
-            if (audioBlob.size === 0) {
-                console.error("Audio Blob vacío");
-                alert("El audio grabado está vacío. Verifica tu micrófono.");
-                return;
-            }
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = function() {
-                const base64data = reader.result.split(',')[1];
-                console.log("Audio convertido a Base64, longitud:", base64data.length);
-                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const sender = localStorage.getItem("userName") || "Anónimo";
-                const userFunction = localStorage.getItem("userFunction") || "Desconocida";
-                const message = {
-                    type: "audio",
-                    data: base64data,
-                    text: transcript,
-                    timestamp: timestamp,
-                    sender: sender,
-                    function: userFunction,
-                    sessionToken: localStorage.getItem("sessionToken")
-                };
-
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    console.log("Enviando mensaje al servidor:", {
-                        type: message.type,
-                        data: message.data.slice(0, 20) + "...",
-                        text: message.text,
-                        timestamp: message.timestamp,
-                        sender: message.sender,
-                        function: message.function
-                    });
-                    ws.send(JSON.stringify(message));
-                } else {
-                    console.warn("WebSocket no está abierto, encolando mensaje");
-                    queueMessageForSync(message);
-                }
-
-                const chatList = document.getElementById("chat-list");
-                if (chatList) {
-                    const msgDiv = document.createElement("div");
-                    msgDiv.className = "chat-message";
-                    msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${timestamp} - ${sender} (${userFunction}): ${transcript}`;
-                    msgDiv.onclick = () => playAudio(audioBlob);
-                    chatList.appendChild(msgDiv);
-                    chatList.scrollTop = chatList.scrollHeight;
-                } else {
-                    console.error("Elemento #chat-list no encontrado en el DOM");
-                }
-            };
-            reader.onerror = function(err) {
-                console.error("Error al leer el audio como Base64:", err);
-                alert("Error al procesar el audio: " + err.message);
-            };
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-            audioChunks = [];
-            mediaRecorder = null;
-            if (supportsSpeechRecognition && recognition) {
-                recognition.stop();
-            }
-        };
-
-        mediaRecorder.onerror = function(err) {
-            console.error("Error en MediaRecorder:", err);
-            alert("Error durante la grabación: " + err.message);
-        };
-
-        try {
-            mediaRecorder.start(100);
-            console.log("Grabación iniciada");
-            talkButton.classList.add("recording");
-        } catch (err) {
-            console.error("Error al iniciar la grabación:", err);
-            alert("Error al iniciar la grabación: " + err.message);
-            stream.getTracks().forEach(track => track.stop());
-        }
-    } else if (mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-        talkButton.classList.remove("recording");
-    }
-}
-
-async function toggleGroupTalk() {
-    const talkButton = document.getElementById('group-talk');
-    if (!talkButton) {
-        console.error("Botón #group-talk no encontrado en el DOM");
-        return;
-    }
-    if (!groupRecording) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                groupMediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                const chunks = [];
-                groupMediaRecorder.ondataavailable = e => {
-                    if (e.data.size > 0) chunks.push(e.data);
-                };
-                groupMediaRecorder.onstop = () => {
-                    const blob = new Blob(chunks, { type: 'audio/webm' });
-                    if (blob.size === 0) {
-                        console.error("Blob de grupo vacío");
-                        alert("El audio grabado está vacío. Verifica tu micrófono.");
-                        return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const audioData = reader.result.split(',')[1];
-                        sendGroupMessage(audioData);
-                    };
-                    reader.readAsDataURL(blob);
-                    stream.getTracks().forEach(track => track.stop());
-                };
-                groupMediaRecorder.start(100);
-                groupRecording = true;
-                talkButton.classList.add("recording");
-                console.log("Grabación de grupo iniciada");
-            })
-            .catch(err => {
-                console.error('Error al acceder al micrófono:', err);
-                alert('No se pudo acceder al micrófono. Por favor, verifica los permisos de la app.');
-            });
-    } else {
-        groupMediaRecorder.stop();
-        groupRecording = false;
-        talkButton.classList.remove("recording");
-        console.log("Grabación de grupo detenida");
-    }
-}
-
-function sendGroupMessage(audioData) {
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    const message = {
-        type: 'group_message',
-        data: audioData,
-        sender: localStorage.getItem('userName') || "Anónimo",
-        function: localStorage.getItem('userFunction') || "Desconocida",
-        timestamp: timestamp,
-        text: supportsSpeechRecognition ? "Procesando..." : "Procesando...",
-        sessionToken: localStorage.getItem("sessionToken"),
-        group_id: currentGroup
+function updateFlightInfo() {
+    console.log("Actualizando tablas con flightData:", flightData);
+    const tables = {
+        'departures-table': { filter: f => f.origin === 'SABE', isArrival: false },
+        'arrivals-table': { filter: f => f.destination === 'SABE', isArrival: true },
+        'group-departures-table': { filter: f => f.origin === 'SABE', isArrival: false },
+        'group-arrivals-table': { filter: f => f.destination === 'SABE', isArrival: true }
     };
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
-        console.log("Mensaje de grupo enviado:", {
-            type: message.type,
-            data: message.data.slice(0, 20) + "...",
-            text: message.text,
-            timestamp: message.timestamp,
-            sender: message.sender,
-            function: message.function,
-            group_id: message.group_id
+    Object.entries(tables).forEach(([id, { filter, isArrival }]) => {
+        const table = document.getElementById(id);
+        if (!table) {
+            console.error(`Tabla #${id} no encontrada`);
+            return;
+        }
+        const tbody = table.querySelector('tbody') || table;
+        tbody.innerHTML = '';
+        const flights = flightData.filter(f => f && f.flight_number && f.flight_number.startsWith('AR') && filter(f));
+        console.log(`Vuelos para ${id}:`, flights);
+        flights.forEach(flight => {
+            const row = document.createElement('tr');
+            row.className = 'tams-row';
+            const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+            const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+            const originDest = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
+            row.innerHTML = `
+                <td>${flight.registration || 'N/A'}</td>
+                <td>${flight.flight_number || 'N/A'}</td>
+                <td>${sta}</td>
+                <td>${flight.position || 'N/A'}</td>
+                <td>${originDest}</td>
+                <td>${eta}</td>
+                <td><button class="tams-details-btn" onclick="showFlightDetails(${JSON.stringify(flight).replace(/"/g, '"')})">Ver Más</button></td>
+            `;
+            tbody.appendChild(row);
         });
-    } else {
-        console.warn("WebSocket no está abierto, encolando mensaje de grupo");
-        queueMessageForSync(message);
-    }
-}
-
-// Funciones de muteo
-function toggleMute() {
-    const muteButton = document.getElementById("mute");
-    const groupMuteButton = document.getElementById("group-mute");
-    if (muteButton.classList.contains("unmuted")) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_all" }));
-        }
-        muteButton.classList.remove("unmuted");
-        muteButton.classList.add("muted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("unmuted");
-            groupMuteButton.classList.add("muted");
-        }
-    } else {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_all" }));
-        }
-        muteButton.classList.remove("muted");
-        muteButton.classList.add("unmuted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("muted");
-            groupMuteButton.classList.add("unmuted");
-        }
-    }
-}
-
-function toggleGroupMute() {
-    const groupMuteButton = document.getElementById("group-mute");
-    const muteButton = document.getElementById("mute");
-    if (groupMuteButton.classList.contains("unmuted")) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_all" }));
-        }
-        groupMuteButton.classList.remove("unmuted");
-        groupMuteButton.classList.add("muted");
-        if (muteButton) {
-            muteButton.classList.remove("unmuted");
-            muteButton.classList.add("muted");
-        }
-    } else {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_all" }));
-        }
-        groupMuteButton.classList.remove("muted");
-        groupMuteButton.classList.add("unmuted");
-        if (muteButton) {
-            muteButton.classList.remove("muted");
-            muteButton.classList.add("unmuted");
-        }
-    }
-}
-
-function updateMuteButton(isMuted) {
-    const muteButton = document.getElementById("mute");
-    const groupMuteButton = document.getElementById("group-mute");
-    if (isMuted) {
-        muteButton.classList.remove("unmuted");
-        muteButton.classList.add("muted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("unmuted");
-            groupMuteButton.classList.add("muted");
-        }
-    } else {
-        muteButton.classList.remove("muted");
-        muteButton.classList.add("unmuted");
-        if (groupMuteButton) {
-            groupMuteButton.classList.remove("muted");
-            groupMuteButton.classList.add("unmuted");
-        }
-    }
-}
-
-function toggleMuteNonGroup() {
-    const nonGroupMuteButton = document.getElementById("mute-non-group");
-    const isMuting = !nonGroupMuteButton.classList.contains("muted");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: isMuting ? "mute_non_group" : "unmute_non_group", group_id: currentGroup }));
-    }
-    if (isMuting) {
-        nonGroupMuteButton.classList.add("muted");
-        nonGroupMuteButton.textContent = "Desmutear no grupo";
-    } else {
-        nonGroupMuteButton.classList.remove("muted");
-        nonGroupMuteButton.textContent = "Mutear no grupo";
-    }
-}
-
-function toggleMuteUser(userId, button) {
-    if (mutedUsers.has(userId)) {
-        mutedUsers.delete(userId);
-        button.textContent = "🔊";
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "unmute_user", target_user_id: userId }));
-        }
-        console.log(`Usuario ${userId} desmuteado`);
-    } else {
-        mutedUsers.add(userId);
-        button.textContent = "🔇";
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "mute_user", target_user_id: userId }));
-        }
-        console.log(`Usuario ${userId} muteado`);
-    }
-}
-
-// Funciones de usuarios
-function updateUsers(count, list) {
-    const usersDiv = document.getElementById('users');
-    const groupUsersDiv = document.getElementById('group-users');
-    if (!usersDiv || !groupUsersDiv) {
-        console.error("Elementos #users o #group-users no encontrados en el DOM");
-        return;
-    }
-    usersDiv.innerHTML = `Usuarios conectados: ${count}<br>`;
-    groupUsersDiv.innerHTML = `Usuarios conectados: ${list.filter(user => user.group_id === currentGroup).length}<br>`;
-    const userList = document.createElement("div");
-    userList.className = "user-list";
-    const groupUserList = document.createElement("div");
-    groupUserList.className = "user-list";
-
-    list.forEach(user => {
-        const userDiv = document.createElement("div");
-        userDiv.className = "user-item";
-        if (user.group_id && user.group_id === currentGroup) {
-            userDiv.classList.add('in-group');
-        }
-        const muteButton = document.createElement("button");
-        muteButton.className = "mute-button";
-        const isMuted = mutedUsers.has(user.user_id);
-        muteButton.textContent = isMuted ? "🔇" : "🔊";
-        muteButton.onclick = () => toggleMuteUser(user.user_id, muteButton);
-        userDiv.appendChild(muteButton);
-        const userText = document.createElement("span");
-        let displayText = user.display;
-        if (!displayText || displayText === user.user_id) {
-            const parts = user.user_id.split('_');
-            if (parts.length === 3) {
-                const [, name, userFunction] = parts;
-                displayText = `${name} (${userFunction})`;
-            } else {
-                displayText = user.user_id;
-            }
-        }
-        userText.textContent = displayText;
-        userDiv.appendChild(userText);
-        userList.appendChild(userDiv);
-
-        if (user.group_id === currentGroup) {
-            const groupUserDiv = document.createElement("div");
-            groupUserDiv.className = "user-item";
-            const groupMuteButton = document.createElement("button");
-            groupMuteButton.className = "mute-button";
-            groupMuteButton.textContent = isMuted ? "🔇" : "🔊";
-            groupMuteButton.onclick = () => toggleMuteUser(user.user_id, groupMuteButton);
-            groupUserDiv.appendChild(groupMuteButton);
-            const groupUserText = document.createElement("span");
-            groupUserText.textContent = displayText;
-            groupUserDiv.appendChild(groupUserText);
-            groupUserList.appendChild(groupUserDiv);
-        }
     });
-
-    usersDiv.appendChild(userList);
-    groupUsersDiv.appendChild(groupUserList);
-    console.log("Lista de usuarios actualizada:", list);
+    filterFlights(localStorage.getItem('lastSearchQuery') || '');
 }
 
-// Funciones de grupos
-function createGroup() {
-    const groupId = document.getElementById('group-id')?.value.trim() || '';
-    const isPrivate = document.getElementById('group-private')?.checked || false;
-    if (!groupId) {
-        alert('Por favor, ingresa un nombre de grupo válido.');
+function filterFlights(searchTerm = '') {
+    searchTerm = searchTerm.toUpperCase().trim();
+    console.log("Filtrando vuelos con término:", searchTerm);
+    const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
+    tables.forEach(id => {
+        const table = document.getElementById(id);
+        if (!table) return;
+        const rows = table.querySelectorAll('tr.tams-row');
+        console.log(`Filtrando ${rows.length} filas en ${id}`);
+        rows.forEach(row => {
+            const registration = row.cells[0].textContent.toUpperCase();
+            const flightNumber = row.cells[1].textContent.toUpperCase();
+            const matches = searchTerm === '' || registration.includes(searchTerm) || flightNumber.includes(searchTerm);
+            row.style.display = matches ? '' : 'none';
+        });
+    });
+    if (map) {
+        markers.forEach(marker => {
+            const flight = marker.flight || {};
+            const registration = flight.registration || '';
+            const flightNumber = flight.flight_number || '';
+            const matches = searchTerm === '' || registration.toUpperCase().includes(searchTerm) || flightNumber.toUpperCase().includes(searchTerm);
+            if (matches) {
+                if (!map.hasLayer(marker)) marker.addTo(map);
+            } else {
+                if (map.hasLayer(marker)) map.removeLayer(marker);
+            }
+        });
+        map.invalidateSize();
+    }
+}
+
+function toggleUpdates() {
+    const updatesToggleBtn = document.getElementById('updates-toggle');
+    if (!updatesToggleBtn) {
+        console.error("Botón #updates-toggle no encontrado");
         return;
     }
+    updatesEnabled = !updatesEnabled;
+    updatesToggleBtn.classList.toggle('active', updatesEnabled);
+    updatesToggleBtn.textContent = updatesEnabled ? 'Pausar Actualizaciones' : 'Reanudar Actualizaciones';
     if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando solicitud para crear grupo:", groupId, "Privado:", isPrivate);
-        ws.send(JSON.stringify({ type: 'create_group', group_id: groupId, is_private: isPrivate }));
-    } else {
-        alert('No estás conectado al servidor. Intenta de nuevo.');
-        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
+        ws.send(JSON.stringify({ type: 'toggle_updates', enabled: updatesEnabled }));
     }
-}
-
-function joinGroup() {
-    const groupId = document.getElementById('group-id')?.value.trim() || '';
-    const isPrivate = document.getElementById('group-private')?.checked || false;
-    if (!groupId) {
-        alert('Por favor, ingresa un nombre de grupo válido.');
-        return;
-    }
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log("Enviando solicitud para unirse al grupo:", groupId, "Privado:", isPrivate);
-        ws.send(JSON.stringify({ type: 'join_group', group_id: groupId, is_private: isPrivate }));
-    } else {
-        alert('No estás conectado al servidor. Intenta de nuevo.');
-        console.error("WebSocket no está abierto. Estado:", ws ? ws.readyState : "WebSocket no definido");
-    }
-}
-
-function leaveGroup() {
-    if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
-        ws.send(JSON.stringify({ type: 'leave_group', group_id: currentGroup }));
-        currentGroup = null;
-        localStorage.removeItem('groupId');
-        document.getElementById('group-screen').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        document.getElementById('group-chat-list').innerHTML = '';
-        document.getElementById('group-departures-table').innerHTML = '';
-        document.getElementById('group-arrivals-table').innerHTML = '';
-        const logoutButton = document.getElementById('logout-button');
-        if (logoutButton) logoutButton.style.display = 'block';
-        updateSwipeHint();
-        console.log("Grupo abandonado");
-    }
-}
-
-function checkGroupStatus() {
-    if (ws && ws.readyState === WebSocket.OPEN && currentGroup) {
-        ws.send(JSON.stringify({ type: 'check_group', group_id: currentGroup }));
-    }
+    console.log("Actualizaciones de vuelos:", updatesEnabled ? "activadas" : "pausadas");
 }
 
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
-    const returnToGroupBtn = document.getElementById('return-to-group-btn');
-    if (!swipeHint || !returnToGroupBtn) {
-        console.error("Elemento #swipe-hint o #return-to-group-btn no encontrado en el DOM");
-        return;
-    }
-    if (currentGroup) {
-        if (document.getElementById('main').style.display === 'block') {
-            swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá hacia la derecha para ir al grupo';
-            returnToGroupBtn.style.display = 'block';
-        } else if (document.getElementById('group-screen').style.display === 'block') {
-            swipeHint.style.display = 'block';
-            swipeHint.textContent = 'Deslizá hacia la izquierda para volver';
-            returnToGroupBtn.style.display = 'none';
-        }
-    } else {
-        swipeHint.style.display = 'none';
-        returnToGroupBtn.style.display = 'none';
-    }
+    if (!swipeHint) return;
+    swipeHint.textContent = currentGroup 
+        ? 'Desliza hacia la derecha para ver el grupo' 
+        : 'Desliza hacia la izquierda para volver al grupo';
 }
 
 function returnToGroup() {
@@ -1516,7 +743,6 @@ function returnToGroup() {
     }
 }
 
-// Funciones de gestos táctiles
 document.addEventListener('touchstart', (e) => {
     if (!currentGroup) return;
     isSwiping = true;
@@ -1544,7 +770,6 @@ document.addEventListener('touchend', () => {
     const threshold = window.innerWidth / 4;
     const main = document.getElementById('main');
     const groupScreen = document.getElementById('group-screen');
-
     if (diffX > threshold && main.style.display === 'block') {
         main.classList.add('slide-left');
         setTimeout(() => {
@@ -1571,10 +796,9 @@ document.addEventListener('touchend', () => {
     }
 });
 
-// Funciones de notificaciones
 function checkNotificationPermission() {
     if (!('Notification' in window)) {
-        console.warn("Notificaciones no soportadas por el navegador");
+        console.warn("Notificaciones no soportadas");
         return;
     }
     if (Notification.permission === 'default') {
@@ -1586,7 +810,7 @@ function checkNotificationPermission() {
 
 function showNotification(title, options) {
     if (!('Notification' in window)) {
-        console.warn("Notificaciones no soportadas por el navegador");
+        console.warn("Notificaciones no soportadas");
         return;
     }
     if (Notification.permission === 'granted') {
@@ -1600,20 +824,18 @@ function showNotification(title, options) {
     }
 }
 
-// Funciones de Service Worker
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('Service Worker registrado con éxito:', registration.scope);
+            console.log('Service Worker registrado:', registration.scope);
         }).catch(error => {
             console.error('Error al registrar Service Worker:', error);
         });
     } else {
-        console.warn("Service Worker no soportado por el navegador");
+        console.warn("Service Worker no soportado");
     }
 }
 
-// Funciones de logout
 function logout() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'logout', sessionToken: localStorage.getItem('sessionToken') }));
@@ -1628,6 +850,7 @@ function completeLogout() {
     localStorage.removeItem('userFunction');
     localStorage.removeItem('userLegajo');
     localStorage.removeItem('groupId');
+    localStorage.removeItem('lastSearchQuery');
     userId = null;
     currentGroup = null;
     if (ws) {
@@ -1640,10 +863,9 @@ function completeLogout() {
     document.getElementById('auth-section').style.display = 'block';
     displayUserProfile();
     updateSwipeHint();
-    alert('Sesión cerrada exitosamente');
+    showError('Sesión cerrada exitosamente');
 }
 
-// Funciones de utilidad
 function base64ToBlob(base64, mime) {
     try {
         const byteString = atob(base64);
@@ -1659,59 +881,91 @@ function base64ToBlob(base64, mime) {
     }
 }
 
-// Event listeners adicionales
 document.addEventListener('DOMContentLoaded', () => {
+    localStorage.removeItem('lastSearchQuery');
+    filterFlights('');
+    document.getElementById('register-form')?.addEventListener('submit', registerUser);
+    document.getElementById('login-form')?.addEventListener('submit', loginUser);
+    document.getElementById('show-login')?.addEventListener('click', () => {
+        document.getElementById('register-form').style.display = 'none';
+        document.getElementById('login-form').style.display = 'block';
+    });
+    document.getElementById('show-register')?.addEventListener('click', () => {
+        document.getElementById('login-form').style.display = 'none';
+        document.getElementById('register-form').style.display = 'block';
+    });
     const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', logout);
-    } else {
-        console.warn("Botón #logout-button no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (logoutButton) logoutButton.addEventListener('click', logout);
     const returnToGroupBtn = document.getElementById('return-to-group-btn');
-    if (returnToGroupBtn) {
-        returnToGroupBtn.addEventListener('click', returnToGroup);
-    } else {
-        console.warn("Botón #return-to-group-btn no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (returnToGroupBtn) returnToGroupBtn.addEventListener('click', returnToGroup);
     const talkButton = document.getElementById('talk');
-    if (talkButton) {
-        talkButton.addEventListener('click', toggleTalk);
-    } else {
-        console.warn("Botón #talk no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (talkButton) talkButton.addEventListener('click', toggleTalk);
     const groupTalkButton = document.getElementById('group-talk');
-    if (groupTalkButton) {
-        groupTalkButton.addEventListener('click', toggleGroupTalk);
-    } else {
-        console.warn("Botón #group-talk no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (groupTalkButton) groupTalkButton.addEventListener('click', toggleGroupTalk);
     const muteButton = document.getElementById('mute');
-    if (muteButton) {
-        muteButton.addEventListener('click', toggleMute);
-    } else {
-        console.warn("Botón #mute no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (muteButton) muteButton.addEventListener('click', toggleMute);
     const groupMuteButton = document.getElementById('group-mute');
-    if (groupMuteButton) {
-        groupMuteButton.addEventListener('click', toggleGroupMute);
-    } else {
-        console.warn("Botón #group-mute no encontrado. Asegúrate de que esté en el HTML.");
-    }
-
+    if (groupMuteButton) groupMuteButton.addEventListener('click', toggleGroupMute);
     const muteNonGroupButton = document.getElementById('mute-non-group');
-    if (muteNonGroupButton) {
-        muteNonGroupButton.addEventListener('click', toggleMuteNonGroup);
-    } else {
-        console.warn("Botón #mute-non-group no encontrado. Asegúrate de que esté en el HTML.");
+    if (muteNonGroupButton) muteNonGroupButton.addEventListener('click', toggleMuteNonGroup);
+    const joinGroupBtn = document.getElementById('join-group-btn');
+    if (joinGroupBtn) joinGroupBtn.addEventListener('click', joinGroup);
+    const createGroupBtn = document.getElementById('create-group-btn');
+    if (createGroupBtn) createGroupBtn.addEventListener('click', createGroup);
+    const leaveGroupBtn = document.getElementById('leave-group-btn');
+    if (leaveGroupBtn) leaveGroupBtn.addEventListener('click', leaveGroup);
+    const radarBtn = document.getElementById('radar');
+    if (radarBtn) radarBtn.addEventListener('click', showRadar);
+    const groupRadarBtn = document.getElementById('group-radar');
+    if (groupRadarBtn) groupRadarBtn.addEventListener('click', showGroupRadar);
+    const historyBtn = document.getElementById('history');
+    if (historyBtn) historyBtn.addEventListener('click', showHistory);
+    const groupHistoryBtn = document.getElementById('group-history');
+    if (groupHistoryBtn) groupHistoryBtn.addEventListener('click', showGroupHistory);
+    const backToMainBtn = document.getElementById('back-to-main');
+    if (backToMainBtn) backToMainBtn.addEventListener('click', backToMainFromGroup);
+    const radarCloseBtn = document.querySelector('#radar-screen .close-btn');
+    if (radarCloseBtn) radarCloseBtn.addEventListener('click', backToMainFromRadar);
+    const updatesToggleBtn = document.getElementById('updates-toggle');
+    if (updatesToggleBtn) updatesToggleBtn.addEventListener('click', toggleUpdates);
+    const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
+    if (toggleAnnouncementsBtn) {
+        toggleAnnouncementsBtn.addEventListener('click', () => {
+            announcementsEnabled = !announcementsEnabled;
+            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
+            console.log("Anuncios de llegadas:", announcementsEnabled ? "activados" : "desactivados");
+        });
     }
+    const toggleDepartureAnnouncementsBtn = document.getElementById('toggle-departure-announcements');
+    if (toggleDepartureAnnouncementsBtn) {
+        toggleDepartureAnnouncementsBtn.addEventListener('click', () => {
+            departureAnnouncementsEnabled = !departureAnnouncementsEnabled;
+            toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
+            console.log("Anuncios de despegues:", departureAnnouncementsEnabled ? "activados" : "desactivados");
+        });
+    }
+    const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
+    if (toggleTokenLimitBtn) {
+        toggleTokenLimitBtn.addEventListener('click', () => {
+            restrictTokens = !restrictTokens;
+            localStorage.setItem('restrictTokens', JSON.stringify(restrictTokens));
+            toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
+            console.log("Límite de tokens:", restrictTokens ? "activado" : "desactivado");
+        });
+    }
+    const searchButton = document.getElementById('search-button');
+    if (searchButton) {
+        searchButton.addEventListener('click', () => {
+            const searchTerm = document.getElementById('search-input')?.value || '';
+            localStorage.setItem('lastSearchQuery', searchTerm);
+            filterFlights(searchTerm);
+        });
+    }
+    checkNotificationPermission();
+    registerServiceWorker();
+    initMap();
 });
 
-// CSS dinámico para transiciones
 const style = document.createElement('style');
 style.textContent = `
     .slide-left {
@@ -1764,31 +1018,16 @@ style.textContent = `
     .tams-details-btn:hover {
         background-color: #0056b3;
     }
-    #flight-details-modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0,0,0,0.5);
-        z-index: 1000;
-    }
-    #flight-details-content {
-        background-color: white;
-        margin: 15% auto;
-        padding: 20px;
-        border: 1px solid #888;
-        width: 80%;
-        max-width: 500px;
-        position: relative;
-    }
-    .close-btn {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        font-size: 20px;
+    .toggle-btn {
+        padding: 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
         cursor: pointer;
+    }
+    .toggle-btn.active {
+        background-color: #28a745;
     }
 `;
 document.head.appendChild(style);
