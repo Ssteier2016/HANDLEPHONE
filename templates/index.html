@@ -35,33 +35,32 @@
         <!-- Formulario de registro -->
         <form id="register-form" style="display: block;">
             <h1>Registro</h1>
-            <input id="surname" placeholder="Apellido" required>
-            <input id="employee_id" placeholder="Legajo" type="number" maxlength="5" required>
-            <select id="sector" required>
+            <input id="surname" placeholder="Apellido" required aria-label="Apellido">
+            <input id="employee_id" placeholder="Legajo" type="number" maxlength="5" required aria-label="Legajo">
+            <select id="sector" required aria-label="Selecciona una función">
                 <option value="" disabled selected>Selecciona una función</option>
                 <option value="Maletero">Maletero</option>
                 <option value="Cintero">Cintero</option>
                 <option value="Tractorista">Tractorista</option>
-                <option value="Equipo">Equipo</option>
-                <option value="Micro">Micro</option>
-                <option value="Mobilero">Movilero</option>
+                <option value="Equipos">Equipos</option>
+                <option value="Movilero">Movilero</option>
                 <option value="Jefatura">Jefatura</option>
                 <option value="Supervisor">Supervisor</option>
                 <option value="Señalero">Señalero</option>
                 <option value="Pañolero">Pañolero</option>
                 <option value="Combustible">Combustible</option>
             </select>
-            <input id="password" type="password" placeholder="Contraseña" required>
-            <button type="submit">Registrarse</button>
+            <input id="password" type="password" placeholder="Contraseña" required aria-label="Contraseña">
+            <button type="submit" aria-label="Registrarse">Registrarse</button>
             <p><a href="#" id="show-login">¿Ya tienes cuenta? Inicia sesión</a></p>
         </form>
         <!-- Formulario de inicio de sesión -->
         <form id="login-form" style="display: none;">
             <h1>Iniciar Sesión</h1>
-            <input id="surname-login" placeholder="Apellido" required>
-            <input id="employee_id-login" placeholder="Legajo" type="number" maxlength="5" required>
-            <input id="password-login" type="password" placeholder="Contraseña" required>
-            <button type="submit">Iniciar Sesión</button>
+            <input id="surname-login" placeholder="Apellido" required aria-label="Apellido">
+            <input id="employee_id-login" placeholder="Legajo" type="number" maxlength="5" required aria-label="Legajo">
+            <input id="password-login" type="password" placeholder="Contraseña" required aria-label="Contraseña">
+            <button type="submit" aria-label="Iniciar Sesión">Iniciar Sesión</button>
             <p><a href="#" id="show-register">¿No tienes cuenta? Regístrate</a></p>
         </form>
     </div>
@@ -74,38 +73,44 @@
         <div id="user-profile" style="font-size: 16px; color: #4682B4; margin-bottom: 10px;"></div>
         <h2>Comunicación Aeronáutica</h2>
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
-        <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()">Volver al Grupo</button>
+        <button id="return-to-group-btn" style="display: none;" onclick="returnToGroup()" aria-label="Volver al Grupo">Volver al Grupo</button>
         <div id="search-container">
-            <input type="text" id="search-input" placeholder="Ej. Vuelos a AEP">
-            <button id="search-button">Consultar</button>
+            <input type="text" id="search-input" placeholder="Ej. Vuelo AR1234 o matrícula" aria-label="Buscar vuelos">
+            <button id="search-button" aria-label="Consultar">Consultar</button>
         </div>
-        <button id="toggle-announcements">Activar anuncios de vuelos</button>
+        <button id="updates-toggle" class="toggle-btn" onclick="toggleUpdates()" aria-label="Activar/desactivar actualizaciones de vuelos">Activar Actualizaciones</button>
         <div id="flights-window">
             <h3>Información de Vuelos</h3>
-            <div id="flight-info" class="flight-details-scroll" style="display: flex; justify-content: space-between;">
-                <div id="departures" style="width: 48%;">
+            <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
+                <div id="departures" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
                     <h4>Salidas</h4>
-                    <table>
+                    <table class="tams-table">
                         <thead>
                             <tr>
-                                <th>Vuelo</th>
-                                <th>Hora</th>
+                                <th>Matrícula</th>
+                                <th>Número de Vuelo</th>
+                                <th>STA</th>
+                                <th>Posición</th>
                                 <th>Destino</th>
-                                <th>Estado</th>
+                                <th>Hora Real</th>
+                                <th>Ver Más</th>
                             </tr>
                         </thead>
                         <tbody id="departures-table"></tbody>
                     </table>
                 </div>
-                <div id="arrivals" style="width: 48%;">
+                <div id="arrivals" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
                     <h4>Llegadas</h4>
-                    <table>
+                    <table class="tams-table">
                         <thead>
                             <tr>
-                                <th>Vuelo</th>
-                                <th>Hora</th>
+                                <th>Matrícula</th>
+                                <th>Número de Vuelo</th>
+                                <th>STA</th>
+                                <th>Posición</th>
                                 <th>Origen</th>
-                                <th>Estado</th>
+                                <th>Hora Real</th>
+                                <th>Ver Más</th>
                             </tr>
                         </thead>
                         <tbody id="arrivals-table"></tbody>
@@ -119,22 +124,22 @@
         </div>
         <div id="group-join">
             <label for="group-id">Nombre del grupo</label>
-            <input id="group-id" placeholder="Nombre del grupo" maxlength="20">
+            <input id="group-id" placeholder="Nombre del grupo" maxlength="20" aria-label="Nombre del grupo">
             <label for="group-private">Grupo Privado</label>
-            <input type="checkbox" id="group-private">
-            <button id="join-group-btn" onclick="joinGroup()">Unirme</button>
-            <button id="create-group-btn" onclick="createGroup()">Crear Grupo</button>
+            <input type="checkbox" id="group-private" aria-label="Grupo Privado">
+            <button id="join-group-btn" onclick="joinGroup()" aria-label="Unirme al grupo">Unirme</button>
+            <button id="create-group-btn" onclick="createGroup()" aria-label="Crear grupo">Crear Grupo</button>
         </div>
-        <button id="talk" onclick="toggleTalk()"></button>
-        <button id="mute" class="active" onclick="toggleMute()"></button>
-        <button id="radar" onclick="showRadar()">Radar</button>
-        <button id="history" onclick="showHistory()">Historial</button>
+        <button id="talk" onclick="toggleTalk()" aria-label="Hablar"></button>
+        <button id="mute" class="active" onclick="toggleMute()" aria-label="Mutear"></button>
+        <button id="radar" onclick="showRadar()" aria-label="Ver radar">Radar</button>
+        <button id="history" onclick="showHistory()" aria-label="Ver historial">Historial</button>
         <div id="users">Usuarios conectados: 0</div>
     </div>
 
     <!-- Pantalla de grupo -->
     <div id="group-screen" style="display: none;">
-        <button id="back-to-main" onclick="backToMainFromGroup()">
+        <button id="back-to-main" onclick="backToMainFromGroup()" aria-label="Volver">
             <img src="/templates/volver.png" alt="Volver" class="back-icon">
         </button>
         <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
@@ -142,30 +147,36 @@
         <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
         <div id="group-flights-window">
             <h3>Datos de Vuelos</h3>
-            <div id="group-flight-info" class="flight-details-scroll" style="display: flex; justify-content: space-between;">
-                <div id="group-departures" style="width: 48%;">
+            <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
+                <div id="group-departures" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
                     <h4>Salidas</h4>
-                    <table>
+                    <table class="tams-table">
                         <thead>
                             <tr>
-                                <th>Vuelo</th>
-                                <th>Hora</th>
+                                <th>Matrícula</th>
+                                <th>Número de Vuelo</th>
+                                <th>STA</th>
+                                <th>Posición</th>
                                 <th>Destino</th>
-                                <th>Estado</th>
+                                <th>Hora Real</th>
+                                <th>Ver Más</th>
                             </tr>
                         </thead>
                         <tbody id="group-departures-table"></tbody>
                     </table>
                 </div>
-                <div id="group-arrivals" style="width: 48%;">
+                <div id="group-arrivals" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
                     <h4>Llegadas</h4>
-                    <table>
+                    <table class="tams-table">
                         <thead>
                             <tr>
-                                <th>Vuelo</th>
-                                <th>Hora</th>
+                                <th>Matrícula</th>
+                                <th>Número de Vuelo</th>
+                                <th>STA</th>
+                                <th>Posición</th>
                                 <th>Origen</th>
-                                <th>Estado</th>
+                                <th>Hora Real</th>
+                                <th>Ver Más</th>
                             </tr>
                         </thead>
                         <tbody id="group-arrivals-table"></tbody>
@@ -177,21 +188,21 @@
             <h3>Conversación</h3>
             <div id="group-chat-list"></div>
         </div>
-        <button id="group-talk" onclick="toggleGroupTalk()"></button>
-        <button id="mute-non-group" onclick="toggleMuteNonGroup()">Mutear grupo</button>
-        <button id="group-mute" class="active" onclick="toggleGroupMute()">Mutear Grupo</button>
-        <button id="group-radar" onclick="showGroupRadar()">Radar</button>
-        <button id="group-history" onclick="showGroupHistory()">Historial</button>
-        <button id="leave-group-btn" onclick="leaveGroup()">Salir del Grupo</button>
+        <button id="group-talk" onclick="toggleGroupTalk()" aria-label="Hablar en grupo"></button>
+        <button id="mute-non-group" onclick="toggleMuteNonGroup()" aria-label="Mutear fuera del grupo">Mutear grupo</button>
+        <button id="group-mute" class="active" onclick="toggleGroupMute()" aria-label="Mutear grupo">Mutear Grupo</button>
+        <button id="group-radar" onclick="showGroupRadar()" aria-label="Ver radar del grupo">Radar</button>
+        <button id="group-history" onclick="showGroupHistory()" aria-label="Ver historial del grupo">Historial</button>
+        <button id="leave-group-btn" onclick="leaveGroup()" aria-label="Salir del grupo">Salir del Grupo</button>
         <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
     <!-- Pantalla de radar -->
     <div id="radar-screen" style="display: none;">
         <div class="radar-header">
-            <h2>Radar</h2>
-            <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10">
-            <button class="close-btn" onclick="backToMainFromRadar()">✖</button>
+            <h2>Radar en Vivo</h2>
+            <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10" aria-label="Buscar vuelo o matrícula">
+            <button class="close-btn" onclick="backToMainFromRadar()" aria-label="Cerrar radar">✖</button>
         </div>
         <div id="map" style="height: 400px;"></div>
     </div>
@@ -199,9 +210,18 @@
     <!-- Pantalla de historial -->
     <div id="history-screen" style="display: none;">
         <button class="logout-btn" onclick="logout()" aria-label="Cerrar sesión"></button>
-        <button onclick="backToMain()">Volver</button>
+        <button onclick="backToMain()" aria-label="Volver">Volver</button>
         <h2>Historial</h2>
         <div id="history-list"></div>
+    </div>
+
+    <!-- Modal para detalles de vuelo -->
+    <div id="flight-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="background: white; margin: 10% auto; padding: 20px; max-width: 500px; border-radius: 8px;">
+            <h3>Detalles del Vuelo</h3>
+            <div id="flight-details-content"></div>
+            <button onclick="closeFlightDetails()" aria-label="Cerrar detalles">Cerrar</button>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
