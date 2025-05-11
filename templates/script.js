@@ -85,6 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         document.getElementById('auth-section').style.display = 'block';
         document.getElementById('main').style.display = 'none';
+        // Llamar a updateOpenSkyData para probar sin autenticación
+        updateOpenSkyData();
     }
 
     const searchButton = document.getElementById('search-button');
@@ -215,7 +217,7 @@ function playAudio(blob) {
     playNextAudio();
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaSessionMetadata({
-            title: 'Mensaje de voz',
+            touché: 'Mensaje de voz',
             artist: 'HANDLEPHONE',
             album: 'Comunicación Aeronáutica'
         });
@@ -350,6 +352,8 @@ async function registerUser(event) {
     const sector = document.getElementById('sector').value;
     const password = document.getElementById('password').value;
 
+    console.log("Intentando registrar:", { surname, employee_id, sector });
+
     // Validación en el frontend
     if (!surname || !employee_id || !sector || !password) {
         alert('Por favor, completa todos los campos.');
@@ -391,6 +395,8 @@ async function loginUser(event) {
     const surname = document.getElementById('surname-login').value.trim();
     const employee_id = document.getElementById('employee_id-login').value.trim();
     const password = document.getElementById('password-login').value;
+
+    console.log("Intentando login con:", { surname, employee_id });
 
     // Validación en el frontend
     if (!surname || !employee_id || !password) {
@@ -609,7 +615,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         console.log("WebSocket cerrado");
         stopPing();
         const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken && retryCount < 3) { // Limitar a 3 intentos
+        if (sessionToken && retryCount < 3) {
             const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000);
             reconnectInterval = setTimeout(() => {
                 connectWebSocket(sessionToken, retryCount + 1);
@@ -675,12 +681,14 @@ function updateFlightDetails(flights, containerId) {
 }
 
 async function updateOpenSkyData() {
+    console.log("Ejecutando updateOpenSkyData...");
     try {
         const response = await fetch('/api/flights');
+        console.log("Respuesta de /api/flights:", response.status, response.statusText);
         if (response.ok) {
             const data = await response.json();
-            console.log("Datos recibidos de /api/flights:", data);
-            flightData = data.flights || [];
+            console.log("Datos recibidos de /api/flights:", JSON.stringify(data, null, 2));
+            flightData = Array.isArray(data.flights) ? data.flights : [];
 
             const flightDetails = document.getElementById("flight-details");
             const groupFlightDetails = document.getElementById("group-flight-details");
@@ -690,31 +698,36 @@ async function updateOpenSkyData() {
                 return;
             }
 
+            console.log("Número de vuelos:", flightData.length);
             flightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
             groupFlightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
 
             flightData.forEach(flight => {
-                const flightNumber = flight.flight_number || "N/A";
-                const scheduled = flight.departure_time || "N/A";
-                const destination = flight.arrival_airport || flight.origin || "N/A";
-                const status = flight.status || "Desconocido";
-                const gate = flight.gate || "N/A";
-                const flightType = flight.departure_time ? "Salida" : "Llegada";
-                const flightDiv = document.createElement("div");
-                flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
-                flightDiv.innerHTML = `
-                    <strong>Vuelo:</strong> ${flightNumber} [FR24] |
-                    <strong>STD:</strong> ${scheduled} |
-                    <strong>Destino:</strong> ${destination} |
-                    <strong>Puerta:</strong> ${gate} |
-                    <strong>Tipo:</strong> ${flightType} |
-                    <strong>Estado:</strong> ${status}
-                `;
-                flightDetails.appendChild(flightDiv);
-                groupFlightDetails.appendChild(flightDiv.cloneNode(true));
+                try {
+                    console.log("Procesando vuelo:", flight);
+                    const flightNumber = typeof flight.flight_number === 'string' ? flight.flight_number : "N/A";
+                    const scheduled = typeof flight.departure_time === 'string' ? flight.departure_time : "N/A";
+                    const destination = typeof flight.arrival_airport === 'string' ? flight.arrival_airport : (typeof flight.origin === 'string' ? flight.origin : "N/A");
+                    const status = typeof flight.status === 'string' ? flight.status : "Desconocido";
+                    const gate = typeof flight.gate === 'string' ? flight.gate : "N/A";
+                    const flightType = flight.departure_time ? "Salida" : "Llegada";
+                    const flightDiv = document.createElement("div");
+                    flightDiv.className = `flight flight-${status.toLowerCase().replace(" ", "-")}`;
+                    flightDiv.innerHTML = `
+                        <strong>Vuelo:</strong> ${flightNumber} [FR24] |
+                        <strong>STD:</strong> ${scheduled} |
+                        <strong>Destino:</strong> ${destination} |
+                        <strong>Puerta:</strong> ${gate} |
+                        <strong>Tipo:</strong> ${flightType} |
+                        <strong>Estado:</strong> ${status}
+                    `;
+                    flightDetails.appendChild(flightDiv);
+                    groupFlightDetails.appendChild(flightDiv.cloneNode(true));
+                } catch (err) {
+                    console.error("Error procesando vuelo:", flight, err);
+                }
             });
 
-            // Anunciar vuelos próximos a aterrizar
             if (announcementsEnabled) {
                 const approachingFlights = flightData.filter(flight => flight.status === "En zona");
                 approachingFlights.forEach(flight => {
@@ -728,7 +741,7 @@ async function updateOpenSkyData() {
             flightDetails.scrollTop = flightDetails.scrollHeight;
             groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
         } else {
-            console.warn("Error al cargar /api/flights:", response.status);
+            console.warn("Error al cargar /api/flights:", response.status, response.statusText);
             throw new Error("Respuesta no OK");
         }
     } catch (err) {
