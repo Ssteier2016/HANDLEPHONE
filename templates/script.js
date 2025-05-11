@@ -77,13 +77,16 @@ async function validateToken(sessionToken) {
         if (response.ok) {
             console.log("Token válido");
             return true;
+        } else if (response.status === 404) {
+            console.warn("Endpoint /validate-token no encontrado. Continuando sin validación.");
+            return true; // Permitir continuar sin validación si el endpoint no existe
         } else {
-            console.warn("Token inválido o expirado");
+            console.warn("Token inválido o expirado:", response.status, response.statusText);
             return false;
         }
     } catch (error) {
         console.error("Error al validar token:", error);
-        return false;
+        return true; // Continuar en caso de error para no interrumpir los vuelos
     }
 }
 
@@ -483,9 +486,11 @@ async function loginUser(event) {
     }
 }
 
+// Conectar WebSocket
 function connectWebSocket(sessionToken, retryCount = 0) {
     if (!sessionToken) {
-        console.error("No hay sessionToken para conectar WebSocket");
+        console.warn("No hay sessionToken, pero continuando para mostrar vuelos");
+        updateOpenSkyData(); // Asegurar que los vuelos se carguen
         return;
     }
     const wsUrl = `wss://${window.location.host}/ws/${encodeURIComponent(sessionToken)}`;
@@ -494,7 +499,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         ws = new WebSocket(wsUrl);
     } catch (err) {
         console.error("Error al crear WebSocket:", err);
-        alert("Error al intentar conectar con el servidor.");
+        updateOpenSkyData(); // Cargar vuelos incluso si WebSocket falla
         return;
     }
 
@@ -638,11 +643,11 @@ function connectWebSocket(sessionToken, retryCount = 0) {
             } else if (message.type === "error") {
                 console.error("Error del servidor:", message.message);
                 if (message.message === "Usuario no registrado") {
-                    alert("Sesión inválida. Por favor, inicia sesión nuevamente.");
-                    // No llamar a completeLogout para mantener vuelos visibles
+                    console.warn("Sesión inválida, pero manteniendo vuelos visibles");
                     localStorage.removeItem('sessionToken');
                     document.getElementById('auth-section').style.display = 'block';
-                    document.getElementById('main').style.display = 'block'; // Mantener main visible
+                    document.getElementById('main').style.display = 'block';
+                    updateOpenSkyData(); // Forzar carga de vuelos
                 }
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
@@ -654,6 +659,7 @@ function connectWebSocket(sessionToken, retryCount = 0) {
 
     ws.onerror = function(error) {
         console.error("Error en WebSocket:", error);
+        updateOpenSkyData(); // Cargar vuelos incluso si hay un error
     };
 
     ws.onclose = function() {
@@ -667,21 +673,20 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                     if (isValid) {
                         connectWebSocket(sessionToken, retryCount + 1);
                     } else {
-                        console.warn("Token inválido en reconexión, limpiando sesión");
-                        localStorage.removeItem('sessionToken');
-                        document.getElementById('auth-section').style.display = 'block';
-                        document.getElementById('main').style.display = 'block'; // Mantener main visible
+                        console.warn("Token inválido, manteniendo vuelos");
+                        document.getElementById('main').style.display = 'block';
+                        updateOpenSkyData();
                     }
                 });
             }, delay);
         } else {
-            console.error("No hay sessionToken o se alcanzó el límite de reconexiones");
-            document.getElementById('auth-section').style.display = 'block';
-            document.getElementById('main').style.display = 'block'; // Mantener main visible
+            console.warn("No hay sessionToken o límite de reconexiones alcanzado, manteniendo vuelos");
+            document.getElementById('main').style.display = 'block';
+            updateOpenSkyData();
         }
     };
-}
-
+}  
+                
 // Mantener conexión viva con ping
 function startPing() {
     stopPing();
@@ -1542,6 +1547,7 @@ function logout() {
     }
 }
 
+// Completar logout
 function completeLogout() {
     console.log("Completando cierre de sesión...");
     if (ws) {
@@ -1551,10 +1557,6 @@ function completeLogout() {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
-    }
-    if (groupMediaRecorder) {
-        groupMediaRecorder.stop();
-        groupMediaRecorder = null;
     }
     localStorage.removeItem("sessionToken");
     localStorage.removeItem("userName");
@@ -1568,10 +1570,7 @@ function completeLogout() {
     stopPing();
     document.getElementById("auth-section").style.display = "block";
     document.getElementById("main").style.display = "block"; // Mantener main visible
-    document.getElementById("group-screen").style.display = "none";
-    document.getElementById("radar-screen").style.display = "none";
-    document.getElementById("history-screen").style.display = "none";
-    console.log("Sesión cerrada completamente");
+    updateOpenSkyData(); // Forzar carga de vuelos
 }
 
 // Funciones de notificaciones
