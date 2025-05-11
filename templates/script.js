@@ -758,9 +758,14 @@ async function updateOpenSkyData() {
                 return;
             }
 
-            console.log("Número de vuelos:", flightData.length);
-            flightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
-            groupFlightDetails.innerHTML = flightData.length === 0 ? "<p>No hay vuelos disponibles</p>" : "";
+            flightDetails.innerHTML = "";
+            groupFlightDetails.innerHTML = "";
+
+            if (flightData.length === 0) {
+                console.warn("No se recibieron vuelos de /api/flights");
+                flightDetails.innerHTML = "<p>No hay vuelos disponibles</p>";
+                groupFlightDetails.innerHTML = "<p>No hay vuelos disponibles</p>";
+            }
 
             flightData.forEach(flight => {
                 try {
@@ -787,16 +792,6 @@ async function updateOpenSkyData() {
                     console.error("Error procesando vuelo:", flight, err);
                 }
             });
-
-            if (announcementsEnabled) {
-                const approachingFlights = flightData.filter(flight => flight.status === "En zona");
-                approachingFlights.forEach(flight => {
-                    if (!announcedFlights.includes(flight.flight_number)) {
-                        announceFlight(flight);
-                        announcedFlights.push(flight.flight_number);
-                    }
-                });
-            }
 
             flightDetails.scrollTop = flightDetails.scrollHeight;
             groupFlightDetails.scrollTop = groupFlightDetails.scrollHeight;
