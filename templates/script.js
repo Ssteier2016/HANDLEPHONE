@@ -20,19 +20,19 @@ let currentX = 0;
 let flightData = [];
 let reconnectInterval = null;
 let announcementsEnabled = false;
-let departureAnnouncementsEnabled = false; // Nuevo: Para anuncios de despegues
+let departureAnnouncementsEnabled = false;
 let announcedFlights = [];
-let announcedDepartures = []; // Nuevo: Para rastrear despegues anunciados
+let announcedDepartures = [];
 let groupRecording = false;
 let groupMediaRecorder = null;
 let updatesEnabled = true;
 let dailyTokenCount = 0;
-let restrictTokens = localStorage.getItem('restrictTokens') !== 'false'; // Nuevo: Control de límite de tokens
+let restrictTokens = localStorage.getItem('restrictTokens') !== 'false';
 const PING_INTERVAL = 30000;
 const RECONNECT_BASE_DELAY = 5000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SYNC_TAG = 'sync-messages';
-const MAX_TOKENS_DAILY = 2000; // Aumentado de 1000 a 2000
+const MAX_TOKENS_DAILY = 2000;
 const TOKENS_PER_FLIGHT = 3;
 const MAX_FLIGHTS_PER_REQUEST = 20;
 
@@ -41,86 +41,18 @@ const AIRLINE_MAPPING = {
     "AEP": "AEP"
 };
 
-// Mapeo de códigos OACI a IATA
 const AIRPORT_MAPPING = {
-    // Argentina (Domésticos)
-    "SABE": "AEP", // Aeroparque Jorge Newbery, Buenos Aires
-    "SAEZ": "EZE", // Ministro Pistarini, Ezeiza, Buenos Aires
-    "SACO": "COR", // Ingeniero Ambrosio Taravella, Córdoba
-    "SAWC": "FTE", // El Calafate, Santa Cruz
-    "SARI": "IGR", // Cataratas del Iguazú, Puerto Iguazú, Misiones
-    "SASA": "SLA", // Martín Miguel de Güemes, Salta
-    "SASJ": "JUJ", // Gobernador Horacio Guzmán, Jujuy
-    "SANT": "TUC", // Teniente Benjamín Matienzo, Tucumán
-    "SAZS": "BRC", // Teniente Luis Candelaria, Bariloche, Río Negro
-    "SAZM": "MDQ", // Ástor Piazzolla, Mar del Plata, Buenos Aires
-    "SAZN": "NQN", // Presidente Perón, Neuquén
-    "SAZR": "RSA", // Santa Rosa, La Pampa
-    "SAZY": "CPC", // Aviador Carlos Campos, San Martín de los Andes, Neuquén
-    "SAWH": "USH", // Malvinas Argentinas, Ushuaia, Tierra del Fuego
-    "SAWG": "RGL", // Piloto Civil Norberto Fernández, Río Gallegos, Santa Cruz
-    "SAWJ": "CRD", // Comodoro Rivadavia, Chubut
-    "SAWT": "RGA", // Hermes Quijada, Río Grande, Tierra del Fuego
-    "SAWP": "PMY", // El Tehuelche, Puerto Madryn, Chubut
-    "SAOU": "LGS", // Malargüe, Mendoza
-    "SAME": "MDZ", // Gobernador Francisco Gabrielli, Mendoza
-    "SANU": "UAQ", // Domingo Faustino Sarmiento, San Juan
-    "SAOC": "RCQ", // Reconquista, Santa Fe
-    "SARP": "PSS", // Libertador General José de San Martín, Posadas, Misiones
-    "SATR": "RCU", // Área de Material, Río Cuarto, Córdoba
-    "SAVC": "PMQ", // Perito Moreno, Santa Cruz
-    "SAVT": "REL", // Almirante Marco Andrés Zar, Trelew, Chubut
-    "SAVV": "VDM", // Gobernador Edgardo Castello, Viedma, Río Negro
-    "SAAP": "PRA", // General Justo José de Urquiza, Paraná, Entre Ríos
-    "SAAV": "SFN", // Sauce Viejo, Santa Fe
-    "SANR": "RLO", // Valle del Conlara, San Luis
-    "SANC": "CTC", // Coronel Felipe Varela, Catamarca
-    "SANL": "IRJ", // Capitán Vicente Almandos Almonacid, La Rioja
-    "SAVB": "EHL", // El Bolsón, Río Negro
-    "SAVY": "PMY", // Puerto Madryn, Chubut
-
-    // Bolivia
-    "SLVR": "VVI", // Viru Viru, Santa Cruz de la Sierra
-
-    // Brasil
-    "SBGR": "GRU", // São Paulo-Guarulhos, São Paulo
-    "SBGL": "GIG", // Tom Jobim, Río de Janeiro
-    "SBFL": "FLN", // Hercílio Luz, Florianópolis
-    "SBPA": "POA", // Salgado Filho, Porto Alegre
-    "SBRF": "REC", // Gilberto Freyre, Recife
-    "SBSV": "SSA", // Deputado Luís Eduardo Magalhães, Salvador
-    "SBFZ": "FOR", // Pinto Martins, Fortaleza
-    "SBFI": "IGU", // Foz do Iguaçu, Paraná
-
-    // Chile
-    "SCEL": "SCL", // Arturo Merino Benítez, Santiago
-    "SCFA": "ANF", // Andrés Sabella Gálvez, Antofagasta
-
-    // Paraguay
-    "SGAS": "ASU", // Silvio Pettirossi, Asunción
-
-    // Uruguay
-    "SUMU": "MVD", // Carrasco, Montevideo
-    "SULS": "PDP", // Capitán de Corbeta Carlos A. Curbelo, Punta del Este
-
-    // Colombia
-    "SKBO": "BOG", // El Dorado, Bogotá
-    "SKRG": "MDE", // José María Córdova, Medellín
-    "SKAR": "ADZ", // Gustavo Rojas Pinilla, San Andrés
-
-    // Perú
-    "SPJC": "LIM", // Jorge Chávez, Lima
-
-    // Otros destinos internacionales
-    "KJFK": "JFK", // John F. Kennedy, Nueva York, EE.UU.
-    "KMIA": "MIA", // Miami International, Miami, EE.UU.
-    "LEMD": "MAD", // Adolfo Suárez Madrid-Barajas, Madrid, España
-    "LIRF": "FCO", // Leonardo da Vinci-Fiumicino, Roma, Italia
-    "MMUN": "CUN", // Cancún International, Cancún, México
-    "MDPC": "PUJ", // Punta Cana International, Punta Cana, República Dominicana
-    "MDSD": "SDQ", // Las Américas, Santo Domingo, República Dominicana
-    "TNCM": "SXM", // Princess Juliana, Sint Maarten
-    "TBPB": "BGI" // Grantley Adams, Bridgetown, Barbados
+    "SABE": "AEP", "SAEZ": "EZE", "SACO": "COR", "SAWC": "FTE", "SARI": "IGR", "SASA": "SLA",
+    "SASJ": "JUJ", "SANT": "TUC", "SAZS": "BRC", "SAZM": "MDQ", "SAZN": "NQN", "SAZR": "RSA",
+    "SAZY": "CPC", "SAWH": "USH", "SAWG": "RGL", "SAWJ": "CRD", "SAWT": "RGA", "SAWP": "PMY",
+    "SAOU": "LGS", "SAME": "MDZ", "SANU": "UAQ", "SAOC": "RCQ", "SARP": "PSS", "SATR": "RCU",
+    "SAVC": "PMQ", "SAVT": "REL", "SAVV": "VDM", "SAAP": "PRA", "SAAV": "SFN", "SANR": "RLO",
+    "SANC": "CTC", "SANL": "IRJ", "SAVB": "EHL", "SAVY": "PMY", "SLVR": "VVI", "SBGR": "GRU",
+    "SBGL": "GIG", "SBFL": "FLN", "SBPA": "POA", "SBRF": "REC", "SBSV": "SSA", "SBFZ": "FOR",
+    "SBFI": "IGU", "SCEL": "SCL", "SCFA": "ANF", "SGAS": "ASU", "SUMU": "MVD", "SULS": "PDP",
+    "SKBO": "BOG", "SKRG": "MDE", "SKAR": "ADZ", "SPJC": "LIM", "KJFK": "JFK", "KMIA": "MIA",
+    "LEMD": "MAD", "LIRF": "FCO", "MMUN": "CUN", "MDPC": "PUJ", "MDSD": "SDQ", "TNCM": "SXM",
+    "TBPB": "BGI"
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -190,7 +122,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userFunction = localStorage.getItem('userFunction');
     const userLegajo = localStorage.getItem('userLegajo');
 
-    // Restaurar estados desde localStorage
     announcementsEnabled = localStorage.getItem('announcementsEnabled') === 'true';
     departureAnnouncementsEnabled = localStorage.getItem('departureAnnouncementsEnabled') === 'true';
     restrictTokens = localStorage.getItem('restrictTokens') !== 'false';
@@ -270,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Anuncios de llegadas:", announcementsEnabled ? "activados" : "desactivados");
         });
     } else {
-        console.error("Botón #toggle-announcements no encontrado");
+        console.warn("Botón #toggle-announcements no encontrado. Asegúrate de que esté en el HTML.");
     }
 
     const toggleDepartureAnnouncementsBtn = document.getElementById('toggle-departure-announcements');
@@ -283,7 +214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Anuncios de despegues:", departureAnnouncementsEnabled ? "activados" : "desactivados");
         });
     } else {
-        console.error("Botón #toggle-departure-announcements no encontrado");
+        console.warn("Botón #toggle-departure-announcements no encontrado. Asegúrate de que esté en el HTML.");
     }
 
     const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
@@ -301,7 +232,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     } else {
-        console.error("Botón #toggle-token-limit no encontrado");
+        console.warn("Botón #toggle-token-limit no encontrado. Asegúrate de que esté en el HTML.");
     }
 
     const updatesToggleBtn = document.getElementById('updates-toggle');
@@ -316,7 +247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Actualizaciones de vuelos:", updatesEnabled ? "activadas" : "pausadas");
         });
     } else {
-        console.error("Botón #updates-toggle no encontrado");
+        console.warn("Botón #updates-toggle no encontrado. Asegúrate de que esté en el HTML.");
     }
 
     checkNotificationPermission();
@@ -401,7 +332,7 @@ function playAudio(blob) {
     const audio = new Audio(URL.createObjectURL(blob));
     audioQueue.push(audio);
     playNextAudio();
-    if ('mediaSession' in navigator) {
+    if ('mediaSession' in navigator && typeof MediaSessionMetadata !== 'undefined') {
         navigator.mediaSession.metadata = new MediaSessionMetadata({
             title: 'Mensaje de voz',
             artist: 'HANDLEPHONE',
@@ -436,7 +367,7 @@ function playAnnouncement(audioUrl) {
 
 // Funciones de búsqueda
 function sendSearchQuery() {
-    const query = document.getElementById('search-input').value.trim().toUpperCase();
+    const query = document.getElementById('search-input')?.value.trim().toUpperCase() || '';
     if (!query) {
         alert('Ingresá una consulta');
         return;
@@ -496,10 +427,10 @@ function filterFlights(searchTerm = '') {
 // Funciones de registro y conexión
 async function registerUser(event) {
     event.preventDefault();
-    const surname = document.getElementById('surname').value.trim();
-    const employee_id = document.getElementById('employee_id').value.trim();
-    const sector = document.getElementById('sector').value;
-    const password = document.getElementById('password').value;
+    const surname = document.getElementById('surname')?.value.trim() || '';
+    const employee_id = document.getElementById('employee_id')?.value.trim() || '';
+    const sector = document.getElementById('sector')?.value || '';
+    const password = document.getElementById('password')?.value || '';
 
     console.log("Intentando registrar:", { surname, employee_id, sector });
 
@@ -540,9 +471,9 @@ async function registerUser(event) {
 
 async function loginUser(event) {
     event.preventDefault();
-    const surname = document.getElementById('surname-login').value.trim();
-    const employee_id = document.getElementById('employee_id-login').value.trim();
-    const password = document.getElementById('password-login').value;
+    const surname = document.getElementById('surname-login')?.value.trim() || '';
+    const employee_id = document.getElementById('employee_id-login')?.value.trim() || '';
+    const password = document.getElementById('password-login')?.value || '';
 
     console.log("Intentando login con:", { surname, employee_id });
 
@@ -577,7 +508,7 @@ async function loginUser(event) {
             displayUserProfile();
             updateOpenSkyData();
         } else {
-            const errorMessage = data.detail && typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+            const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
             alert(`Error al iniciar sesión: ${errorMessage}`);
             console.error('Error en login:', data);
         }
@@ -839,7 +770,7 @@ function updateFlightInfo() {
         return;
     }
 
-    const filteredFlights = flightData.filter(flight => flight.flight_number.startsWith('AR'));
+    const filteredFlights = flightData.filter(flight => flight.flight_number && typeof flight.flight_number === 'string' && flight.flight_number.startsWith('AR'));
     const departures = filteredFlights.filter(flight => flight.origin === 'SABE');
     const arrivals = filteredFlights.filter(flight => flight.destination === 'SABE');
 
@@ -865,10 +796,10 @@ function updateFlightInfo() {
         });
     };
 
-    updateTableBody(departuresTable, departures, false);
-    updateTableBody(arrivalsTable, arrivals, true);
-    updateTableBody(groupDeparturesTable, departures, false);
-    updateTableBody(groupArrivalsTable, arrivals, true);
+    updateTableBody(departuresTable.querySelector('tbody') || departuresTable, departures, false);
+    updateTableBody(arrivalsTable.querySelector('tbody') || arrivalsTable, arrivals, true);
+    updateTableBody(groupDeparturesTable.querySelector('tbody') || groupDeparturesTable, departures, false);
+    updateTableBody(groupArrivalsTable.querySelector('tbody') || groupArrivalsTable, arrivals, true);
 
     filterFlights(localStorage.getItem('lastSearchQuery') || '');
 }
@@ -929,7 +860,7 @@ async function updateOpenSkyData() {
         if (response.ok) {
             const data = await response.json();
             console.log("Datos recibidos de /api/flights:", JSON.stringify(data, null, 2));
-            flightData = Array.isArray(data.flights) ? data.flights : [];
+            flightData = Array.isArray(data.flights) ? data.flights.filter(flight => flight && flight.flight_number) : [];
             dailyTokenCount += flightData.length * TOKENS_PER_FLIGHT;
             console.log("Tokens consumidos:", dailyTokenCount);
 
@@ -1021,12 +952,21 @@ function initMap() {
 }
 
 function updateMap() {
-    if (!map) return;
+    if (!map) {
+        console.warn("Mapa no inicializado. Intentando inicializar...");
+        initMap();
+        if (!map) return;
+    }
 
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
 
-    const validFlights = flightData.filter(flight => flight.lat && flight.lon && flight.flight_number.startsWith('AR'));
+    const validFlights = flightData.filter(flight => 
+        flight.lat && flight.lon && 
+        flight.flight_number && 
+        typeof flight.flight_number === 'string' && 
+        flight.flight_number.startsWith('AR')
+    );
 
     validFlights.forEach(flight => {
         const airplaneIcon = L.icon({
@@ -1048,10 +988,12 @@ function updateMap() {
         `);
         marker.flight = flight;
         markers.push(marker);
+        marker.addTo(map);
     });
 
     filterFlights(localStorage.getItem('lastSearchQuery') || '');
     map.invalidateSize();
+    console.log("Mapa actualizado con", validFlights.length, "vuelos válidos");
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1485,7 +1427,7 @@ function updateUsers(count, list) {
 
 // Funciones de grupos
 function createGroup() {
-    const groupId = document.getElementById('group-id').value.trim();
+    const groupId = document.getElementById('group-id')?.value.trim() || '';
     const isPrivate = document.getElementById('group-private')?.checked || false;
     if (!groupId) {
         alert('Por favor, ingresa un nombre de grupo válido.');
@@ -1501,7 +1443,7 @@ function createGroup() {
 }
 
 function joinGroup() {
-    const groupId = document.getElementById('group-id').value.trim();
+    const groupId = document.getElementById('group-id')?.value.trim() || '';
     const isPrivate = document.getElementById('group-private')?.checked || false;
     if (!groupId) {
         alert('Por favor, ingresa un nombre de grupo válido.');
@@ -1574,85 +1516,134 @@ function returnToGroup() {
     }
 }
 
-function backToMainFromGroup() {
-    document.getElementById('group-screen').classList.add('slide-right');
-    setTimeout(() => {
-        document.getElementById('group-screen').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        document.getElementById('group-screen').classList.remove('slide-right');
-        const logoutButton = document.getElementById('logout-button');
-        if (logoutButton) logoutButton.style.display = 'block';
-        checkGroupStatus();
-        updateSwipeHint();
-    }, 300);
-}
+// Funciones de gestos táctiles
+document.addEventListener('touchstart', (e) => {
+    if (!currentGroup) return;
+    isSwiping = true;
+    startX = e.touches[0].clientX;
+    currentX = startX;
+});
 
-// Funciones de navegación
-function showGroupRadar() {
-    console.log("Mostrando radar desde grupo...");
-    document.getElementById('group-screen').style.display = 'none';
-    document.getElementById('radar-screen').style.display = 'block';
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'none';
-    if (!map) {
-        initMap();
-        updateOpenSkyData();
+document.addEventListener('touchmove', (e) => {
+    if (!isSwiping || !currentGroup) return;
+    currentX = e.touches[0].clientX;
+    const diffX = startX - currentX;
+    const main = document.getElementById('main');
+    const groupScreen = document.getElementById('group-screen');
+    if (diffX > 0 && main.style.display === 'block') {
+        main.style.transform = `translateX(-${diffX}px)`;
+    } else if (diffX < 0 && groupScreen.style.display === 'block') {
+        groupScreen.style.transform = `translateX(${-diffX}px)`;
+    }
+});
+
+document.addEventListener('touchend', () => {
+    if (!isSwiping || !currentGroup) return;
+    isSwiping = false;
+    const diffX = startX - currentX;
+    const threshold = window.innerWidth / 4;
+    const main = document.getElementById('main');
+    const groupScreen = document.getElementById('group-screen');
+
+    if (diffX > threshold && main.style.display === 'block') {
+        main.classList.add('slide-left');
+        setTimeout(() => {
+            main.style.display = 'none';
+            main.style.transform = '';
+            main.classList.remove('slide-left');
+            groupScreen.style.display = 'block';
+            groupScreen.style.transform = '';
+            updateSwipeHint();
+        }, 300);
+    } else if (diffX < -threshold && groupScreen.style.display === 'block') {
+        groupScreen.classList.add('slide-right');
+        setTimeout(() => {
+            groupScreen.style.display = 'none';
+            groupScreen.style.transform = '';
+            groupScreen.classList.remove('slide-right');
+            main.style.display = 'block';
+            main.style.transform = '';
+            updateSwipeHint();
+        }, 300);
     } else {
-        map.invalidateSize();
-        filterFlights();
+        main.style.transform = '';
+        groupScreen.style.transform = '';
+    }
+});
+
+// Funciones de notificaciones
+function checkNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.warn("Notificaciones no soportadas por el navegador");
+        return;
+    }
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            console.log("Permiso de notificaciones:", permission);
+        });
     }
 }
 
-function showGroupHistory() {
-    document.getElementById('group-screen').style.display = 'none';
-    document.getElementById('history-screen').style.display = 'block';
-    loadHistory();
-}
-
-function showRadar() {
-    console.log("Mostrando radar...");
-    document.getElementById("main").style.display = "none";
-    document.getElementById("radar-screen").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'none';
-    if (!map) {
-        initMap();
-        updateOpenSkyData();
-    } else {
-        map.invalidateSize();
-        filterFlights();
+function showNotification(title, options) {
+    if (!('Notification' in window)) {
+        console.warn("Notificaciones no soportadas por el navegador");
+        return;
+    }
+    if (Notification.permission === 'granted') {
+        new Notification(title, options);
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                new Notification(title, options);
+            }
+        });
     }
 }
 
-function backToMainFromRadar() {
-    document.getElementById("radar-screen").style.display = "none";
-    document.getElementById("main").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'block';
-    document.getElementById("search-bar").value = "";
-    filterFlights();
+// Funciones de Service Worker
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('Service Worker registrado con éxito:', registration.scope);
+        }).catch(error => {
+            console.error('Error al registrar Service Worker:', error);
+        });
+    } else {
+        console.warn("Service Worker no soportado por el navegador");
+    }
+}
+
+// Funciones de logout
+function logout() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'logout', sessionToken: localStorage.getItem('sessionToken') }));
+    } else {
+        completeLogout();
+    }
+}
+
+function completeLogout() {
+    localStorage.removeItem('sessionToken');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userFunction');
+    localStorage.removeItem('userLegajo');
+    localStorage.removeItem('groupId');
+    userId = null;
+    currentGroup = null;
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    stopPing();
+    document.getElementById('main').style.display = 'none';
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('auth-section').style.display = 'block';
+    displayUserProfile();
     updateSwipeHint();
+    alert('Sesión cerrada exitosamente');
 }
 
-function showHistory() {
-    document.getElementById("main").style.display = "none";
-    document.getElementById("radar-screen").style.display = "none";
-    document.getElementById("history-screen").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'none';
-    loadHistory();
-}
-
-function backToMain() {
-    document.getElementById("history-screen").style.display = "none";
-    document.getElementById("main").style.display = "block";
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.style.display = 'block';
-    updateSwipeHint();
-    console.log("Volviendo a la pantalla principal desde historial");
-}
-
-// Funciones auxiliares
+// Funciones de utilidad
 function base64ToBlob(base64, mime) {
     try {
         const byteString = atob(base64);
@@ -1661,178 +1652,143 @@ function base64ToBlob(base64, mime) {
         for (let i = 0; i < byteString.length; i++) {
             uint8Array[i] = byteString.charCodeAt(i);
         }
-        return new Blob([uint8Array], { type: mime });
+        return new Blob([arrayBuffer], { type: mime });
     } catch (err) {
-        console.error("Error al convertir Base64 a Blob:", err);
+        console.error("Error al convertir base64 a Blob:", err);
         return null;
     }
 }
 
-function logout() {
-    console.log("Iniciando cierre de sesión...");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "logout" }));
+// Event listeners adicionales
+document.addEventListener('DOMContentLoaded', () => {
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', logout);
     } else {
-        completeLogout();
+        console.warn("Botón #logout-button no encontrado. Asegúrate de que esté en el HTML.");
     }
-}
 
-function completeLogout() {
-    console.log("Completando cierre de sesión...");
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    localStorage.removeItem("sessionToken");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userFunction");
-    localStorage.removeItem("userLegajo");
-    localStorage.removeItem("groupId");
-    localStorage.removeItem("lastSearchQuery");
-    currentGroup = null;
-    mutedUsers.clear();
-    clearInterval(reconnectInterval);
-    stopPing();
-    document.getElementById("auth-section").style.display = "block";
-    document.getElementById("main").style.display = "none";
-}
-
-// Funciones de notificaciones
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        fetch('/templates/sw.js', { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    navigator.serviceWorker.register('/templates/sw.js')
-                        .then(() => console.log('Service Worker registrado'))
-                        .catch(err => console.error('Error al registrar Service Worker:', err));
-                } else {
-                    console.warn('Archivo sw.js no encontrado.');
-                }
-            })
-            .catch(err => {
-                console.warn('No se pudo verificar sw.js:', err);
-            });
+    const returnToGroupBtn = document.getElementById('return-to-group-btn');
+    if (returnToGroupBtn) {
+        returnToGroupBtn.addEventListener('click', returnToGroup);
     } else {
-        console.warn('Service Worker no soportado.');
+        console.warn("Botón #return-to-group-btn no encontrado. Asegúrate de que esté en el HTML.");
     }
-}
 
-function checkNotificationPermission() {
-    if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-            console.log('Permiso de notificación ya concedido');
-        } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                    console.log('Permiso de notificación concedido');
-                } else {
-                    console.warn('Permiso de notificación denegado');
-                }
-            }).catch(err => {
-                console.error('Error al solicitar permiso de notificación:', err);
-            });
-        } else {
-            console.warn('Permiso de notificación denegado previamente');
-        }
+    const talkButton = document.getElementById('talk');
+    if (talkButton) {
+        talkButton.addEventListener('click', toggleTalk);
     } else {
-        console.warn('Notificaciones no soportadas en este navegador');
+        console.warn("Botón #talk no encontrado. Asegúrate de que esté en el HTML.");
     }
-}
 
-// Función para cargar historial
-function loadHistory() {
-    fetch('/history')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error al cargar historial: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            const historyList = document.getElementById("history-list");
-            if (!historyList) {
-                console.error("Elemento #history-list no encontrado en el DOM");
-                return;
-            }
-            historyList.innerHTML = "";
-            data.forEach(msg => {
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "chat-message";
-                const utcTime = msg.timestamp.split(":");
-                const utcDate = new Date();
-                utcDate.setUTCHours(parseInt(utcTime[0]), parseInt(utcTime[1]));
-                const localTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                const text = msg.text || "Sin transcripción";
-                msgDiv.innerHTML = `<span class="play-icon">▶️</span> ${msg.date} ${localTime} - ${msg.user_id}: ${text}`;
-                const audioBlob = base64ToBlob(msg.audio, 'audio/webm');
-                if (audioBlob) {
-                    msgDiv.onclick = () => playAudio(audioBlob);
-                } else {
-                    console.error("No se pudo crear Blob para mensaje del historial:", msg);
-                }
-                historyList.appendChild(msgDiv);
-            });
-            console.log("Historial cargado con", data.length, "mensajes");
-        })
-        .catch(err => {
-            console.error("Error al cargar historial:", err);
-            const historyList = document.getElementById("history-list");
-            if (historyList) {
-                historyList.innerHTML = "<div>Error al cargar el historial</div>";
-            }
-        });
-}
+    const groupTalkButton = document.getElementById('group-talk');
+    if (groupTalkButton) {
+        groupTalkButton.addEventListener('click', toggleGroupTalk);
+    } else {
+        console.warn("Botón #group-talk no encontrado. Asegúrate de que esté en el HTML.");
+    }
 
-// Event listeners
-document.addEventListener('click', unlockAudio, { once: true });
+    const muteButton = document.getElementById('mute');
+    if (muteButton) {
+        muteButton.addEventListener('click', toggleMute);
+    } else {
+        console.warn("Botón #mute no encontrado. Asegúrate de que esté en el HTML.");
+    }
 
-let lastVolumeUpTime = 0;
-let volumeUpCount = 0;
+    const groupMuteButton = document.getElementById('group-mute');
+    if (groupMuteButton) {
+        groupMuteButton.addEventListener('click', toggleGroupMute);
+    } else {
+        console.warn("Botón #group-mute no encontrado. Asegúrate de que esté en el HTML.");
+    }
 
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'VolumeUp') {
-        event.preventDefault();
-        const currentTime = Date.now();
-        const timeDiff = currentTime - lastVolumeUpTime;
-
-        if (timeDiff < 500) {
-            volumeUpCount++;
-            if (volumeUpCount === 2) {
-                toggleTalk();
-                volumeUpCount = 0;
-            }
-        } else {
-            volumeUpCount = 1;
-        }
-        lastVolumeUpTime = currentTime;
+    const muteNonGroupButton = document.getElementById('mute-non-group');
+    if (muteNonGroupButton) {
+        muteNonGroupButton.addEventListener('click', toggleMuteNonGroup);
+    } else {
+        console.warn("Botón #mute-non-group no encontrado. Asegúrate de que esté en el HTML.");
     }
 });
 
-document.addEventListener('touchstart', e => {
-    if (!isSwiping) {
-        startX = e.touches[0].clientX;
+// CSS dinámico para transiciones
+const style = document.createElement('style');
+style.textContent = `
+    .slide-left {
+        transition: transform 0.3s ease-out;
+        transform: translateX(-100%);
     }
-});
-
-document.addEventListener('touchmove', e => {
-    if (!isSwiping) {
-        currentX = e.touches[0].clientX;
+    .slide-right {
+        transition: transform 0.3s ease-out;
+        transform: translateX(100%);
     }
-});
-
-document.addEventListener('touchend', e => {
-    if (isSwiping) return;
-    const deltaX = currentX - startX;
-    if (Math.abs(deltaX) > 50) {
-        if (deltaX > 0 && document.getElementById('group-screen').style.display === 'block') {
-            backToMainFromGroup();
-        } else if (deltaX < 0 && document.getElementById('main').style.display === 'block' && currentGroup) {
-            returnToGroup();
-        }
+    .recording {
+        background-color: red;
+        color: white;
     }
-});
+    .muted {
+        background-color: #ccc;
+    }
+    .unmuted {
+        background-color: #4CAF50;
+    }
+    .user-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+    }
+    .mute-button {
+        margin-right: 10px;
+    }
+    .chat-message {
+        cursor: pointer;
+        margin: 5px 0;
+    }
+    .play-icon {
+        margin-right: 5px;
+    }
+    .in-group {
+        font-weight: bold;
+    }
+    .tams-row {
+        cursor: pointer;
+    }
+    .tams-details-btn {
+        padding: 5px 10px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .tams-details-btn:hover {
+        background-color: #0056b3;
+    }
+    #flight-details-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 1000;
+    }
+    #flight-details-content {
+        background-color: white;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 500px;
+        position: relative;
+    }
+    .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 20px;
+        cursor: pointer;
+    }
+`;
+document.head.appendChild(style);
