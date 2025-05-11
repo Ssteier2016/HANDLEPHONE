@@ -23,6 +23,7 @@ let announcementsEnabled = false; // Estado de los anuncios
 let announcedFlights = []; // Lista de vuelos ya anunciados
 const PING_INTERVAL = 30000; // Ping cada 30 segundos
 const RECONNECT_BASE_DELAY = 5000; // Reintento base cada 5 segundos
+const MAX_RECONNECT_ATTEMPTS = 5; // Aumentado de 3 a 5
 const SYNC_TAG = 'sync-messages'; // Tag para sincronización
 
 // Mapeo de aerolíneas
@@ -59,15 +60,35 @@ function displayUserProfile() {
             console.error('Error al decodificar token:', error);
             localStorage.removeItem('sessionToken');
             profileDiv.textContent = '';
-            completeLogout();
         }
     } else if (profileDiv) {
         profileDiv.textContent = '';
     }
 }
 
+// Validar token con el servidor
+async function validateToken(sessionToken) {
+    try {
+        const response = await fetch('/validate-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: sessionToken }),
+        });
+        if (response.ok) {
+            console.log("Token válido");
+            return true;
+        } else {
+            console.warn("Token inválido o expirado");
+            return false;
+        }
+    } catch (error) {
+        console.error("Error al validar token:", error);
+        return false;
+    }
+}
+
 // Restaurar sesión al cargar la página
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     registerServiceWorker();
     displayUserProfile();
     const sessionToken = localStorage.getItem('sessionToken');
@@ -75,19 +96,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const userFunction = localStorage.getItem('userFunction');
     const userLegajo = localStorage.getItem('userLegajo');
 
+    let isAuthenticated = false;
     if (sessionToken && userName && userFunction && userLegajo) {
-        userId = `${userLegajo}_${userName}_${userFunction}`;
-        connectWebSocket(sessionToken);
-        document.getElementById('auth-section').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        checkGroupStatus();
-        updateOpenSkyData();
+        // Validar token antes de conectar
+        isAuthenticated = await validateToken(sessionToken);
+        if (isAuthenticated) {
+            userId = `${userLegajo}_${userName}_${userFunction}`;
+            connectWebSocket(sessionToken);
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+            checkGroupStatus();
+        } else {
+            console.warn("Token inválido, mostrando pantalla de login");
+            localStorage.removeItem('sessionToken');
+            localStorage.removeItem('userName');
+            localStorage.removeItem('userFunction');
+            localStorage.removeItem('userLegajo');
+            alert("Sesión inválida. Por favor, inicia sesión nuevamente.");
+            document.getElementById('auth-section').style.display = 'block';
+            document.getElementById('main').style.display = 'none';
+        }
     } else {
+        console.log("No hay sesión activa, mostrando pantalla de login");
         document.getElementById('auth-section').style.display = 'block';
         document.getElementById('main').style.display = 'none';
-        // Llamar a updateOpenSkyData para probar sin autenticación
-        updateOpenSkyData();
     }
+
+    // Llamar a updateOpenSkyData siempre para probar
+    updateOpenSkyData();
 
     const searchButton = document.getElementById('search-button');
     if (searchButton) {
@@ -160,7 +196,14 @@ document.addEventListener('visibilitychange', () => {
         if (ws && ws.readyState !== WebSocket.OPEN) {
             const sessionToken = localStorage.getItem('sessionToken');
             if (sessionToken) {
-                connectWebSocket(sessionToken);
+                validateToken(sessionToken).then(isValid => {
+                    if (isValid) {
+                        connectWebSocket(sessionToken);
+                    } else {
+                        console.warn("Token inválido al intentar reconectar WebSocket");
+                        localStorage.removeItem('sessionToken');
+                    }
+                });
             }
         }
     }
@@ -217,7 +260,7 @@ function playAudio(blob) {
     playNextAudio();
     if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaSessionMetadata({
-            touché: 'Mensaje de voz',
+            title: 'Mensaje de voz',
             artist: 'HANDLEPHONE',
             album: 'Comunicación Aeronáutica'
         });
@@ -443,7 +486,6 @@ async function loginUser(event) {
 function connectWebSocket(sessionToken, retryCount = 0) {
     if (!sessionToken) {
         console.error("No hay sessionToken para conectar WebSocket");
-        completeLogout();
         return;
     }
     const wsUrl = `wss://${window.location.host}/ws/${encodeURIComponent(sessionToken)}`;
@@ -597,7 +639,10 @@ function connectWebSocket(sessionToken, retryCount = 0) {
                 console.error("Error del servidor:", message.message);
                 if (message.message === "Usuario no registrado") {
                     alert("Sesión inválida. Por favor, inicia sesión nuevamente.");
-                    completeLogout();
+                    // No llamar a completeLogout para mantener vuelos visibles
+                    localStorage.removeItem('sessionToken');
+                    document.getElementById('auth-section').style.display = 'block';
+                    document.getElementById('main').style.display = 'block'; // Mantener main visible
                 }
             } else {
                 console.warn("Tipo de mensaje desconocido:", message.type);
@@ -615,14 +660,24 @@ function connectWebSocket(sessionToken, retryCount = 0) {
         console.log("WebSocket cerrado");
         stopPing();
         const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken && retryCount < 3) {
+        if (sessionToken && retryCount < MAX_RECONNECT_ATTEMPTS) {
             const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, retryCount), 30000);
             reconnectInterval = setTimeout(() => {
-                connectWebSocket(sessionToken, retryCount + 1);
+                validateToken(sessionToken).then(isValid => {
+                    if (isValid) {
+                        connectWebSocket(sessionToken, retryCount + 1);
+                    } else {
+                        console.warn("Token inválido en reconexión, limpiando sesión");
+                        localStorage.removeItem('sessionToken');
+                        document.getElementById('auth-section').style.display = 'block';
+                        document.getElementById('main').style.display = 'block'; // Mantener main visible
+                    }
+                });
             }, delay);
         } else {
             console.error("No hay sessionToken o se alcanzó el límite de reconexiones");
-            completeLogout();
+            document.getElementById('auth-section').style.display = 'block';
+            document.getElementById('main').style.display = 'block'; // Mantener main visible
         }
     };
 }
@@ -1512,7 +1567,7 @@ function completeLogout() {
     clearInterval(reconnectInterval);
     stopPing();
     document.getElementById("auth-section").style.display = "block";
-    document.getElementById("main").style.display = "none";
+    document.getElementById("main").style.display = "block"; // Mantener main visible
     document.getElementById("group-screen").style.display = "none";
     document.getElementById("radar-screen").style.display = "none";
     document.getElementById("history-screen").style.display = "none";
