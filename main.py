@@ -37,8 +37,14 @@ app = FastAPI()
 # Estado de la aplicación
 app_state = {
     "global_mute_active": False,
-    "announced_flights": set()  # Track flights that have been announced
+    "announced_flights": set(),
+    "updates_enabled": True,  # Interruptor para actualizaciones
+    "daily_token_count": 0,  # Contador de tokens diarios
+    "last_request_time": datetime.now(),
+    "day_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 }
+
+TOKEN_LIMIT_PER_DAY = 1000  # Límite de tokens diarios
 
 # Configurar hash de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -86,8 +92,8 @@ except Exception as e:
     INDEX_HTML = "<html><body><h1>Error: No se pudo cargar index.html</h1></body></html>"
 
 # Crear cachés
-flightradar24_cache = TTLCache(maxsize=100, ttl=300)
-flight_details_cache = TTLCache(maxsize=100, ttl=300)
+flightradar24_cache = TTLCache(maxsize=100, ttl=900)  # Caché de 15 minutos
+flight_details_cache = TTLCache(maxsize=100, ttl=900)
 
 # Lista de usuarios permitidos
 ALLOWED_USERS = {
@@ -157,6 +163,23 @@ class LoginRequest(BaseModel):
         if not v.strip().isdigit() or len(v.strip()) != 5:
             raise ValueError('El legajo debe ser un número de 5 dígitos')
         return v.strip()
+
+# Modelo para vuelos
+class Flight(BaseModel):
+    flight_number: str
+    registration: str | None
+    sta: str | None
+    eta: str | None
+    origin: str | None
+    destination: str | None
+    status: str
+    color: str
+    position: str | None
+    airline: str
+    additional_data: Dict | None
+    lat: float | None  # Para radar
+    lon: float | None  # Para radar
+    heading: float | None  # Para radar
 
 # Ruta raíz
 @app.get("/")
@@ -338,18 +361,25 @@ async def generate_announcement(flight_number: str, destination: str):
     logger.info(f"Anuncio generado para {flight_number} a {destination}")
     return FileResponse(audio_path, media_type="audio/mpeg", filename=f"{flight_number}_announcement.mp3")
 
-# Endpoint para vuelos desde Flightradar24 (clasificados en salidas y llegadas)
+# Endpoint para vuelos desde Flightradar24
 @app.get("/api/flights")
 async def get_flights(query: Optional[str] = None):
     cache_key = f'flightradar24_flights_aep_{query or "all"}'
-    if cache_key in flightradar24_cache:
-        logger.info(f'Sirviendo desde caché: {cache_key}, {len(flightradar24_cache[cache_key]["departures"])} salidas, {len(flightradar24_cache[cache_key]["arrivals"])} llegadas')
+    if cache_key in flightradar24_cache and app_state["updates_enabled"]:
+        logger.info(f'Sirviendo desde caché: {cache_key}, {len(flightradar24_cache[cache_key]["flights"])} vuelos')
         return flightradar24_cache[cache_key]
 
-    # Configuración de la solicitud
+    if app_state["daily_token_count"] >= TOKEN_LIMIT_PER_DAY:
+        logger.warning("Límite de 1000 tokens diarios alcanzado.")
+        return flightradar24_cache.get(cache_key, {"flights": []})
+
+    if not app_state["updates_enabled"]:
+        logger.info("Actualizaciones desactivadas, devolviendo caché.")
+        return flightradar24_cache.get(cache_key, {"flights": []})
+
     now = datetime.utcnow()
     date_from = now - timedelta(hours=24)
-    date_to = now + timedelta(hours=1)  # Extend to capture upcoming flights
+    date_to = now + timedelta(hours=1)
     flight_datetime_from = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
     flight_datetime_to = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -357,13 +387,12 @@ async def get_flights(query: Optional[str] = None):
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
         "airports": "AEP",
-        "limit": 100
+        "airline": "AR",  # Filtrar por Aerolíneas Argentinas
+        "limit": 200  # Aumentar límite para capturar todos los vuelos
     }
 
-    departures = []
-    arrivals = []
+    flights = []
 
-    # Intentar con cada token
     for token in TOKENS:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -375,9 +404,13 @@ async def get_flights(query: Optional[str] = None):
             async with aiohttp.ClientSession() as session:
                 async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                     if response.status == 200:
+                        app_state["daily_token_count"] += 1
+                        logger.info(f"Tokens usados hoy: {app_state['daily_token_count']}")
                         data = await response.json()
                         for flight in data.get("data", []):
                             flight_number = flight.get("flight", "N/A")
+                            # Agregar prefijo "AR"
+                            flight_number = f"AR{flight_number}" if flight.get("airline") == "AR" else flight_number
                             departure_time = flight.get("datetime_takeoff", "N/A")
                             arrival_time = flight.get("datetime_landed", "N/A")
                             status = "Landed" if flight.get("flight_ended", False) else "En vuelo"
@@ -386,14 +419,13 @@ async def get_flights(query: Optional[str] = None):
                             origin = flight.get("orig_icao", flight.get("orig_iata", "N/A"))
                             destination = flight.get("dest_icao", flight.get("dest_iata", "N/A"))
 
-                            # Determine color and status
-                            color = "green"  # Default for "En vuelo"
+                            # Determinar color y estado
+                            color = "green"
                             if status == "En tierra":
                                 color = "yellow"
                             elif status == "Landed":
-                                color = "gray"  # Completed flights
+                                color = "gray"
                             else:
-                                # Check if next to depart (within 30 minutes)
                                 if origin == "SABE" and departure_time != "N/A":
                                     try:
                                         dep_time = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%SZ")
@@ -402,7 +434,6 @@ async def get_flights(query: Optional[str] = None):
                                             status = "Próximo a despegar"
                                     except ValueError:
                                         pass
-                                # Check if next to land (within 30 minutes)
                                 if destination == "SABE" and arrival_time != "N/A":
                                     try:
                                         arr_time = datetime.strptime(arrival_time, "%Y-%m-%dT%H:%M:%SZ")
@@ -414,43 +445,37 @@ async def get_flights(query: Optional[str] = None):
 
                             flight_data = {
                                 "flight_number": flight_number,
-                                "departure_time": departure_time,
-                                "arrival_time": arrival_time,
-                                "status": status,
-                                "gate": "N/A",
+                                "registration": flight.get("reg", "N/A"),
+                                "sta": flight.get("sta", departure_time if origin == "SABE" else arrival_time),
+                                "eta": flight.get("eta", arrival_time if destination == "SABE" else "N/A"),
                                 "origin": origin,
                                 "destination": destination,
-                                "registration": flight.get("reg", "N/A"),
-                                "source": "flightradar24",
-                                "color": color
+                                "status": status,
+                                "color": color,
+                                "position": flight.get("gate", "N/A"),
+                                "airline": flight.get("airline", "AR"),
+                                "additional_data": flight.get("additional_data", flight),  # Incluir todos los datos
+                                "lat": flight.get("lat", None),  # Para radar
+                                "lon": flight.get("lon", None),  # Para radar
+                                "heading": flight.get("heading", None)  # Para radar
                             }
 
-                            # Classify as departure or arrival
-                            if origin == "SABE":  # AEP departures
-                                departures.append(flight_data)
-                            elif destination == "SABE":  # AEP arrivals
-                                arrivals.append(flight_data)
+                            flights.append(flight_data)
 
-                        # Apply query filter if provided
                         if query:
                             query = query.lower()
-                            departures = [
-                                f for f in departures
+                            flights = [
+                                f for f in flights
                                 if query in f["flight_number"].lower() or
                                    query in f["destination"].lower() or
-                                   query in f["status"].lower()
-                            ]
-                            arrivals = [
-                                f for f in arrivals
-                                if query in f["flight_number"].lower() or
                                    query in f["origin"].lower() or
                                    query in f["status"].lower()
                             ]
 
-                        response_data = {"departures": departures, "arrivals": arrivals}
-                        if departures or arrivals:
+                        response_data = {"flights": flights}
+                        if flights:
                             flightradar24_cache[cache_key] = response_data
-                            logger.info(f"Respuesta cacheada: {cache_key}, {len(departures)} salidas, {len(arrivals)} llegadas (usando token {token[:10]}...)")
+                            logger.info(f"Respuesta cacheada: {cache_key}, {len(flights)} vuelos")
                         else:
                             logger.warning(f"No se encontraron vuelos para {cache_key}, no se cachea")
                         return response_data
@@ -463,39 +488,28 @@ async def get_flights(query: Optional[str] = None):
             logger.error(f"Excepción con token {token[:10]}...: {str(e)}")
             continue
 
-    # Fallback si ambos tokens fallan
     cached_data = flightradar24_cache.get(cache_key)
     if cached_data:
         logger.info(f"Sirviendo datos desde caché debido a fallo de todos los tokens: {cache_key}")
         return cached_data
     logger.warning("No se pudo obtener datos de Flightradar24. Usando datos de prueba temporales.")
     return {
-        "departures": [
+        "flights": [
             {
-                "flight_number": "TEST123",
-                "departure_time": "2025-05-11T10:00:00Z",
-                "arrival_time": "N/A",
-                "status": "Próximo a despegar",
-                "gate": "A1",
+                "flight_number": "AR1234",
+                "registration": "LV-TEST",
+                "sta": "2025-05-11T10:00:00Z",
+                "eta": "2025-05-11T10:05:00Z",
                 "origin": "SABE",
                 "destination": "SAEZ",
-                "registration": "LV-TEST",
-                "source": "flightradar24",
-                "color": "orange"
-            }
-        ],
-        "arrivals": [
-            {
-                "flight_number": "TEST456",
-                "departure_time": "N/A",
-                "arrival_time": "2025-05-11T10:30:00Z",
-                "status": "Próximo a llegar",
-                "gate": "B1",
-                "origin": "SAEZ",
-                "destination": "SABE",
-                "registration": "LV-TEST2",
-                "source": "flightradar24",
-                "color": "red"
+                "status": "Próximo a despegar",
+                "color": "orange",
+                "position": "A1",
+                "airline": "AR",
+                "additional_data": {},
+                "lat": -34.5592,
+                "lon": -58.4156,
+                "heading": 90.0
             }
         ]
     }
@@ -508,6 +522,10 @@ async def get_flight_details(flight_number: str):
         logger.info(f'Sirviendo desde caché: {cache_key}')
         return flight_details_cache[cache_key]
 
+    if app_state["daily_token_count"] >= TOKEN_LIMIT_PER_DAY:
+        logger.warning("Límite de 1000 tokens diarios alcanzado.")
+        return flight_details_cache.get(cache_key, {})
+
     now = datetime.utcnow()
     date_from = now - timedelta(hours=24)
     date_to = now + timedelta(hours=1)
@@ -518,7 +536,8 @@ async def get_flight_details(flight_number: str):
         "flight_datetime_from": flight_datetime_from,
         "flight_datetime_to": flight_datetime_to,
         "airports": "AEP",
-        "limit": 100
+        "airline": "AR",
+        "limit": 200
     }
 
     for token in TOKENS:
@@ -532,11 +551,14 @@ async def get_flight_details(flight_number: str):
             async with aiohttp.ClientSession() as session:
                 async with session.get(BASE_URL, params=params, headers=headers, timeout=15) as response:
                     if response.status == 200:
+                        app_state["daily_token_count"] += 1
+                        logger.info(f"Tokens usados hoy: {app_state['daily_token_count']}")
                         data = await response.json()
-                        flight = next((f for f in data.get("data", []) if f.get("flight") == flight_number), None)
+                        flight = next((f for f in data.get("data", []) if f.get("flight") == flight_number.lstrip("AR")), None)
                         if not flight:
                             logger.warning(f"No se encontró el vuelo: {flight_number}")
                             raise HTTPException(status_code=404, detail="Vuelo no encontrado")
+                        flight_number = f"AR{flight.get('flight', 'N/A')}" if flight.get("airline") == "AR" else flight.get("flight", "N/A")
                         departure_time = flight.get("datetime_takeoff", "N/A")
                         arrival_time = flight.get("datetime_landed", "N/A")
                         status = "Landed" if flight.get("flight_ended", False) else "En vuelo"
@@ -545,8 +567,7 @@ async def get_flight_details(flight_number: str):
                         origin = flight.get("orig_icao", flight.get("orig_iata", "N/A"))
                         destination = flight.get("dest_icao", flight.get("dest_iata", "N/A"))
 
-                        # Determine color and status
-                        color = "green"  # Default for "En vuelo"
+                        color = "green"
                         if status == "En tierra":
                             color = "yellow"
                         elif status == "Landed":
@@ -570,16 +591,20 @@ async def get_flight_details(flight_number: str):
                                     pass
 
                         flight_data = {
-                            "flight_number": flight.get("flight", "N/A"),
-                            "departure_time": departure_time,
-                            "arrival_time": arrival_time,
-                            "status": status,
-                            "gate": "N/A",
+                            "flight_number": flight_number,
+                            "registration": flight.get("reg", "N/A"),
+                            "sta": flight.get("sta", departure_time if origin == "SABE" else arrival_time),
+                            "eta": flight.get("eta", arrival_time if destination == "SABE" else "N/A"),
                             "origin": origin,
                             "destination": destination,
-                            "registration": flight.get("reg", "N/A"),
-                            "source": "flightradar24",
-                            "color": color
+                            "status": status,
+                            "color": color,
+                            "position": flight.get("gate", "N/A"),
+                            "airline": flight.get("airline", "AR"),
+                            "additional_data": flight.get("additional_data", flight),
+                            "lat": flight.get("lat", None),
+                            "lon": flight.get("lon", None),
+                            "heading": flight.get("heading", None)
                         }
                         flight_details_cache[cache_key] = flight_data
                         logger.info(f'Detalles cacheados: {cache_key} (usando token {token[:10]}...)')
@@ -602,64 +627,69 @@ async def get_flight_details(flight_number: str):
 
 # Actualizar vuelos periódicamente y detectar anuncios
 async def update_flights():
-    last_flights = {}  # Track previous flight statuses
+    last_flights = {}
     while True:
         try:
-            response = await get_flights()
-            logger.info(f"Cache de vuelos actualizado: {len(response['departures'])} salidas, {len(response['arrivals'])} llegadas")
-            
-            # Check for flights that need announcements
-            for flight in response['departures']:
-                flight_number = flight['flight_number']
-                status = flight['status']
-                departure_time = flight['departure_time']
-                destination = flight['destination']
+            if app_state["updates_enabled"] and (datetime.now() - app_state["last_request_time"]).total_seconds() >= 900:
+                if datetime.now() >= app_state["day_reset"]:
+                    app_state["daily_token_count"] = 0
+                    app_state["day_reset"] = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                    logger.info("Contador de tokens diario reiniciado.")
 
-                # Detect flights that are about to depart
-                if flight_number not in app_state['announced_flights'] and status == "Próximo a despegar":
+                response = await get_flights()
+                app_state["last_request_time"] = datetime.now()
+                logger.info(f"Cache de vuelos actualizado: {len(response['flights'])} vuelos")
+
+                for flight in response['flights']:
+                    flight_number = flight['flight_number']
+                    status = flight['status']
+                    departure_time = flight['sta'] if flight['origin'] == "SABE" else None
+                    destination = flight['destination']
+
+                    if flight_number not in app_state['announced_flights'] and status == "Próximo a despegar":
+                        try:
+                            dep_time = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%SZ")
+                            if abs((datetime.utcnow() - dep_time).total_seconds()) <= 900:
+                                app_state['announced_flights'].add(flight_number)
+                                announcement_url = f"/announcement/{flight_number}/{destination}"
+                                await broadcast_message({
+                                    "type": "announcement",
+                                    "flight_number": flight_number,
+                                    "destination": destination,
+                                    "audio_url": announcement_url
+                                })
+                                logger.info(f"Anuncio enviado para {flight_number} a {destination}")
+                        except (ValueError, TypeError):
+                            logger.warning(f"Formato de hora inválido para {flight_number}: {departure_time}")
+
+                disconnected_users = []
+                for token, user in users.items():
+                    if not user["logged_in"] or not user["websocket"]:
+                        disconnected_users.append(token)
+                        continue
                     try:
-                        dep_time = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%SZ")
-                        if abs((datetime.utcnow() - dep_time).total_seconds()) <= 900:  # Within 15 minutes
-                            app_state['announced_flights'].add(flight_number)
-                            announcement_url = f"/announcement/{flight_number}/{destination}"
-                            await broadcast_message({
-                                "type": "announcement",
-                                "flight_number": flight_number,
-                                "destination": destination,
-                                "audio_url": announcement_url
-                            })
-                            logger.info(f"Anuncio enviado para {flight_number} a {destination}")
-                    except ValueError:
-                        logger.warning(f"Formato de hora inválido para {flight_number}: {departure_time}")
-
-            # Update clients
-            disconnected_users = []
-            for token, user in users.items():
-                if not user["logged_in"] or not user["websocket"]:
-                    disconnected_users.append(token)
-                    continue
-                try:
-                    await user["websocket"].send_json({
-                        "type": "flight_update",
-                        "departures": response['departures'],
-                        "arrivals": response['arrivals']
-                    })
-                    logger.info(f"Actualización de vuelos enviada a {user['name']}")
-                except Exception as e:
-                    logger.error(f"Error enviando vuelos a {user['name']}: {e}")
-                    disconnected_users.append(token)
-            for token in disconnected_users:
-                if token in users:
-                    users[token]["websocket"] = None
-                    users[token]["logged_in"] = False
-                    logger.info(f"Usuario {token} marcado como desconectado")
+                        await user["websocket"].send_json({
+                            "type": "flight_update",
+                            "flights": response['flights']
+                        })
+                        logger.info(f"Actualización de vuelos enviada a {user['name']}")
+                    except Exception as e:
+                        logger.error(f"Error enviando vuelos a {user['name']}: {e}")
+                        disconnected_users.append(token)
+                for token in disconnected_users:
+                    if token in users:
+                        users[token]["websocket"] = None
+                        users[token]["logged_in"] = False
+                        logger.info(f"Usuario {token} marcado como desconectado")
                 if disconnected_users:
                     await broadcast_users()
                     
-            last_flights = {f['flight_number']: f['status'] for f in response['departures'] + response['arrivals']}
+                last_flights = {f['flight_number']: f['status'] for f in response['flights']}
+            else:
+                logger.debug("Actualizaciones pausadas o intervalo no alcanzado")
         except Exception as e:
             logger.error(f"Error general en update_flights: {e}")
-        await asyncio.sleep(60)  # Update every minute to catch status changes
+        await asyncio.sleep(60)  # Verificar cada minuto si es hora de actualizar
 
 # Función para transcribir audio
 async def transcribe_audio(audio_data: str) -> str:
@@ -695,6 +725,7 @@ async def process_search_query(query: str, flights: List[Dict]) -> str:
     for flight in flights:
         if (query in flight["flight_number"].lower() or
                 query in flight["destination"].lower() or
+                query in flight["origin"].lower() or
                 query in flight["status"].lower()):
             results.append(flight)
     if not results:
@@ -936,8 +967,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         flights_data = await get_flights()
         await websocket.send_json({
             "type": "flight_update",
-            "departures": flights_data['departures'],
-            "arrivals": flights_data['arrivals']
+            "flights": flights_data['flights']
         })
         await broadcast_users()
 
@@ -961,6 +991,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     users[token]["group_id"],
                     users[token]["muted_users"]
                 )
+                continue
+
+            elif message["type"] == "toggle_updates":
+                app_state["updates_enabled"] = message.get("enabled", False)
+                logger.info(f"Actualizaciones {'activadas' if app_state['updates_enabled'] else 'desactivadas'}")
+                await websocket.send_json({"type": "updates_status", "enabled": app_state["updates_enabled"]})
+                await broadcast_message({"type": "updates_status", "enabled": app_state["updates_enabled"]})
                 continue
 
             elif message["type"] == "subscribe":
@@ -1191,7 +1228,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         await broadcast_users()
 
             elif message["type"] == "search_query":
-                response = await process_search_query(message["query"], (await get_flights())['departures'] + (await get_flights())['arrivals'])
+                response = await process_search_query(message["query"], (await get_flights())['flights'])
                 await websocket.send_json({"type": "search_response", "message": response})
 
             elif message["type"] == "flight_details_request":
