@@ -1,8 +1,8 @@
 const CACHE_NAME = 'handyhandle-cache-v3';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
-const SYNC_TAG = 'handyhandle-sync';
+const SYNC_TAG = 'sync-messages'; // Cambiado a 'sync-messages' para coincidir con el SW básico
 const API_CACHE = 'api-cache';
-const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas
 
 const urlsToCache = [
     '/',
@@ -23,8 +23,9 @@ const urlsToCache = [
     '/templates/mic-on.png'
 ];
 
-// Instalar el Service Worker y cachear los recursos
+// Instalar el Service Worker
 self.addEventListener('install', event => {
+    console.log('Service Worker instalado');
     event.waitUntil(
         Promise.all([
             caches.open(CACHE_NAME).then(cache => {
@@ -47,28 +48,31 @@ self.addEventListener('install', event => {
     self.skipWaiting();
 });
 
-// Activar el Service Worker y eliminar caches antiguos
+// Activar el Service Worker
 self.addEventListener('activate', event => {
+    console.log('Service Worker activado');
     event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cacheName => {
-                    if (cacheName !== CACHE_NAME && cacheName !== API_CACHE && cacheName !== 'v1') {
-                        console.log('Eliminando cache antiguo:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        })
+        Promise.all([
+            caches.keys().then(cacheNames => {
+                return Promise.all(
+                    cacheNames.map(cacheName => {
+                        if (cacheName !== CACHE_NAME && cacheName !== API_CACHE && cacheName !== 'v1') {
+                            console.log('Eliminando cache antiguo:', cacheName);
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            }),
+            self.clients.claim()
+        ])
     );
-    return self.clients.claim();
 });
 
-// Interceptar solicitudes y responder con recursos cacheados o de la red
+// Interceptar solicitudes
 self.addEventListener('fetch', event => {
     const requestUrl = new URL(event.request.url);
 
-    // No cachear WebSocket ni rutas dinámicas específicas
+    // No cachear WebSocket ni rutas dinámicas
     if (requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
         requestUrl.pathname === '/aa2000_flights' ||
@@ -76,61 +80,52 @@ self.addEventListener('fetch', event => {
         requestUrl.pathname === '/flightradar24') {
         event.respondWith(
             fetch(event.request).catch(err => {
-                console.error('Error en fetch de red:', err);
+                console.error('Error en fetch:', err);
                 return new Response('Offline', { status: 503 });
             })
         );
         return;
     }
 
-    // Manejar solicitudes a la API de Flightradar24
+    // Manejar solicitudes a FlightRadar24
     if (requestUrl.href.includes('api.flightradar24.com')) {
         event.respondWith(
             caches.open(API_CACHE).then(cache => {
                 return fetch(event.request).then(response => {
                     if (response.status === 200) {
                         cache.put(event.request, response.clone());
-                        console.log('Cacheando respuesta de Flightradar24:', requestUrl.href);
+                        console.log('Cacheando Flightradar24:', requestUrl.href);
                     }
                     return response;
                 }).catch(() => {
                     console.log('Sirviendo Flightradar24 desde caché:', requestUrl.href);
-                    return cache.match(event.request).then(cachedResponse => {
-                        return cachedResponse || new Response('Offline', { status: 503 });
-                    });
+                    return cache.match(event.request) || new Response('Offline', { status: 503 });
                 });
             })
         );
         return;
     }
 
-    // Manejar otras solicitudes (estáticas y dinámicas)
+    // Manejar otras solicitudes
     event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                if (response) {
-                    console.log('Sirviendo desde cache:', event.request.url);
-                    return response;
+        caches.match(event.request).then(response => {
+            if (response) {
+                console.log('Sirviendo desde cache:', event.request.url);
+                return response;
+            }
+            return fetch(event.request).then(networkResponse => {
+                if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+                    return networkResponse;
                 }
-                return fetch(event.request)
-                    .then(networkResponse => {
-                        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-                            return networkResponse;
-                        }
-                        return caches.open(CACHE_NAME).then(cache => {
-                            cache.put(event.request, networkResponse.clone());
-                            return networkResponse;
-                        });
-                    })
-                    .catch(err => {
-                        console.error('Error al obtener recurso:', event.request.url, err);
-                        return caches.match('/templates/index.html');
-                    });
-            })
-            .catch(err => {
-                console.error('Error en cache match:', err);
-                return new Response('Offline', { status: 503 });
-            })
+                return caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, networkResponse.clone());
+                    return networkResponse;
+                });
+            }).catch(() => {
+                console.error('Error al obtener recurso:', event.request.url);
+                return caches.match('/templates/index.html') || new Response('Offline', { status: 503 });
+            });
+        })
     );
 });
 
@@ -138,10 +133,12 @@ self.addEventListener('fetch', event => {
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'QUEUE_MESSAGE') {
         queueMessage(event.data.message);
+    } else if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
     }
 });
 
-// Sincronización en segundo plano
+// Sincronización
 self.addEventListener('sync', event => {
     if (event.tag === SYNC_TAG) {
         event.waitUntil(syncMessages());
@@ -150,77 +147,67 @@ self.addEventListener('sync', event => {
 
 // Almacenar mensaje en IndexedDB
 async function queueMessage(message) {
-    const db = await openDB();
-    const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
-    const store = tx.objectStore(MESSAGE_QUEUE);
-    const messageWithTimestamp = {
-        ...message,
-        timestamp: Date.now()
-    };
-    await store.add(messageWithTimestamp);
-    await tx.done;
-    console.log('Mensaje encolado:', messageWithTimestamp);
+    try {
+        const db = await openDB();
+        const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
+        const store = tx.objectStore(MESSAGE_QUEUE);
+        const messageWithTimestamp = { ...message, timestamp: Date.now() };
+        await store.add(messageWithTimestamp);
+        await tx.done;
+        console.log('Mensaje encolado:', messageWithTimestamp);
+    } catch (err) {
+        console.error('Error al encolar mensaje:', err);
+    }
 }
 
-// Sincronizar mensajes pendientes
+// Sincronizar mensajes
 async function syncMessages() {
-    const db = await openDB();
-    const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
-    const store = tx.objectStore(MESSAGE_QUEUE);
-    const messages = await store.getAll();
-    const now = Date.now();
+    try {
+        console.log('Sincronizando mensajes');
+        const db = await openDB();
+        const tx = db.transaction(MESSAGE_QUEUE, 'readwrite');
+        const store = tx.objectStore(MESSAGE_QUEUE);
+        const messages = await store.getAll();
+        const now = Date.now();
 
-    for (const message of messages) {
-        if (now - message.timestamp > MAX_MESSAGE_AGE) {
-            console.log('Descartando mensaje antiguo:', message);
-            await store.delete(message.id);
-            continue;
-        }
-
-        try {
-            if (message.type === 'logout') {
-                console.log('Sincronizando logout:', message);
-                await notifyClient({ ...message, priority: 'high' });
+        for (const message of messages) {
+            if (now - message.timestamp > MAX_MESSAGE_AGE) {
+                console.log('Descartando mensaje antiguo:', message);
                 await store.delete(message.id);
-            } else if (message.type === 'create_group') {
-                console.log('Sincronizando create_group:', message);
-                await notifyClient({ ...message, priority: 'high' });
-                await store.delete(message.id);
-            } else if (message.type === 'message' || message.type === 'group_message') {
-                console.log('Sincronizando mensaje de audio:', message);
-                await notifyClient({ ...message, priority: 'normal' });
-                await store.delete(message.id);
-            } else {
-                console.log('Sincronizando mensaje genérico:', message);
-                await notifyClient({ ...message, priority: 'low' });
-                await store.delete(message.id);
+                continue;
             }
-        } catch (err) {
-            console.error('Error al sincronizar mensaje:', message, err);
+            try {
+                console.log('Sincronizando mensaje:', message);
+                await notifyClient({ ...message, priority: message.priority || 'normal' });
+                await store.delete(message.id);
+            } catch (err) {
+                console.error('Error al sincronizar mensaje:', message, err);
+            }
         }
-    }
-    await tx.done;
+        await tx.done;
 
-    self.clients.matchAll().then(clients => {
+        const clients = await self.clients.matchAll();
         clients.forEach(client => {
             client.postMessage({ type: 'SYNC_COMPLETE' });
         });
-    });
+    } catch (err) {
+        console.error('Error en syncMessages:', err);
+    }
 }
 
-// Notificar al cliente para manejar WebSocket
+// Notificar al cliente
 async function notifyClient(message) {
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     if (clients.length === 0) {
-        console.warn('No hay clientes activos para procesar mensaje:', message);
+        console.warn('No hay clientes activos:', message);
         return;
     }
-    for (const client of clients) {
+    clients.forEach(client => {
         client.postMessage({ type: 'SEND_MESSAGE', message });
-    }
+    });
 }
 
-// Abrir base de datos IndexedDB
+// Abrir IndexedDB
 function openDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open('handyhandle-db', 1);
@@ -228,12 +215,8 @@ function openDB() {
             const db = event.target.result;
             db.createObjectStore(MESSAGE_QUEUE, { keyPath: 'id', autoIncrement: true });
         };
-        request.onsuccess = event => {
-            resolve(event.target.result);
-        };
-        request.onerror = event => {
-            reject(event.target.error);
-        };
+        request.onsuccess = event => resolve(event.target.result);
+        request.onerror = event => reject(event.target.error);
     });
 }
 
@@ -251,7 +234,5 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
     event.notification.close();
-    event.waitUntil(
-        clients.openWindow('/')
-    );
+    event.waitUntil(clients.openWindow('/'));
 });
