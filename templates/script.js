@@ -40,11 +40,84 @@ const AIRLINE_MAPPING = {
 
 // Mapeo de códigos OACI a nombres de aeropuertos
 const AIRPORT_MAPPING = {
-    "SABE": "Aeroparque Jorge Newbery, Buenos Aires",
-    "SACO": "Aeropuerto Internacional, Córdoba",
-    "SAWC": "Aeropuerto Internacional, El Calafate",
-    "SARI": "Aeropuerto Internacional, Iguazú",
-    // Agrega más aeropuertos según sea necesario
+    // Argentina (Domésticos)
+    "SABE": "AEP", // Aeroparque Jorge Newbery, Buenos Aires
+    "SAEZ": "EZE", // Ministro Pistarini, Ezeiza, Buenos Aires
+    "SACO": "COR", // Ingeniero Ambrosio Taravella, Córdoba
+    "SAWC": "FTE", // El Calafate, Santa Cruz
+    "SARI": "IGR", // Cataratas del Iguazú, Puerto Iguazú, Misiones
+    "SASA": "SLA", // Martín Miguel de Güemes, Salta
+    "SASJ": "JUJ", // Gobernador Horacio Guzmán, Jujuy
+    "SANT": "TUC", // Teniente Benjamín Matienzo, Tucumán
+    "SAZS": "BRC", // Teniente Luis Candelaria, Bariloche, Río Negro
+    "SAZM": "MDQ", // Ástor Piazzolla, Mar del Plata, Buenos Aires
+    "SAZN": "NQN", // Presidente Perón, Neuquén
+    "SAZR": "RSA", // Santa Rosa, La Pampa
+    "SAZY": "CPC", // Aviador Carlos Campos, San Martín de los Andes, Neuquén
+    "SAWH": "USH", // Malvinas Argentinas, Ushuaia, Tierra del Fuego
+    "SAWG": "RGL", // Piloto Civil Norberto Fernández, Río Gallegos, Santa Cruz
+    "SAWJ": "CRD", // Comodoro Rivadavia, Chubut
+    "SAWT": "RGA", // Hermes Quijada, Río Grande, Tierra del Fuego
+    "SAWP": "PMY", // El Tehuelche, Puerto Madryn, Chubut
+    "SAOU": "LGS", // Malargüe, Mendoza
+    "SAME": "MDZ", // Gobernador Francisco Gabrielli, Mendoza
+    "SANU": "UAQ", // Domingo Faustino Sarmiento, San Juan
+    "SAOC": "RCQ", // Reconquista, Santa Fe
+    "SARP": "PSS", // Libertador General José de San Martín, Posadas, Misiones
+    "SATR": "RCU", // Área de Material, Río Cuarto, Córdoba
+    "SAVC": "PMQ", // Perito Moreno, Santa Cruz
+    "SAVT": "REL", // Almirante Marco Andrés Zar, Trelew, Chubut
+    "SAVV": "VDM", // Gobernador Edgardo Castello, Viedma, Río Negro
+    "SAAP": "PRA", // General Justo José de Urquiza, Paraná, Entre Ríos
+    "SAAV": "SFN", // Sauce Viejo, Santa Fe
+    "SANR": "RLO", // Valle del Conlara, San Luis
+    "SANC": "CTC", // Coronel Felipe Varela, Catamarca
+    "SANL": "IRJ", // Capitán Vicente Almandos Almonacid, La Rioja
+    "SAVB": "EHL", // El Bolsón, Río Negro
+    "SAVY": "PMY", // Puerto Madryn, Chubut (mismo IATA que SAWP, pero incluido por completitud)
+
+    // Bolivia
+    "SLVR": "VVI", // Viru Viru, Santa Cruz de la Sierra
+
+    // Brasil
+    "SBGR": "GRU", // São Paulo-Guarulhos, São Paulo
+    "SBGL": "GIG", // Tom Jobim, Río de Janeiro
+    "SBFL": "FLN", // Hercílio Luz, Florianópolis
+    "SBPA": "POA", // Salgado Filho, Porto Alegre
+    "SBRF": "REC", // Gilberto Freyre, Recife
+    "SBSV": "SSA", // Deputado Luís Eduardo Magalhães, Salvador
+    "SBFZ": "FOR", // Pinto Martins, Fortaleza
+    "SBFI": "IGU", // Foz do Iguaçu, Paraná
+
+    // Chile
+    "SCEL": "SCL", // Arturo Merino Benítez, Santiago
+    "SCFA": "ANF", // Andrés Sabella Gálvez, Antofagasta
+
+    // Paraguay
+    "SGAS": "ASU", // Silvio Pettirossi, Asunción
+
+    // Uruguay
+    "SUMU": "MVD", // Carrasco, Montevideo
+    "SULS": "PDP", // Capitán de Corbeta Carlos A. Curbelo, Punta del Este
+
+    // Colombia
+    "SKBO": "BOG", // El Dorado, Bogotá
+
+    // Perú
+    "SPJC": "LIM", // Jorge Chávez, Lima
+
+    // Otros destinos internacionales
+    "KJFK": "JFK", // John F. Kennedy, Nueva York, EE.UU.
+    "KMIA": "MIA", // Miami International, Miami, EE.UU.
+    "LEMD": "MAD", // Adolfo Suárez Madrid-Barajas, Madrid, España
+    "LIRF": "FCO", // Leonardo da Vinci-Fiumicino, Roma, Italia
+    "MMUN": "CUN", // Cancún International, Cancún, México
+    "MDPC": "PUJ", // Punta Cana International, Punta Cana, República Dominicana
+    "MDSD": "SDQ", // Las Américas, Santo Domingo, República Dominicana
+    "TNCM": "SXM", // Princess Juliana, Sint Maarten
+    "TBPB": "BGI", // Grantley Adams, Bridgetown, Barbados
+    "SKRG": "MDE", // José María Córdova, Medellín, Colombia
+    "SKAR": "ADZ", // Gustavo Rojas Pinilla, San Andrés, Colombia
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
