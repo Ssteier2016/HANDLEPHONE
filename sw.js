@@ -1,8 +1,8 @@
 const CACHE_NAME = 'handyhandle-cache-v3';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
-const SYNC_TAG = 'sync-messages'; // Cambiado a 'sync-messages' para coincidir con el SW básico
+const SYNC_TAG = 'sync-messages';
 const API_CACHE = 'api-cache';
-const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000; // 24 horas
+const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 const urlsToCache = [
     '/',
@@ -20,10 +20,10 @@ const urlsToCache = [
     '/templates/mic.png',
     '/templates/mute.png',
     '/templates/mic-off.png',
-    '/templates/mic-on.png'
+    '/templates/mic-on.png',
+    '/templates/airplane.png'
 ];
 
-// Instalar el Service Worker
 self.addEventListener('install', event => {
     console.log('Service Worker instalado');
     event.waitUntil(
@@ -33,7 +33,7 @@ self.addEventListener('install', event => {
                 return cache.addAll(urlsToCache);
             }),
             caches.open('v1').then(cache => {
-                console.log('Cache v1 abierto para compatibilidad');
+                console.log('Cache v1 abierto');
                 return cache.addAll([
                     '/',
                     '/templates/index.html',
@@ -48,7 +48,6 @@ self.addEventListener('install', event => {
     self.skipWaiting();
 });
 
-// Activar el Service Worker
 self.addEventListener('activate', event => {
     console.log('Service Worker activado');
     event.waitUntil(
@@ -68,11 +67,8 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Interceptar solicitudes
 self.addEventListener('fetch', event => {
     const requestUrl = new URL(event.request.url);
-
-    // No cachear WebSocket ni rutas dinámicas
     if (requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
         requestUrl.pathname === '/aa2000_flights' ||
@@ -86,8 +82,6 @@ self.addEventListener('fetch', event => {
         );
         return;
     }
-
-    // Manejar solicitudes a FlightRadar24
     if (requestUrl.href.includes('api.flightradar24.com')) {
         event.respondWith(
             caches.open(API_CACHE).then(cache => {
@@ -105,8 +99,6 @@ self.addEventListener('fetch', event => {
         );
         return;
     }
-
-    // Manejar otras solicitudes
     event.respondWith(
         caches.match(event.request).then(response => {
             if (response) {
@@ -129,7 +121,6 @@ self.addEventListener('fetch', event => {
     );
 });
 
-// Manejar mensajes desde script.js
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'QUEUE_MESSAGE') {
         queueMessage(event.data.message);
@@ -138,14 +129,12 @@ self.addEventListener('message', event => {
     }
 });
 
-// Sincronización
 self.addEventListener('sync', event => {
     if (event.tag === SYNC_TAG) {
         event.waitUntil(syncMessages());
     }
 });
 
-// Almacenar mensaje en IndexedDB
 async function queueMessage(message) {
     try {
         const db = await openDB();
@@ -160,7 +149,6 @@ async function queueMessage(message) {
     }
 }
 
-// Sincronizar mensajes
 async function syncMessages() {
     try {
         console.log('Sincronizando mensajes');
@@ -169,7 +157,6 @@ async function syncMessages() {
         const store = tx.objectStore(MESSAGE_QUEUE);
         const messages = await store.getAll();
         const now = Date.now();
-
         for (const message of messages) {
             if (now - message.timestamp > MAX_MESSAGE_AGE) {
                 console.log('Descartando mensaje antiguo:', message);
@@ -185,7 +172,6 @@ async function syncMessages() {
             }
         }
         await tx.done;
-
         const clients = await self.clients.matchAll();
         clients.forEach(client => {
             client.postMessage({ type: 'SYNC_COMPLETE' });
@@ -195,7 +181,6 @@ async function syncMessages() {
     }
 }
 
-// Notificar al cliente
 async function notifyClient(message) {
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     if (clients.length === 0) {
@@ -207,7 +192,6 @@ async function notifyClient(message) {
     });
 }
 
-// Abrir IndexedDB
 function openDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open('handyhandle-db', 1);
@@ -220,7 +204,6 @@ function openDB() {
     });
 }
 
-// Manejo de notificaciones push
 self.addEventListener('push', event => {
     const data = event.data ? event.data.json() : { title: 'Handyhandle', body: 'Nuevo mensaje recibido' };
     event.waitUntil(
