@@ -1,10 +1,90 @@
-/* Estilos para tablas y colores de vuelos */
-.flight-red { color: red; }
-.flight-yellow { color: yellow; }
-.flight-green { color: green; }
-.flight-details-scroll { max-height: 200px; overflow-y: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+/* Estilos para tablas inspirados en TAMS */
+.tams-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+}
+
+.tams-table th, .tams-table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+.tams-table th {
+    background: #f4f4f4;
+    font-weight: bold;
+}
+
+.tams-row:hover {
+    background: #f0f0f0;
+}
+
+.tams-details-btn {
+    background: #2196f3;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 12px;
+}
+
+.tams-details-btn:hover {
+    background: #1976d2;
+}
+
+/* Estilo para el interruptor de actualizaciones */
+.toggle-btn {
+    background: #ccc;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Orbitron', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    color: #333;
+    width: 100%;
+    margin: 10px 0;
+}
+
+.toggle-btn.active {
+    background: #4caf50;
+    color: white;
+}
+
+/* Estilo para el modal de detalles */
+#flight-details-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+}
+
+#flight-details-modal > div {
+    background: white;
+    margin: 10% auto;
+    padding: 20px;
+    max-width: 500px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+#flight-details-content {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+    max-height: 300px;
+    overflow-y: auto;
+}
 
 /* Estilos para el botón de cerrar sesión */
 .logout-btn {
@@ -718,6 +798,34 @@ h3 {
         padding: 6px;
     }
 
+    .tams-table {
+        font-size: 12px;
+    }
+
+    .tams-table th, .tams-table td {
+        padding: 6px;
+    }
+
+    .tams-details-btn {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+
+    .toggle-btn {
+        font-size: 12px;
+        padding: 6px;
+    }
+
+    #flight-details-modal > div {
+        margin: 20% auto;
+        padding: 15px;
+        max-width: 90%;
+    }
+
+    #flight-details-content {
+        font-size: 12px;
+    }
+
     h2 {
         font-size: 14px;
     }
@@ -883,6 +991,34 @@ h3 {
         max-width: 100%;
         padding: 10px;
         width: auto;
+    }
+
+    .tams-table {
+        font-size: 14px;
+    }
+
+    .tams-table th, .tams-table td {
+        padding: 8px;
+    }
+
+    .tams-details-btn {
+        font-size: 12px;
+        padding: 5px 10px;
+    }
+
+    .toggle-btn {
+        font-size: 14px;
+        padding: 8px;
+    }
+
+    #flight-details-modal > div {
+        margin: 10% auto;
+        padding: 20px;
+        max-width: 500px;
+    }
+
+    #flight-details-content {
+        font-size: 14px;
     }
 
     h2 {
