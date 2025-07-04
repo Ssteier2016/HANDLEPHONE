@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Live - Mensajes de Voz en Tiempo Real</title>
+    <style>
+        /* General styles for the body and container */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 400px;
+            width: 95%; /* Make it more fluid for mobile */
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header styles */
+        .header {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .status {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        /* Main content area */
+        .main-content {
+            padding: 30px 20px;
+            flex-grow: 1; /* Allow content to grow */
+        }
+
+        /* User information section */
+        .user-info {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .username {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .user-status {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .online-indicator {
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Controls section (record, inbox, group, history) */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .record-section {
+            text-align: center;
+        }
+
+        .record-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f); /* Red */
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .record-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
+        }
+
+        .record-btn.recording {
+            background: linear-gradient(135deg, #666, #888); /* Grey */
+            animation: recordingPulse 1s infinite;
+        }
+
+        @keyframes recordingPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .record-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+        }
+
+        .record-btn:active::before {
+            width: 100%;
+            height: 100%;
+        }
+
+        .record-status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .action-btn {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 500;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .inbox-btn {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .group-btn {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+
+        /* Connected users list */
+        .connected-users {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .users-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .user-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin-right: 12px;
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .user-location {
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6); /* Darker overlay */
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 450px; /* Slightly wider for better content */
+            text-align: center;
+            position: relative;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            max-height: 90vh; /* Limit height for scrollable content */
+            overflow-y: auto; /* Enable scrolling for long content */
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 28px; /* Larger close button */
+            cursor: pointer;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+
+        .close-btn:hover {
+            transform: rotate(90deg);
+        }
+
+        .map-container {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 10px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2); /* Inner shadow for map */
+        }
+
+        .volume-control {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .volume-control:hover {
+            background: rgba(255,255,255,0.4);
+        }
+
+        /* Notification styles */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: translateX(120%); /* Start off-screen */
+            transition: all 0.4s ease-out;
+            z-index: 1001;
+            opacity: 0;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        /* Live audio message styles */
+        #liveMessagesContainer {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f2f5;
+            border-radius: 15px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            max-height: 300px; /* Limit height for live messages */
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column-reverse; /* New messages at top */
+            gap: 10px;
+        }
+
+        .audio-message {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+            padding: 15px;
+            border-radius: 15px;
+            animation: slideIn 0.5s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .audio-message.own {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            align-self: flex-end; /* Align own messages to the right */
+            margin-left: 20%; /* Keep some margin */
+        }
+
+        .audio-message.other {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            align-self: flex-start; /* Align other messages to the left */
+            margin-right: 20%; /* Keep some margin */
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .message-user {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .message-time {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .audio-player {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .play-btn {
+            background: rgba(255,255,255,0.3);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .play-btn:hover {
+            background: rgba(255,255,255,0.5);
+        }
+
+        .audio-progress {
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .audio-progress-bar {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .audio-duration {
+            font-size: 12px;
+            opacity: 0.8;
+            flex-shrink: 0;
+        }
+
+        .speech-text {
+            background: rgba(255,255,255,0.15);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-style: italic;
+            font-size: 14px;
+            border-left: 3px solid rgba(255,255,255,0.5);
+            word-wrap: break-word; /* Ensure long text wraps */
+        }
+
+        .speech-text::before {
+            content: "💬 ";
+            opacity: 0.7;
+        }
+
+        /* History button and modal */
+        .history-btn {
+            background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+            width: 100%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .history-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(156, 39, 176, 0.4);
+        }
+
+        .history-container {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px 0;
+            border-radius: 10px;
+            background: #fdfdfd;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.03);
+        }
+
+        .history-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px; /* Add margin for spacing */
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            animation: fadeIn 0.5s ease;
+        }
+
+        .history-item.own {
+            background: #e8f5e8;
+            border-left-color: #4CAF50;
+        }
+
+        .history-item.other {
+            background: #e3f2fd;
+            border-left-color: #2196F3;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .history-user {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .history-time {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .history-text {
+            color: #444;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .history-audio {
+            margin-top: 10px;
+        }
+
+        .mini-audio-player {
+            background: #e9ecef;
+            border-radius: 8px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-play-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 12px;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mini-progress {
+            flex: 1;
+            height: 3px;
+            background: #ddd;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .mini-progress .audio-progress-bar {
+            height: 100%;
+            background: #667eea;
+            width: 0%;
+            transition: width 0.3s linear;
+        }
+
+        .mini-duration {
+            font-size: 11px;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        /* Filter controls for history */
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            justify-content: center;
+        }
+
+        .filter-btn {
+            background: #e9ecef;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex-grow: 1; /* Allow buttons to grow */
+            min-width: 80px; /* Minimum width for buttons */
+        }
+
+        .filter-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Empty state for history */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        /* Frequency indicator for recording */
+        .frequency-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 3px;
+            margin: 15px 0;
+            height: 40px; /* Ensure consistent height */
+            align-items: flex-end; /* Align bars to the bottom */
+        }
+
+        .frequency-bar {
+            width: 4px;
+            height: 20px;
+            background: #ddd;
+            border-radius: 2px;
+            animation: frequency 1s infinite alternate ease-in-out; /* Smoother animation */
+            transform-origin: bottom; /* Animate from bottom */
+        }
+
+        .frequency-bar:nth-child(1) { animation-delay: 0s; }
+        .frequency-bar:nth-child(2) { animation-delay: 0.1s; }
+        .frequency-bar:nth-child(3) { animation-delay: 0.2s; }
+        .frequency-bar:nth-child(4) { animation-delay: 0.3s; }
+        .frequency-bar:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes frequency {
+            0% { height: 20px; background: #ddd; }
+            50% { height: 40px; background: #4CAF50; }
+            100% { height: 20px; background: #ddd; }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                border-radius: 0; /* Full width on small screens */
+                height: 100vh; /* Take full height on mobile */
+                width: 100%;
+            }
+            .header {
+                border-radius: 0;
+            }
+            .modal-content {
+                width: 95%;
+                padding: 20px;
+            }
+            .action-buttons {
+                grid-template-columns: 1fr; /* Stack buttons on small screens */
+            }
+            .filter-controls {
+                justify-content: space-around;
+            }
+            .filter-btn {
+                flex-grow: 0;
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="volume-control" onclick="toggleVolume()">
+                <span id="volumeIcon">🔊</span>
+            </div>
+            <h1>Radio Live</h1>
+            <div class="status">
+                <span class="online-indicator"></span>
+                <span id="connectionStatus">Conectado - En vivo</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="user-info">
+                <div class="avatar" id="userAvatar">U</div>
+                <div class="username" id="userName">Usuario</div>
+                <div class="user-status">📍 Buenos Aires, Argentina</div>
+            </div>
+
+            <div class="controls">
+                <div class="record-section">
+                    <button class="record-btn" id="recordBtn">
+                        <span id="recordIcon">🎙️</span>
+                    </button>
+                    <div class="record-status" id="recordStatus">Mantén presionado para grabar</div>
+                    <div class="frequency-indicator" id="frequencyIndicator" style="display: none;">
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="action-btn inbox-btn" onclick="openInbox()">
+                        📥 Inbox
+                    </button>
+                    <button class="action-btn group-btn" onclick="openGroup()">
+                        👥 Grupo
+                    </button>
+                </div>
+
+                <button class="history-btn" onclick="openHistory()">
+                    📜 Historial de Mensajes
+                </button>
+            </div>
+
+            <div class="connected-users">
+                <div class="section-title">Usuarios Conectados (<span id="connectedUsersCount">4</span>)</div>
+                <div class="users-list" id="connectedUsersList">
+                    <!-- Dynamic user items will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Inbox -->
+    <div class="modal" id="inboxModal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeModal('inboxModal')">&times;</button>
+            <h2>Enviar Mensaje Privado</h2>
+            <p>Selecciona un usuario para enviar un mensaje de voz privado:</p>
+            <div class="users-list" id="inboxUsersList">
+                <!-- User items for inbox will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Grupo -->
+    <div class="modal" id="groupModal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeModal('groupModal')">&times;</button>
+            <h2>Crear Grupo</h2>
+            <input type="text" id="groupNameInput" placeholder="Nombre del grupo" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin: 15px 0;">
+            <div class="map-container">
+                <div id="mapPlaceholder">🗺️ Mapa de ubicaciones de usuarios (Simulado)</div>
+            </div>
+            <p>Usuarios seleccionados para el grupo:</p>
+            <div class="users-list" id="groupUsersList">
+                <!-- User items with checkboxes for group creation -->
+            </div>
+            <button class="action-btn group-btn" style="width: 100%; margin-top: 15px;" onclick="createGroup()">
+                Crear Grupo
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal para Historial -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content" style="max-width: 500px; height: 80vh;">
+            <button class="close-btn" onclick="closeModal('historyModal')">&times;</button>
+            <h2>Historial de Mensajes</h2>
+            
+            <div class="filter-controls">
+                <button class="filter-btn active" onclick="filterHistory('all', this)">Todos</button>
+                <button class="filter-btn" onclick="filterHistory('own', this)">Míos</button>
+                <button class="filter-btn" onclick="filterHistory('received', this)">Recibidos</button>
+                <button class="filter-btn" onclick="filterHistory('private', this)">Privados</button>
+                <button class="filter-btn" onclick="filterHistory('group', this)">Grupos</button>
+            </div>
+
+            <div class="history-container" id="historyContainer">
+                <div class="empty-state" id="emptyHistoryState" style="display: none;">
+                    <span class="empty-state-icon">📂</span>
+                    <p>No hay mensajes en el historial.</p>
+                </div>
+                <!-- History items will be dynamically loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificación -->
+    <div class="notification" id="notification">
+        <div id="notificationText">Mensaje recibido</div>
+    </div>
+
+    <!-- Contenedor para mensajes en tiempo real -->
+    <div id="liveMessagesContainer"></div>
+
+    <script>
+        // Global variables
+        let isRecording = false;
+        let volumeOn = true;
+        let currentMode = 'broadcast'; // 'broadcast' or 'private'
+        let selectedUser = null;
+        let messageHistory = []; // Stores all messages for history
+        let currentFilter = 'all';
+        let speechRecognition;
+        let mediaRecorder;
+        let audioChunks = [];
+        let currentPlayingAudio = null;
+        let audioContext;
+        let audioSourceNode;
+        let gainNode;
+
+        // User data (simulated)
+        const users = [
+            { id: 'user1', name: 'Ana García', location: 'Palermo, CABA', avatar: 'A' },
+            { id: 'user2', name: 'Carlos López', location: 'San Telmo, CABA', avatar: 'C' },
+            { id: 'user3', name: 'María Rodríguez', location: 'Recoleta, CABA', avatar: 'M' },
+            { id: 'user4', name: 'Diego Fernández', location: 'Belgrano, CABA', avatar: 'D' }
+        ];
+
+        // Initialize Web Audio API for beep sound and volume control
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                gainNode = audioContext.createGain();
+                gainNode.connect(audioContext.destination);
+                updateVolume(); // Set initial volume
+            }
+        }
+
+        // Simulate beep sound
+        const beepSound = {
+            play: () => {
+                initAudioContext();
+                const oscillator = audioContext.createOscillator();
+                oscillator.connect(gainNode);
+                
+                oscillator.frequency.value = 800; // Hz
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(volumeOn ? 0.3 : 0, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.2);
+            }
+        };
+
+        // Update global volume based on volumeOn state
+        function updateVolume() {
+            if (gainNode) {
+                gainNode.gain.value = volumeOn ? 1 : 0; // 1 for full volume, 0 for mute
+            }
+        }
+
+        // Toggle global volume
+        function toggleVolume() {
+            volumeOn = !volumeOn;
+            const volumeIcon = document.getElementById('volumeIcon');
+            volumeIcon.textContent = volumeOn ? '🔊' : '🔇';
+            showNotification(volumeOn ? 'Volumen activado' : 'Volumen desactivado');
+            updateVolume();
+        }
+
+        // Initialize Speech Recognition
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window) {
+                speechRecognition = new webkitSpeechRecognition();
+            } else if ('SpeechRecognition' in window) {
+                speechRecognition = new SpeechRecognition();
+            } else {
+                console.warn('Speech Recognition not supported in this browser.');
+                return;
+            }
+
+            speechRecognition.continuous = true;
+            speechRecognition.interimResults = true;
+            speechRecognition.lang = 'es-ES';
+
+            speechRecognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                // Update a temporary display for interim results if needed
+                // console.log('Interim:', interimTranscript, 'Final:', finalTranscript);
+            };
+
+            speechRecognition.onerror = (event) => {
+                console.error('Speech Recognition Error:', event.error);
+                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                    showNotification('Permiso de micrófono denegado. Habilítalo en la configuración de tu navegador.');
+                }
+            };
+
+            speechRecognition.onend = () => {
+                console.log('Speech Recognition ended.');
+                if (isRecording) { // If recording is still active, restart recognition
+                    speechRecognition.start();
+                }
+            };
+        }
+
+        // Toggle recording state
+        function toggleRecording() {
+            const recordBtn = document.getElementById('recordBtn');
+            const recordIcon = document.getElementById('recordIcon');
+            const recordStatus = document.getElementById('recordStatus');
+            const frequencyIndicator = document.getElementById('frequencyIndicator');
+
+            if (!isRecording) {
+                // Start recording
+                startRecording();
+                recordBtn.classList.add('recording');
+                recordIcon.textContent = '⏹️';
+                recordStatus.textContent = currentMode === 'broadcast' ? 'Transmitiendo a todos...' : `Enviando a ${selectedUser.name}...`;
+                frequencyIndicator.style.display = 'flex';
+                beepSound.play();
+            } else {
+                // Stop recording
+                stopRecording();
+                recordBtn.classList.remove('recording');
+                recordIcon.textContent = '🎙️';
+                recordStatus.textContent = 'Mantén presionado para grabar';
+                frequencyIndicator.style.display = 'none';
+                beepSound.play();
+            }
+        }
+
+        // Start the actual recording process
+        function startRecording() {
+            isRecording = true;
+            audioChunks = [];
+
+            if (speechRecognition) {
+                speechRecognition.start();
+            }
+
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    console.log('Micrófono activado');
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        sendAudioMessage(audioBlob);
+                        stream.getTracks().forEach(track => track.stop()); // Stop microphone stream
+                    };
+                    mediaRecorder.start();
+                })
+                .catch(error => {
+                    console.error('Error al acceder al micrófono:', error);
+                    showNotification('Error: No se pudo acceder al micrófono. Por favor, concede los permisos.');
+                    isRecording = false; // Reset recording state on error
+                    document.getElementById('recordBtn').classList.remove('recording');
+                    document.getElementById('recordIcon').textContent = '🎙️';
+                    document.getElementById('recordStatus').textContent = 'Mantén presionado para grabar';
+                    document.getElementById('frequencyIndicator').style.display = 'none';
+                });
+        }
+
+        // Stop the actual recording process
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            if (speechRecognition) {
+                speechRecognition.stop();
+            }
+            isRecording = false;
+        }
+
+        // Simulate sending the audio message and getting speech-to-text
+        async function sendAudioMessage(audioBlob) {
+            const user = 'Tú';
+            const type = 'own';
+            const mode = currentMode === 'broadcast' ? 'broadcast' : 'private';
+            const target = currentMode === 'private' ? selectedUser.name : 'todos';
+
+            // Simulate speech-to-text using a placeholder or a real API call if available
+            let transcribedText = "Simulación de texto del mensaje de voz.";
+            // In a real app, you'd send audioBlob to a speech-to-text API (e.g., Google Cloud Speech-to-Text)
+
+            // Example of how you might call a real LLM for transcription (requires API key and proper setup)
+            // try {
+            //     const base64Audio = await blobToBase64(audioBlob); // Helper function to convert blob to base64
+            //     const prompt = "Transcribe the following audio.";
+            //     const payload = {
+            //         contents: [
+            //             {
+            //                 role: "user",
+            //                 parts: [
+            //                     { text: prompt },
+            //                     {
+            //                         inlineData: {
+            //                             mimeType: "audio/webm", // Or the correct mime type of your audio blob
+            //                             data: base64Audio
+            //                         }
+            //                     }
+            //                 ]
+            //             }
+            //         ],
+            //     };
+            //     const apiKey = ""; // Canvas will provide this
+            //     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            //     const response = await fetch(apiUrl, {
+            //         method: 'POST',
+            //         headers: { 'Content-Type': 'application/json' },
+            //         body: JSON.stringify(payload)
+            //     });
+            //     const result = await response.json();
+            //     if (result.candidates && result.candidates.length > 0 &&
+            //         result.candidates[0].content && result.candidates[0].content.parts &&
+            //         result.candidates[0].content.parts.length > 0) {
+            //         transcribedText = result.candidates[0].content.parts[0].text;
+            //     } else {
+            //         console.error("Failed to transcribe audio:", result);
+            //     }
+            // } catch (error) {
+            //     console.error("Error during transcription API call:", error);
+            // }
+
+            // Store audio blob URL for playback
+            const audioUrl = URL.createObjectURL(audioBlob);
+
+            addMessageToHistory(user, transcribedText, type, mode, audioUrl, target);
+            displayLiveMessage(user, transcribedText, type, audioUrl, target);
+
+            showNotification(currentMode === 'broadcast' ? 'Mensaje enviado a todos los usuarios' : `Mensaje privado enviado a ${selectedUser.name}`);
+            
+            // Reset to broadcast mode after sending private message
+            if (currentMode === 'private') {
+                currentMode = 'broadcast';
+                selectedUser = null;
+                document.getElementById('recordStatus').textContent = 'Mantén presionado para grabar';
+            }
+        }
+
+        // Helper to convert Blob to Base64 (for potential API calls)
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64String = reader.result.split(',')[1]; // Remove data:mime/type;base64, prefix
+                    resolve(base64String);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // Open Inbox modal
+        function openInbox() {
+            document.getElementById('inboxModal').style.display = 'flex'; // Use flex for centering
+            populateInboxUsers();
+        }
+
+        // Open History modal
+        function openHistory() {
+            document.getElementById('historyModal').style.display = 'flex'; // Use flex for centering
+            renderHistoryMessages(); // Render messages when opening history
+            filterHistory(currentFilter, document.querySelector(`.filter-btn[onclick*="${currentFilter}"]`)); // Apply current filter
+        }
+
+        // Filter history messages based on type
+        function filterHistory(type, clickedButton) {
+            currentFilter = type;
+            
+            // Update active button styling
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            }
+            
+            renderHistoryMessages(); // Re-render with the new filter
+        }
+
+        // Play audio for history messages
+        function playHistoryAudio(audioUrl, buttonElement) {
+            if (!volumeOn) {
+                showNotification('Volumen desactivado. Actívalo para escuchar.');
+                return;
+            }
+
+            const progressBar = buttonElement.parentElement.querySelector('.audio-progress-bar');
+            const durationSpan = buttonElement.parentElement.querySelector('.mini-duration');
+
+            if (currentPlayingAudio && currentPlayingAudio.audioElement.src === audioUrl) {
+                // Pause if already playing this audio
+                currentPlayingAudio.audioElement.pause();
+                buttonElement.textContent = '▶️';
+                clearInterval(currentPlayingAudio.interval);
+                currentPlayingAudio = null;
+            } else {
+                // Stop any currently playing audio
+                if (currentPlayingAudio) {
+                    currentPlayingAudio.audioElement.pause();
+                    clearInterval(currentPlayingAudio.interval);
+                    currentPlayingAudio.button.textContent = '▶️';
+                    currentPlayingAudio.progressBar.style.width = '0%';
+                }
+
+                const audio = new Audio(audioUrl);
+                audio.volume = gainNode ? gainNode.gain.value : 1; // Respect global volume
+
+                audio.onloadedmetadata = () => {
+                    const duration = Math.floor(audio.duration);
+                    const minutes = Math.floor(duration / 60);
+                    const seconds = duration % 60;
+                    durationSpan.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                };
+
+                audio.onended = () => {
+                    buttonElement.textContent = '▶️';
+                    progressBar.style.width = '0%';
+                    clearInterval(currentPlayingAudio.interval);
+                    currentPlayingAudio = null;
+                };
+
+                audio.ontimeupdate = () => {
+                    const progress = (audio.currentTime / audio.duration) * 100;
+                    progressBar.style.width = `${progress}%`;
+                };
+
+                audio.play().catch(e => console.error("Error playing audio:", e));
+                buttonElement.textContent = '⏸️';
+
+                currentPlayingAudio = {
+                    audioElement: audio,
+                    button: buttonElement,
+                    progressBar: progressBar,
+                    durationSpan: durationSpan,
+                    interval: null // No interval needed with ontimeupdate
+                };
+            }
+        }
+
+        // Add message to the history array
+        function addMessageToHistory(user, text, type, mode, audioUrl, target = null) {
+            const timestamp = new Date().toLocaleTimeString('es-ES', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            
+            messageHistory.unshift({ // Add to the beginning for newest first
+                user: user,
+                text: text,
+                type: type,
+                mode: mode, // 'broadcast', 'private', 'group'
+                target: target, // For private/group messages
+                audioUrl: audioUrl,
+                timestamp: timestamp,
+                id: Date.now()
+            });
+            renderHistoryMessages(); // Re-render history after adding
+        }
+
+        // Render all history messages based on current filter
+        function renderHistoryMessages() {
+            const historyContainer = document.getElementById('historyContainer');
+            historyContainer.innerHTML = ''; // Clear existing messages
+            
+            const filteredMessages = messageHistory.filter(message => {
+                const isOwn = message.type === 'own';
+                const isPrivate = message.mode === 'private';
+                const isGroup = message.mode === 'group';
+
+                switch(currentFilter) {
+                    case 'all':
+                        return true;
+                    case 'own':
+                        return isOwn;
+                    case 'received':
+                        return !isOwn;
+                    case 'private':
+                        return isPrivate;
+                    case 'group':
+                        return isGroup;
+                    default:
+                        return true;
+                }
+            });
+
+            if (filteredMessages.length === 0) {
+                document.getElementById('emptyHistoryState').style.display = 'block';
+            } else {
+                document.getElementById('emptyHistoryState').style.display = 'none';
+                filteredMessages.forEach(message => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `history-item ${message.type}`;
+                    let userDisplay = message.user;
+                    if (message.mode === 'private' && message.type === 'own') {
+                        userDisplay = `Tú (privado a ${message.target})`;
+                    } else if (message.mode === 'private' && message.type === 'other') {
+                        userDisplay = `${message.user} (privado)`;
+                    } else if (message.mode === 'group') {
+                        userDisplay = `${message.user} (grupo)`;
+                    }
+
+                    messageDiv.innerHTML = `
+                        <div class="history-header">
+                            <span class="history-user">${userDisplay}</span>
+                            <span class="history-time">${message.timestamp}</span>
+                        </div>
+                        <div class="history-text">
+                            "${message.text}"
+                        </div>
+                        <div class="history-audio">
+                            <div class="mini-audio-player">
+                                <button class="mini-play-btn" onclick="playHistoryAudio('${message.audioUrl}', this)">▶️</button>
+                                <div class="mini-progress">
+                                    <div class="audio-progress-bar" style="width: 0%"></div>
+                                </div>
+                                <span class="mini-duration">0:00</span>
+                            </div>
+                        </div>
+                    `;
+                    historyContainer.appendChild(messageDiv);
+                });
+            }
+        }
+
+        // Display live messages in the main content area
+        function displayLiveMessage(user, text, type, audioUrl, target = null) {
+            const container = document.getElementById('liveMessagesContainer');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `audio-message ${type}`;
+            let userDisplay = user;
+            if (target && type === 'own') {
+                userDisplay = `${user} → ${target}`;
+            }
+
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-user">${userDisplay}</span>
+                    <span class="message-time">Ahora</span>
+                </div>
+                <div class="audio-player">
+                    <button class="play-btn" onclick="playHistoryAudio('${audioUrl}', this)">▶️</button>
+                    <div class="audio-progress">
+                        <div class="audio-progress-bar"></div>
+                    </div>
+                    <span class="audio-duration">0:00</span>
+                </div>
+                <div class="speech-text">${text}</div>
+            `;
+            
+            // Insert at the beginning of the container
+            if (container.firstChild) {
+                container.insertBefore(messageDiv, container.firstChild);
+            } else {
+                container.appendChild(messageDiv);
+            }
+            
+            // Limit to 5 messages shown
+            const messages = container.querySelectorAll('.audio-message');
+            if (messages.length > 5) {
+                messages[messages.length - 1].remove();
+            }
+            
+            // Auto-remove after 10 seconds (for live feed only)
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.remove();
+                }
+            }, 10000);
+        }
+
+        // Populate connected users list
+        function populateConnectedUsers() {
+            const listContainer = document.getElementById('connectedUsersList');
+            listContainer.innerHTML = '';
+            users.forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.onclick = () => selectUser(user);
+                userItem.innerHTML = `
+                    <div class="user-avatar">${user.avatar}</div>
+                    <div class="user-details">
+                        <div class="user-name">${user.name}</div>
+                        <div class="user-location">📍 ${user.location}</div>
+                    </div>
+                    <div class="online-indicator"></div>
+                `;
+                listContainer.appendChild(userItem);
+            });
+            document.getElementById('connectedUsersCount').textContent = users.length;
+        }
+
+        // Populate inbox users list
+        function populateInboxUsers() {
+            const listContainer = document.getElementById('inboxUsersList');
+            listContainer.innerHTML = '';
+            users.forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.onclick = () => startPrivateRecording(user);
+                userItem.innerHTML = `
+                    <div class="user-avatar">${user.avatar}</div>
+                    <div class="user-details">
+                        <div class="user-name">${user.name}</div>
+                        <div class="user-location">📍 ${user.location}</div>
+                    </div>
+                `;
+                listContainer.appendChild(userItem);
+            });
+        }
+
+        // Populate group users list
+        function populateGroupUsers() {
+            const listContainer = document.getElementById('groupUsersList');
+            listContainer.innerHTML = '';
+            users.forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.innerHTML = `
+                    <div class="user-avatar">${user.avatar}</div>
+                    <div class="user-details">
+                        <div class="user-name">${user.name}</div>
+                        <div class="user-location">📍 ${user.location}</div>
+                    </div>
+                    <input type="checkbox" data-user-id="${user.id}">
+                `;
+                listContainer.appendChild(userItem);
+            });
+        }
+
+        // Open Group modal
+        function openGroup() {
+            document.getElementById('groupModal').style.display = 'flex'; // Use flex for centering
+            populateGroupUsers();
+        }
+
+        // Close any modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Select a user (for private messaging context)
+        function selectUser(userObj) {
+            selectedUser = userObj;
+            showNotification(`Usuario ${userObj.name} seleccionado`);
+            // Optionally, you could update the UI to show who is selected
+        }
+
+        // Start private recording mode
+        function startPrivateRecording(userObj) {
+            selectedUser = userObj;
+            currentMode = 'private';
+            closeModal('inboxModal');
+            showNotification(`Modo privado activado para ${userObj.name}`);
+            document.getElementById('recordStatus').textContent = `Listo para enviar mensaje a ${userObj.name}`;
+            // Automatically start recording after selecting user
+            // toggleRecording(); // Uncomment if you want immediate recording after selection
+        }
+
+        // Simulate group creation
+        function createGroup() {
+            const groupName = document.getElementById('groupNameInput').value.trim();
+            const selectedUserIds = Array.from(document.querySelectorAll('#groupUsersList input[type="checkbox"]:checked'))
+                                        .map(checkbox => checkbox.dataset.userId);
+            
+            if (!groupName) {
+                showNotification('Por favor, ingresa un nombre para el grupo.');
+                return;
+            }
+            if (selectedUserIds.length === 0) {
+                showNotification('Selecciona al menos un usuario para el grupo.');
+                return;
+            }
+
+            const selectedUsers = users.filter(user => selectedUserIds.includes(user.id));
+            const userNames = selectedUsers.map(u => u.name).join(', ');
+
+            showNotification(`Grupo "${groupName}" creado con: ${userNames}`);
+            closeModal('groupModal');
+        }
+
+        // Display a temporary notification
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notificationText');
+            
+            notificationText.textContent = message;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Simulate incoming messages from other users
+        function simulateIncomingMessage() {
+            if (volumeOn) {
+                const randomUser = users[Math.floor(Math.random() * users.length)];
+                const messages = [
+                    "¡Hola a todos! ¿Cómo están?",
+                    "Todo bien por aquí, gracias por preguntar.",
+                    "Perfecto, nos vemos en la reunión de mañana.",
+                    "Excelente trabajo equipo, sigamos así.",
+                    "¿Alguien tiene novedades del proyecto?",
+                    "Muy bien, trabajando desde casa hoy.",
+                    "El clima está perfecto para quedarse adentro.",
+                    "Un saludo desde mi ubicación actual.",
+                    "Espero que todos estén teniendo un gran día.",
+                    "Recuerden la fecha límite para el informe."
+                ];
+                
+                const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                
+                // Simulate audio blob for incoming message
+                const simulatedAudioBlob = new Blob(['simulated audio data'], { type: 'audio/webm' });
+                const audioUrl = URL.createObjectURL(simulatedAudioBlob);
+
+                // Add to history
+                addMessageToHistory(randomUser.name, randomMessage, 'other', 'broadcast', audioUrl);
+                
+                // Display live message
+                displayLiveMessage(randomUser.name, randomMessage, 'other', audioUrl);
+                
+                // Play beep sound for notification
+                beepSound.play();
+                showNotification(`Nuevo mensaje de ${randomUser.name}`);
+            }
+        }
+
+        // Simulate push notifications when the app is in the background
+        function simulateBackgroundNotification() {
+            if (document.hidden) {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('Radio Live', {
+                        body: 'Nuevo mensaje de voz recibido',
+                        icon: '🎙️'
+                    });
+                }
+            }
+        }
+
+        // Request notification and geolocation permissions on load
+        window.addEventListener('load', () => {
+            initAudioContext(); // Initialize audio context on load
+            initSpeechRecognition(); // Initialize speech recognition
+
+            if ('Notification' in window && Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+            
+            // Simulate geolocation
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        console.log('Ubicación obtenida:', position.coords.latitude, position.coords.longitude);
+                        showNotification('Ubicación activada');
+                        // In a real app, you'd use these coords for a map API
+                        document.getElementById('mapPlaceholder').textContent = `📍 Mi ubicación: ${position.coords.latitude.toFixed(2)}, ${position.coords.longitude.toFixed(2)}`;
+                    },
+                    error => {
+                        console.error('Error de geolocalización:', error.message);
+                        showNotification('Error: No se pudo obtener la ubicación.');
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            }
+
+            populateConnectedUsers(); // Populate initial user lists
+            renderHistoryMessages(); // Render initial history (will be empty unless pre-filled)
+
+            // Attach event listeners for record button (for hold-to-record)
+            const recordBtn = document.getElementById('recordBtn');
+            recordBtn.addEventListener('mousedown', startRecording);
+            recordBtn.addEventListener('mouseup', stopRecording);
+            recordBtn.addEventListener('touchstart', startRecording, { passive: true });
+            recordBtn.addEventListener('touchend', stopRecording);
+        });
+
+        // Simulate real-time activity (incoming messages)
+        setInterval(() => {
+            if (Math.random() > 0.8) { // 20% chance every 5 seconds
+                simulateIncomingMessage();
+            }
+        }, 5000);
+
+        // Detect when the page is in the background
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('App en segundo plano');
+                // simulateBackgroundNotification(); // Uncomment to test background notifications
+            } else {
+                console.log('App en primer plano');
+            }
+        });
+
+        // Close modals when clicking outside their content
+        window.addEventListener('click', (e) => {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (e.target === modal) { // Check if the click was directly on the modal overlay
+                    modal.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
