@@ -16,9 +16,9 @@
       "type": "image/png"
     },
     {
-      "src": "/templates/icon-512x512.png",
+      "src": "/templates/icon.mp4",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "video/mp4"
     },
     {
       "src": "/templates/icon-180x180.png",
