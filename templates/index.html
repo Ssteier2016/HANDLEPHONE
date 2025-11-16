@@ -1,0 +1,2654 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto & Stock Tracker Pro</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Seguí tus transacciones y ganancias en criptomonedas y acciones" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>₿</text></svg>" />
+  <style>
+    /* Global styles for the merged application */
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(to bottom right, #0f172a, #4c1d95, #0f172a);
+      color: white;
+      min-height: 100vh;
+      padding: 1rem;
+      padding-bottom: 5rem; /* Space for the PWA banner */
+    }
+    .chart-container {
+      width: 100%;
+      height: 300px;
+    }
+    #loadingBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: #3B82F6;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s ease-in-out;
+      z-index: 1000;
+    }
+    #loadingBar.active {
+      transform: scaleX(1);
+    }
+    #errorMessage {
+      display: none;
+      background: #ef4444;
+      color: white;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    /* Custom scrollbar for transaction list */
+    #transactionListContainer {
+        max-height: 500px;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
+    #transactionListContainer::-webkit-scrollbar {
+        width: 8px;
+    }
+    #transactionListContainer::-webkit-scrollbar-track {
+        background: #1f2937;
+        border-radius: 10px;
+    }
+    #transactionListContainer::-webkit-scrollbar-thumb {
+        background-color: #4c1d95;
+        border-radius: 10px;
+        border: 2px solid #1f2937;
+    }
+
+    /* Calendar styles */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      margin-top: 15px;
+    }
+    .calendar-day {
+      background-color: #1f2937;
+      padding: 10px 5px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 70px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .calendar-day.empty {
+      background-color: #111827;
+      visibility: hidden;
+    }
+    .calendar-day-number {
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #cbd5e0;
+    }
+    .calendar-day-profit {
+      font-size: 0.75rem;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .calendar-day-profit.positive {
+      color: #10B981;
+    }
+    .calendar-day-profit.negative {
+      color: #EF4444;
+    }
+    .calendar-day-profit.zero {
+      color: #9CA3AF;
+    }
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #cbd5e0;
+    }
+    .calendar-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      text-align: center;
+      font-weight: bold;
+      color: #9CA3AF;
+      margin-bottom: 5px;
+      font-size: 0.8rem;
+    }
+
+    /* Modal Styles */
+    .modal {
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background-color: #1e293b;
+      margin: auto;
+      padding: 20px;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 800px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    .close-button {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+    }
+    .close-button:hover,
+    .close-button:focus {
+      color: #fff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .wallet-image-preview, .staking-asset-image-preview, .asset-image-preview {
+        width: 100px;
+        height: 100px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid #475569;
+        display: block;
+        margin-top: 10px;
+    }
+    .asset-card-image {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-right: 8px;
+    }
+    /* Marquee animation for the price banner */
+    .marquee {
+      animation: marquee 60s linear infinite;
+    }
+    @keyframes marquee {
+      0% { transform: translate3d(0, 0, 0); }
+      100% { transform: translate3d(-50%, 0, 0); }
+    }
+    /* PWA Banner Styles */
+    #pwaInstallBanner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        z-index: 999;
+        transform: translateY(100%);
+        transition: transform 0.3s ease-in-out;
+    }
+    #pwaInstallBanner.show {
+        transform: translateY(0);
+    }
+    /* AI Assistant Styles */
+    #aiResponseContainer {
+        min-height: 200px;
+        max-height: 500px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        border-left: 4px solid #4c1d95;
+    }
+  </style>
+</head>
+<body>
+  <!-- Barra de carga -->
+  <div id="loadingBar"></div>
+
+  <div class="max-w-6xl mx-auto">
+    <!-- Mensaje de error -->
+    <div id="errorMessage"></div>
+
+    <!-- Encabezado con logo -->
+    <div class="text-center mb-8">
+      <span class="text-4xl">₿</span>
+      <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
+        CRYPTO & STOCK TRACKER PRO
+      </h1>
+      <div class="flex justify-center flex-wrap gap-4 mt-4">
+        <button id="assetsBtn" class="px-4 py-2 rounded-lg transition-all bg-blue-600 text-white shadow-lg">
+          📊 Activos
+        </button>
+        <button id="profitBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+          💰 Profit Total
+        </button>
+        <button id="stakingBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+          🔗 Staking
+        </button>
+        <button id="addBalanceBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+            ➕ Saldo Manual
+        </button>
+        <button id="historyBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+          🕒 Historial
+        </button>
+        <button id="chartsBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+          📈 Gráficos
+        </button>
+        <button id="settingsBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+          ⚙️ Configuración
+        </button>
+        <!-- Nuevo botón para el Asistente de IA -->
+        <button id="aiAssistantBtn" class="px-4 py-2 rounded-lg transition-all bg-slate-700 hover:bg-slate-600">
+            🤖 Asistente AI
+        </button>
+      </div>
+    </div>
+
+    <!-- Crypto Price Banner (Marquee) -->
+    <div id="priceBannerContainer" class="bg-slate-900 border-t border-b border-purple-800 py-2 mb-8 overflow-hidden relative">
+      <!-- Duplicate content for continuous scrolling animation (handled by JS) -->
+      <div id="priceBanner" class="whitespace-nowrap inline-block">
+        <span class="text-slate-400 mx-6">Cargando precios de criptomonedas...</span>
+      </div>
+    </div>
+
+    <!-- Vista Asistente de IA -->
+    <div id="aiAssistantView" class="hidden">
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-2xl font-semibold mb-4 text-purple-300">Asistente de Análisis Financiero (Gemini)</h3>
+            <p class="text-sm text-slate-400 mb-4">Pregunta sobre el mercado, un activo específico (ej. "Analiza BTC"), o pide una explicación de términos (ej. "Qué es el FOMO").</p>
+            <textarea id="aiQueryInput" placeholder="Escribe tu pregunta o solicitud aquí..." rows="3" class="w-full bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-purple-500 focus:outline-none mb-4"></textarea>
+            <button id="sendAiQueryBtn" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition-all shadow-md w-full mb-6">
+                Consultar 🚀
+            </button>
+            
+            <!-- Contenedor de la Respuesta de IA -->
+            <div id="aiResponseContainer" class="bg-slate-700 p-4 rounded-lg text-sm text-slate-300">
+                <p>Tu asistente está listo. Presiona 'Consultar' para empezar.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vista Activos (Dashboard mejorado) -->
+    <div id="assetsView" class="block">
+      <!-- Botón de actualización y fuente de API -->
+      <div class="flex justify-between items-center mb-4">
+        <button id="refreshPrices" class="px-4 py-2 rounded-lg transition-all bg-green-600 hover:bg-green-700 shadow-md text-white">
+          🔄 Actualizar Precios
+        </button>
+        <div class="text-sm text-slate-400">Precios de CoinGecko API y Alpha Vantage API</div>
+      </div>
+
+      <!-- Tarjetas de saldo -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl p-4 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold opacity-90">Saldo Total USD</h3>
+              <p id="totalUSD" class="text-2xl font-bold">USD 0.00</p>
+            </div>
+            <span class="h-8 w-8 opacity-75">💵</span>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-xl p-4 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold opacity-90">Saldo Total ARS</h3>
+              <p id="totalARS" class="text-2xl font-bold">$0</p>
+            </div>
+            <span class="h-8 w-8 opacity-75">🇦🇷</span>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-orange-600 to-red-600 rounded-xl p-4 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold opacity-90">Saldo Total BTC</h3>
+              <p id="totalBTC" class="text-2xl font-bold">₿0.000000</p>
+            </div>
+            <span class="text-2xl opacity-75">₿</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjetas de profit -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div class="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold opacity-90">Profit No Realizado</h3>
+              <p id="totalUnrealizedProfitDisplay" class="text-3xl font-bold">USD 0.00</p>
+            </div>
+            <span class="h-12 w-12 opacity-75">💵</span>
+          </div>
+        </div>
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold opacity-90">Profit Realizado Total</h3>
+              <p id="totalRealizedProfitDisplay" class="text-3xl font-bold">USD 0.00</p>
+            </div>
+            <span class="h-12 w-12 opacity-75">📈</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de cartera y listado de activos (Catálogo) -->
+      <div class="bg-slate-800 rounded-xl p-6 mb-6 shadow-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-blue-300">Mis Activos</h3>
+            <select id="walletFilterSelect" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                <option value="all">Todas las Carteras</option>
+            </select>
+        </div>
+        <div id="assetHoldingsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Asset holding cards will be dynamically inserted here -->
+            <div class="text-center py-8 text-slate-400 col-span-full">
+                <span class="text-5xl mb-4 block opacity-50">💸</span>
+                <p>No tienes activos registrados. ¡Registra una transacción!</p>
+            </div>
+        </div>
+      </div>
+
+      <!-- Formulario de transacciones -->
+      <div class="bg-slate-800 rounded-xl p-6 mb-6 shadow-lg">
+        <h3 class="text-xl font-semibold mb-4 text-blue-300">Registrar Transacción</h3>
+        <input type="hidden" id="editingTransactionId" value="">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <select id="transactionType" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+            <option value="compra">Compra</option>
+            <option value="venta">Venta</option>
+          </select>
+          <select id="transactionAsset" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+            <!-- Assets will be added here dynamically -->
+          </select>
+          <input id="transactionAmount" type="number" placeholder="Cantidad (Nocional)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" />
+          <input id="transactionPrice" type="number" placeholder="Precio (USD)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" />
+          <input id="transactionDate" type="date" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" value="" />
+          <select id="transactionWallet" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+            <option value="">Selecciona Cartera (Opcional)</option>
+             <!-- Wallets will be added here dynamically -->
+          </select>
+          <!-- New commission fields -->
+          <input id="commissionAmount" type="number" placeholder="Comisión (Monto)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" step="any" />
+          <select id="commissionCurrency" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+            <option value="">Moneda Comisión</option>
+            <option value="USD">USD</option>
+            <option value="ARS">ARS</option>
+            <!-- Assets will be added here dynamically for commission currency -->
+          </select>
+          <!-- New leverage field -->
+          <input id="transactionLeverage" type="number" placeholder="Apalancamiento (x)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="1" value="1" />
+          <!-- End new leverage field -->
+          <input id="transactionNotes" type="text" placeholder="Notas (Ej: 'Desde Binance')" class="col-span-full md:col-span-2 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" maxlength="100" />
+          <button id="addTransaction" class="col-span-full md:col-span-1 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 px-4 py-2 rounded-lg transition-all shadow-md">
+            ➕ Agregar
+          </button>
+          <button id="cancelEdit" class="col-span-full md:col-span-1 bg-gradient-to-r from-gray-500 to-gray-700 hover:from-gray-600 hover:to-gray-800 px-4 py-2 rounded-lg transition-all shadow-md hidden">
+            ❌ Cancelar Edición
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista Saldo Manual -->
+    <div id="addBalanceView" class="hidden">
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Agregar Saldo Manualmente</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input id="manualBalanceAmount" type="number" placeholder="Cantidad" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" />
+                <input id="manualBalanceName" type="text" placeholder="Nombre (Ej: USD, ARS, BTC)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" />
+                <button id="addManualBalance" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 py-2 rounded-lg transition-all shadow-md">
+                    Guardar Saldo
+                </button>
+            </div>
+        </div>
+
+        <!-- New section for withdrawing manual balance -->
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Retirar Saldo Manualmente</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input id="manualWithdrawAmount" type="number" placeholder="Cantidad a Retirar" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" />
+                <input id="manualWithdrawName" type="text" placeholder="Nombre (Ej: USD, ARS, BTC)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" />
+                <button id="withdrawManualBalanceBtn" class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 px-4 py-2 rounded-lg transition-all shadow-md">
+                    Retirar Saldo
+                </button>
+            </div>
+        </div>
+        <!-- End new section for withdrawing manual balance -->
+
+        <div id="manualBalancesList" class="mt-6 space-y-3">
+            <h4 class="text-lg font-semibold text-slate-300 mb-2">Saldos Manuales Existentes:</h4>
+            <!-- Manual balances will be listed here -->
+        </div>
+    </div>
+
+    <!-- Vista Profit por Activo -->
+    <div id="profitView" class="hidden">
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <h3 class="text-2xl font-semibold mb-6 text-blue-300">Ganancias por Activo</h3>
+            <div id="assetProfitList" class="space-y-4">
+                <!-- Asset profit details will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Vista Staking -->
+    <div id="stakingView" class="hidden">
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Registrar Staking</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <select id="stakingAssetSelect" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                    <option value="">Selecciona Activo</option>
+                    <!-- User cryptos will be loaded here -->
+                </select>
+                <input id="stakingAmount" type="number" placeholder="Cantidad Staked" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" step="any" />
+                <input id="stakingApr" type="number" placeholder="APR (%)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" min="0" step="0.01" />
+                <input id="stakingDate" type="date" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" value="" />
+                <label for="stakingAssetImageInput" class="block text-slate-300 mb-2 col-span-full">Imagen del Activo (Opcional):</label>
+                <input type="file" id="stakingAssetImageInput" accept="image/*" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none col-span-full" />
+                <img id="stakingAssetImagePreview" class="staking-asset-image-preview mt-2 hidden" src="#" alt="Previsualización de imagen">
+                <button id="addStakingEntryBtn" class="col-span-full bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 px-4 py-2 rounded-lg transition-all shadow-md">
+                    ➕ Añadir Staking
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Mis Stakings Activos</h3>
+            <div id="stakingList" class="space-y-4">
+                <!-- Staking entries will be rendered here -->
+                <div class="text-center py-8 text-slate-400">
+                    <span class="text-5xl mb-4 block opacity-50">🔗</span>
+                    <p>No hay stakings registrados.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Vista Historial -->
+    <div id="historyView" class="hidden">
+      <div class="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <h3 class="text-2xl font-semibold mb-6 text-blue-300">Historial de Transacciones</h3>
+        <div id="transactionListContainer" class="space-y-4">
+          <div id="transactionList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista Gráficos -->
+    <div id="chartsView" class="hidden">
+      <div class="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <h3 class="text-2xl font-semibold mb-6 text-blue-300">Gráficos de Profit</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div>
+            <h4 class="text-lg font-semibold mb-4 text-blue-300">Profit en USD vs Tiempo</h4>
+            <div class="chart-container">
+              <canvas id="usdChart"></canvas>
+            </div>
+          </div>
+          <div>
+            <h4 class="text-lg font-semibold mb-4 text-blue-300">Profit en BTC vs Tiempo</h4>
+            <div class="chart-container">
+              <canvas id="btcChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="text-2xl font-semibold mb-6 text-blue-300">Almanaque de Ganancias Diarias</h3>
+        <div class="bg-slate-700 rounded-xl p-4 shadow-md">
+            <div class="calendar-header">
+                <button id="prevMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">‹</button>
+                <span id="currentMonthYear"></span>
+                <button id="nextMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">›</button>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+            </div>
+            <div id="calendarGrid" class="calendar-grid">
+                <!-- Calendar days will be rendered here -->
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista de Configuración -->
+    <div id="settingsView" class="hidden">
+        
+        <!-- Configuración del Banner de Precios -->
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Configuración del Banner de Precios</h3>
+            <p class="text-sm text-slate-400 mb-4">Selecciona qué activos quieres que se muestren en el banner corredizo (solo criptomonedas con precio en USD).</p>
+            <div id="bannerAssetSelection" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <!-- Checkboxes for assets will be generated here -->
+            </div>
+            <button id="saveBannerSettingsBtn" class="mt-6 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition-all shadow-md w-full">
+                Guardar Configuración del Banner
+            </button>
+        </div>
+
+
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Administrar Activos</h3>
+            <div class="bg-yellow-800 border-l-4 border-yellow-500 text-yellow-200 p-4 rounded-lg mb-6" role="alert">
+                <p class="font-bold">¡Advertencia!</p>
+                <p>La clave API de Alpha Vantage está incrustada en el código JavaScript. Para aplicaciones de producción, considera usar un backend.</p>
+                <p>Puedes obtener una clave API gratis en: <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-yellow-100 underline">https://www.alphavantage.co/support/#api-key</a></p>
+            </div>
+            <div class="flex flex-wrap gap-2 mb-4" id="managedAssetList">
+                <!-- Current assets will be listed here with remove buttons -->
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="hidden" id="editingAssetId" value="">
+                <div>
+                    <label for="assetType" class="block text-slate-300 text-sm font-bold mb-2">Tipo de Activo:</label>
+                    <select id="assetType" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none w-full">
+                        <option value="crypto">Criptomoneda</option>
+                        <option value="stock">Acción</option>
+                    </select>
+                </div>
+                <input type="text" id="addAssetName" placeholder="Nombre (Ej: Cardano, Apple)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" />
+                <input type="text" id="addAssetSymbol" placeholder="Símbolo (Ej: ₳, AAPL)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" />
+                <input type="text" id="addAssetIdentifier" placeholder="ID CoinGecko (Ej: cardano) / Símbolo Stock (Ej: AAPL)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" />
+                <input type="text" id="addAssetDescription" placeholder="Descripción (Opcional)" class="col-span-full bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none" maxlength="200" />
+                <label for="addAssetImageInput" class="block text-slate-300 mb-2 col-span-full">Imagen del Activo (Opcional):</label>
+                <input type="file" id="addAssetImageInput" accept="image/*" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none col-span-full" />
+                <img id="addAssetImagePreview" class="asset-image-preview mt-2 hidden" src="#" alt="Previsualización de imagen">
+                <div class="flex justify-between w-full md:w-auto mt-2 md:mt-0 col-span-full">
+                    <button id="saveOrUpdateAssetBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-all shadow-md flex-grow mr-2">
+                        ➕ Añadir Activo
+                    </button>
+                    <button id="cancelAssetEditBtn" class="bg-gray-500 hover:bg-gray-700 px-4 py-2 rounded-lg transition-all shadow-md hidden">
+                        ❌ Cancelar Edición
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
+            <h3 class="text-xl font-semibold mb-4 text-blue-300">Administrar Carteras</h3>
+            <div class="mb-4">
+                <input type="text" id="walletNameInput" placeholder="Nombre de Cartera (Ej: Binance Spot)" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none w-full mb-3" />
+                <label for="walletImageInput" class="block text-slate-300 mb-2">Imagen de Cartera (Opcional):</label>
+                <input type="file" id="walletImageInput" accept="image/*" class="bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none w-full" />
+                <img id="walletImagePreview" class="wallet-image-preview mt-2 hidden" src="#" alt="Previsualización de imagen">
+                <button id="addWalletBtn" class="mt-4 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-all shadow-md w-full">
+                    ➕ Añadir Cartera
+                </button>
+            </div>
+            <div id="managedWalletList" class="space-y-3">
+                <h4 class="text-lg font-semibold text-slate-300 mb-2">Carteras Existentes:</h4>
+                <!-- Current wallets will be listed here with remove buttons -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para detalles de activo -->
+    <div id="assetDetailModal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close-button" id="closeAssetDetailModal">&times;</span>
+        <h2 id="modalAssetName" class="text-3xl font-bold mb-4 text-blue-300"></h2>
+        <p id="modalAssetDescription" class="text-slate-400 mb-4 text-sm"></p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <h3 class="text-xl font-semibold mb-2 text-slate-200">Tenencia Actual</h3>
+                <p class="text-2xl font-bold text-green-400" id="modalAssetQuantity"></p>
+                <p class="text-lg text-slate-300" id="modalAssetValue"></p>
+            </div>
+            <div>
+                <h3 class="text-xl font-semibold mb-2 text-slate-200">Profit No Realizado</h3>
+                <p class="text-2xl font-bold" id="modalAssetUnrealizedProfit"></p>
+            </div>
+            <div>
+                <h3 class="text-xl font-semibold mb-2 text-slate-200">Profit Realizado</h3>
+                <p class="text-2xl font-bold" id="modalAssetRealizedProfit"></p>
+            </div>
+        </div>
+
+        <h3 class="text-xl font-semibold mb-2 text-slate-200">Evolución en el Tiempo</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div>
+                <h4 class="text-lg font-semibold mb-2 text-blue-300">Evolución del Precio</h4>
+                <div class="chart-container">
+                    <canvas id="modalAssetPriceChart"></canvas>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-lg font-semibold mb-2 text-blue-300">Evolución de Cantidad</h4>
+                <div class="chart-container">
+                    <canvas id="modalAssetQuantityChart"></canvas>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-lg font-semibold mb-2 text-blue-300">Evolución del Profit (No Realizado)</h4>
+                <div class="chart-container">
+                    <canvas id="modalAssetUnrealizedProfitChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- New: Almanaque de Profit No Realizado por Activo -->
+        <h3 class="text-2xl font-semibold mb-6 text-blue-300">Almanaque de Profit No Realizado</h3>
+        <div class="bg-slate-700 rounded-xl p-4 shadow-md mb-6">
+            <div class="calendar-header">
+                <button id="modalUnrealizedPrevMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">‹</button>
+                <span id="modalUnrealizedCurrentMonthYear"></span>
+                <button id="modalUnrealizedNextMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">›</button>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+            </div>
+            <div id="modalUnrealizedCalendarGrid" class="calendar-grid">
+                <!-- Calendar days will be rendered here -->
+            </div>
+        </div>
+
+        <!-- New: Almanaque de Profit Realizado por Activo -->
+        <h3 class="text-2xl font-semibold mb-6 text-blue-300">Almanaque de Profit Realizado</h3>
+        <div class="bg-slate-700 rounded-xl p-4 shadow-md mb-6">
+            <div class="calendar-header">
+                <button id="modalRealizedPrevMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">‹</button>
+                <span id="modalRealizedCurrentMonthYear"></span>
+                <button id="modalRealizedNextMonthBtn" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">›</button>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+            </div>
+            <div id="modalRealizedCalendarGrid" class="calendar-grid">
+                <!-- Calendar days will be rendered here -->
+            </div>
+        </div>
+
+        <h3 class="text-xl font-semibold mb-2 text-slate-200">Historial de Transacciones</h3>
+        <div id="modalAssetTransactions" class="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2">
+            <!-- Specific asset transactions will be loaded here -->
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+  <!-- PWA Install Banner -->
+  <div id="pwaInstallBanner" class="bg-purple-800 p-4 shadow-2xl flex justify-between items-center text-sm md:text-base hidden">
+      <div class="flex items-center space-x-3">
+          <span class="text-2xl">📲</span>
+          <p class="font-semibold">Instala Crypto Tracker Pro como acceso directo.</p>
+      </div>
+      <div class="flex space-x-2">
+          <button id="dismissPwaBannerBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded-lg transition-all">
+              Ignorar
+          </button>
+          <button id="installAppBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg transition-all font-bold">
+              Instalar App
+          </button>
+      </div>
+  </div>
+
+  <script>
+    // --- Global State Variables ---
+    let selectedAsset = '';
+    let currentView = 'assets';
+    let transactions = []; 
+    let wallets = []; 
+    let userAssets = []; 
+    let manualBalances = {}; 
+    let stakingEntries = []; 
+    let bannerAssetIds = []; 
+
+    let editingTransactionId = null;
+    let loading = false;
+    let chartData = []; 
+    let usdChart = null;
+    let btcChart = null;
+    let modalAssetPriceChart = null; 
+    let modalAssetQuantityChart = null; 
+    let modalAssetUnrealizedProfitChart = null; 
+    let currentCalendarDate = new Date(); 
+    let currentModalUnrealizedCalendarDate = new Date(); 
+    let currentModalRealizedCalendarDate = new Date(); 
+    let arsRate = 1; 
+
+    let currentModalAssetId = null; 
+    let currentModalWalletFilterId = 'all';
+
+    // PWA deferred prompt
+    let deferredPrompt = null; 
+    let isPromptDismissed = localStorage.getItem('pwaPromptDismissed') === 'true'; // New: Flag to check if the user dismissed the banner
+
+    // --- Default Assets ---
+    const defaultAssets = [
+        { id: 'bitcoin', symbol: '₿', name: 'Bitcoin', coingeckoId: 'bitcoin', assetType: 'crypto', imageUrl: 'https://placehold.co/40x40/FF9900/FFFFFF?text=BTC', description: 'La primera y más grande criptomoneda.' },
+        { id: 'ethereum', symbol: '◊', name: 'Ethereum', coingeckoId: 'ethereum', assetType: 'crypto', imageUrl: 'https://placehold.co/40x40/627EEA/FFFFFF?text=ETH', description: 'Plataforma líder para contratos inteligentes y dApps.' },
+        { id: 'binancecoin', symbol: '⬢', name: 'BNB', coingeckoId: 'binancecoin', assetType: 'crypto', imageUrl: 'https://placehold.co/40x40/F3BA2F/FFFFFF?text=BNB', description: 'Token de la cadena de bloques de Binance.' },
+        { id: 'solana', symbol: 'S', name: 'Solana', coingeckoId: 'solana', assetType: 'crypto', imageUrl: 'https://placehold.co/40x40/9945FF/FFFFFF?text=SOL', description: 'Blockchain de alto rendimiento para aplicaciones descentralizadas.' },
+        { id: 'tether', symbol: '₮', name: 'USDT', coingeckoId: 'tether', assetType: 'crypto', imageUrl: 'https://placehold.co/40x40/50AF95/FFFFFF?text=USDT', description: 'Una stablecoin vinculada al dólar estadounidense.' },
+        { id: 'aapl', symbol: 'AAPL', name: 'Apple Inc.', stockSymbol: 'AAPL', assetType: 'stock', imageUrl: 'https://placehold.co/40x40/A2AAAD/FFFFFF?text=AAPL', description: 'Empresa de tecnología multinacional estadounidense.' },
+        { id: 'googl', symbol: 'GOOGL', name: 'Alphabet Inc.', stockSymbol: 'GOOGL', assetType: 'stock', imageUrl: 'https://placehold.co/40x40/4285F4/FFFFFF?text=GOOGL', description: 'Empresa matriz de Google y otras filiales.' }
+    ];
+
+    let assetPrices = {}; 
+    const ALPHA_VANTAGE_API_KEY = '2WMFTP4I863HSQ26'; 
+    const ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query";
+    const GEMINI_API_KEY = ""; // Required for the AI Assistant
+
+    // --- Utility Functions ---
+
+    function loadState() {
+        transactions = JSON.parse(localStorage.getItem('cryptoTransactions')) || [];
+        wallets = JSON.parse(localStorage.getItem('cryptoWallets')) || [];
+        userAssets = JSON.parse(localStorage.getItem('cryptoUserAssets')) || defaultAssets; 
+        manualBalances = JSON.parse(localStorage.getItem('cryptoManualBalances')) || {};
+        stakingEntries = JSON.parse(localStorage.getItem('cryptoStakingEntries')) || [];
+        bannerAssetIds = JSON.parse(localStorage.getItem('cryptoBannerAssets')) || ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'tether'];
+
+        // Ensure defaultAssets are always present if userAssets is empty initially
+        if (userAssets.length === 0) {
+            userAssets = [...defaultAssets];
+            saveState(); 
+        }
+        userAssets = userAssets.map(asset => ({
+            ...asset,
+            description: asset.description || '', 
+            imageUrl: asset.imageUrl || '', 
+            assetType: asset.assetType || (asset.coingeckoId ? 'crypto' : 'stock'), 
+            stockSymbol: asset.stockSymbol || (asset.assetType === 'stock' ? asset.id.toUpperCase() : undefined) 
+        }));
+
+        transactions = transactions.map(t => ({
+            ...t,
+            originalAmount: t.originalAmount !== undefined ? t.originalAmount : t.amount, 
+            originalPrice: t.originalPrice !== undefined ? t.originalPrice : t.price,
+            leverage: t.leverage !== undefined ? t.leverage : 1,
+            // Ensure type is present, useful for profit calculation
+            type: t.type || 'compra' 
+        }));
+    }
+
+    function saveState() {
+        localStorage.setItem('cryptoTransactions', JSON.stringify(transactions));
+        localStorage.setItem('cryptoWallets', JSON.stringify(wallets));
+        localStorage.setItem('cryptoUserAssets', JSON.stringify(userAssets)); 
+        localStorage.setItem('cryptoManualBalances', JSON.stringify(manualBalances));
+        localStorage.setItem('cryptoStakingEntries', JSON.stringify(stakingEntries));
+        localStorage.setItem('cryptoBannerAssets', JSON.stringify(bannerAssetIds));
+    }
+
+    function formatCurrency(amount, curr = 'USD', displaySign = false) {
+        let valueToFormat = amount;
+        let prefix = '';
+        let options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+
+        if (curr === 'USD') {
+            prefix = 'USD ';
+        } else if (curr === 'ARS') {
+            prefix = '$';
+            options = { minimumFractionDigits: 0, maximumFractionDigits: 0 };
+        } else if (curr === 'EUR') {
+            prefix = '€';
+        } else if (curr === 'MXN' || curr === 'COP') {
+            prefix = '$';
+        } else if (curr === 'BRL') {
+            prefix = 'R$';
+        } else {
+            const asset = userAssets.find(a => a.id.toUpperCase() === curr.toUpperCase() || a.symbol.toUpperCase() === curr.toUpperCase());
+            if (asset) {
+                prefix = asset.symbol;
+                options = { minimumFractionDigits: 6, maximumFractionDigits: 6 };
+            } else {
+                prefix = curr + ' '; 
+            }
+        }
+
+        const formatted = valueToFormat.toLocaleString('es-ES', options);
+
+        let finalFormatted = formatted;
+        if (displaySign && amount > 0) {
+            finalFormatted = `+${formatted}`;
+        }
+
+        return `${prefix}${finalFormatted}`;
+    }
+
+    function formatAssetAmount(amount, assetSymbol, assetType) { 
+        let decimals = 2; 
+        if (assetType === 'crypto') {
+            decimals = 6; 
+            if (assetSymbol === '₿') { 
+                decimals = 8; // BTC commonly shown up to 8
+            }
+        }
+        return `${amount.toFixed(decimals)}${assetSymbol}`;
+    }
+
+    function showError(message) {
+        const errorEl = document.getElementById('errorMessage');
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+    }
+    
+    function setLoading(isLoading) {
+        loading = isLoading;
+        const loadingBar = document.getElementById('loadingBar');
+        if (isLoading) {
+            loadingBar.classList.add('active');
+        } else {
+            loadingBar.classList.remove('active');
+        }
+    }
+
+    // --- API & Data Fetching Functions ---
+
+    // Function with exponential backoff for API calls
+    async function fetchWithRetry(url, options, maxRetries = 5) {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(url, options);
+                if (response.ok) {
+                    return response;
+                } else if (response.status === 429) {
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    console.warn(`Rate limit exceeded. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                if (i === maxRetries - 1) throw error;
+                const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                console.warn(`Fetch error. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    async function fetchArsRate() {
+        // Mock ARS rate, typically fetched from a reliable exchange rate API
+        // For a real app, use an API like Fixer or ExchangeRate-API
+        arsRate = 1000; // Placeholder for USD to ARS rate
+        console.log(`USD/ARS Rate: ${arsRate} (Placeholder)`);
+    }
+
+    async function fetchAssetPrices() {
+        if (loading) return;
+        setLoading(true);
+        assetPrices = {};
+        
+        const cryptoIds = userAssets.filter(a => a.assetType === 'crypto' && a.coingeckoId).map(a => a.coingeckoId);
+        const stockSymbols = userAssets.filter(a => a.assetType === 'stock' && a.stockSymbol).map(a => a.stockSymbol);
+
+        // 1. Fetch Crypto Prices from CoinGecko
+        if (cryptoIds.length > 0) {
+            const url = `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoIds.join(',')}&vs_currencies=usd`;
+            try {
+                const response = await fetchWithRetry(url, {});
+                const data = await response.json();
+                
+                cryptoIds.forEach(id => {
+                    const asset = userAssets.find(a => a.coingeckoId === id);
+                    if (data[id] && data[id].usd) {
+                        assetPrices[asset.id] = data[id].usd;
+                    } else {
+                        assetPrices[asset.id] = 0; // Price not found
+                        console.warn(`Price not found for crypto: ${asset.name} (${id})`);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching crypto prices:', error);
+                showError('Error al cargar precios de criptomonedas. Intenta de nuevo.');
+            }
+        }
+
+        // 2. Fetch Stock Prices from Alpha Vantage (rate limited)
+        for (const symbol of stockSymbols) {
+            const asset = userAssets.find(a => a.stockSymbol === symbol);
+            const url = `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+            try {
+                const response = await fetchWithRetry(url, {});
+                const data = await response.json();
+                
+                const quote = data['Global Quote'];
+                if (quote && quote['05. price']) {
+                    assetPrices[asset.id] = parseFloat(quote['05. price']);
+                } else {
+                    assetPrices[asset.id] = 0; // Price not found
+                    console.warn(`Price not found for stock: ${asset.name} (${symbol}). Alpha Vantage API may be rate-limiting.`);
+                }
+                // Delay to respect API limits (5 calls per minute)
+                await new Promise(r => setTimeout(r, 15000)); 
+            } catch (error) {
+                console.error('Error fetching stock prices:', error);
+                showError(`Error al cargar precio de ${asset.name}. Alpha Vantage puede tener límites. Intenta de nuevo.`);
+            }
+        }
+
+        // 3. Update BTC Price for conversions (if available)
+        const btcAsset = userAssets.find(a => a.id === 'bitcoin');
+        if (btcAsset && assetPrices[btcAsset.id]) {
+            assetPrices['BTC'] = assetPrices[btcAsset.id];
+        } else {
+            assetPrices['BTC'] = 0; // Fallback
+        }
+
+        updateAllUI();
+        setLoading(false);
+    }
+    
+    // --- AI Assistant Logic ---
+
+    async function sendAiQuery() {
+        const queryInput = document.getElementById('aiQueryInput');
+        const responseContainer = document.getElementById('aiResponseContainer');
+        const sendBtn = document.getElementById('sendAiQueryBtn');
+        const userQuery = queryInput.value.trim();
+
+        if (!userQuery) {
+            showError('Por favor, escribe una consulta para el asistente.');
+            return;
+        }
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Analizando... 🧠';
+        responseContainer.innerHTML = '<div class="text-yellow-400">Cargando respuesta...</div>';
+
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+        
+        // System instruction guides the AI persona
+        const systemPrompt = `Eres un asistente de análisis financiero experto y conciso, especializado en criptomonedas y mercados de valores. Proporciona análisis, explicaciones o resúmenes claros. Siempre usa la función de búsqueda para obtener información actualizada del mercado y citar tus fuentes.`;
+
+        const payload = {
+            contents: [{ parts: [{ text: userQuery }] }],
+            // Enable Google Search for grounding and current data
+            tools: [{ "google_search": {} }], 
+            systemInstruction: {
+                parts: [{ text: systemPrompt }]
+            },
+        };
+
+        try {
+            const response = await fetchWithRetry(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+
+            if (candidate && candidate.content?.parts?.[0]?.text) {
+                const text = candidate.content.parts[0].text;
+                let sources = [];
+
+                // Extract grounding sources
+                const groundingMetadata = candidate.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri,
+                            title: attribution.web?.title, // Corrected access
+                        }))
+                        .filter(source => source.uri && source.title); 
+                }
+
+                // Format response
+                let formattedResponse = `<strong>Respuesta del Asistente:</strong>\n\n${text}`;
+                
+                if (sources.length > 0) {
+                    formattedResponse += '\n\n---\n<strong>Fuentes:</strong>\n';
+                    sources.forEach((source, index) => {
+                        formattedResponse += `[${index + 1}] <a href="${source.uri}" target="_blank" class="text-blue-400 hover:text-blue-300">${source.title}</a>\n`;
+                    });
+                }
+
+                responseContainer.innerHTML = formattedResponse;
+            } else {
+                responseContainer.innerHTML = '<p class="text-red-400">Error: No se pudo generar una respuesta. Inténtalo de nuevo o revisa tu consulta.</p>';
+                if (result.error) {
+                    console.error('API Error:', result.error.message);
+                }
+            }
+        } catch (error) {
+            console.error('Fetch/Gemini Error:', error);
+            responseContainer.innerHTML = '<p class="text-red-400">Error de conexión con la API del Asistente. Verifica tu conexión o clave de API.</p>';
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Consultar 🚀';
+        }
+    }
+
+
+    // --- Core Calculation Functions ---
+
+    function calculateAssetHoldings(filterWalletId = 'all') {
+        const holdings = {};
+
+        transactions.forEach(t => {
+            if (filterWalletId !== 'all' && t.walletId !== filterWalletId) return;
+
+            const assetId = t.assetId;
+            const amount = parseFloat(t.amount) || 0;
+            const price = parseFloat(t.price) || 0;
+            const commission = getCommissionAmountInUSD(t.commissionAmount || 0, t.commissionCurrency || 'USD');
+            const leverage = parseFloat(t.leverage) || 1;
+
+            if (!holdings[assetId]) {
+                holdings[assetId] = { 
+                    quantity: 0, 
+                    costBasis: 0, 
+                    realizedProfit: 0, 
+                    realizedProfitUSD: 0, 
+                    totalCommissions: 0,
+                    transactions: [] 
+                };
+            }
+
+            const holding = holdings[assetId];
+            const transactionValue = (amount * price * leverage) + commission; // Total USD spent/received including fees
+
+            holding.transactions.push({ ...t, calculatedValue: transactionValue });
+
+            if (t.type === 'compra') {
+                holding.quantity += amount;
+                // Add the leveraged cost basis
+                holding.costBasis += (amount * price * leverage) + commission;
+                holding.totalCommissions += commission;
+            } else if (t.type === 'venta') {
+                holding.quantity -= amount;
+                holding.totalCommissions += commission;
+
+                // Simple FIFO (First-In, First-Out) calculation for realized profit
+                let unitsToSell = amount;
+                let costOfSoldUnits = 0;
+                let remainingTransactions = holding.transactions
+                    .filter(tx => tx.type === 'compra' && tx.assetId === assetId)
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                for (let i = 0; i < remainingTransactions.length; i++) {
+                    const buyTx = remainingTransactions[i];
+                    if (buyTx.quantity > 0) {
+                        const unitsFromThisTx = Math.min(unitsToSell, buyTx.quantity);
+                        const costPerUnit = (buyTx.originalPrice * buyTx.leverage) + (getCommissionAmountInUSD(buyTx.commissionAmount, buyTx.commissionCurrency) / buyTx.originalAmount);
+                        
+                        costOfSoldUnits += unitsFromThisTx * costPerUnit;
+                        unitsToSell -= unitsFromThisTx;
+                        buyTx.quantity -= unitsFromThisTx; // Update remaining quantity in the transaction list
+
+                        if (unitsToSell <= 0) break;
+                    }
+                }
+
+                // If unitsToSell > 0, it means we sold more than we bought. We can't calculate profit accurately
+                // but we adjust the cost basis to ensure it doesn't go below zero.
+                if (unitsToSell > 0) {
+                    costOfSoldUnits += unitsToSell * holding.costBasis / holding.quantity; // Best effort to allocate remaining cost
+                }
+
+
+                const saleProceeds = (amount * price * leverage) - commission;
+                const realizedProfit = saleProceeds - costOfSoldUnits;
+                
+                holding.realizedProfitUSD += realizedProfit;
+                // Update cost basis for unsold quantity (must be done after calculating realized profit)
+                holding.costBasis -= costOfSoldUnits; 
+            }
+        });
+
+        // Final cleanup for costBasis: it cannot be negative
+        Object.keys(holdings).forEach(assetId => {
+            if (holdings[assetId].quantity <= 0) {
+                holdings[assetId].costBasis = 0;
+            } else if (holdings[assetId].costBasis < 0) {
+                holdings[assetId].costBasis = 0; 
+            }
+        });
+
+        return holdings;
+    }
+
+    function calculateTotalBalance() {
+        const holdings = calculateAssetHoldings('all');
+        let totalUSD = 0;
+
+        // 1. Calculate USD from holdings and current prices
+        Object.keys(holdings).forEach(assetId => {
+            const holding = holdings[assetId];
+            const currentPrice = assetPrices[assetId] || 0;
+            totalUSD += holding.quantity * currentPrice;
+        });
+
+        // 2. Add manual balances (assuming manual balances are in their base currency, converted to USD)
+        Object.keys(manualBalances).forEach(currency => {
+            const amount = manualBalances[currency];
+            const currencyAsset = userAssets.find(a => a.symbol.toUpperCase() === currency.toUpperCase() || a.name.toUpperCase() === currency.toUpperCase());
+            
+            if (currency.toUpperCase() === 'USD') {
+                totalUSD += amount;
+            } else if (assetPrices[currencyAsset?.id]) {
+                totalUSD += amount * assetPrices[currencyAsset.id];
+            } else if (currency.toUpperCase() === 'ARS') {
+                totalUSD += amount / arsRate;
+            } else {
+                totalUSD += amount; // Assume 1:1 if no price or conversion rate
+            }
+        });
+        
+        const totalARS = totalUSD * arsRate;
+        const totalBTC = assetPrices['BTC'] ? totalUSD / assetPrices['BTC'] : 0;
+
+        return { totalUSD, totalARS, totalBTC };
+    }
+
+    function calculatePortfolioProfits() {
+        const holdings = calculateAssetHoldings('all');
+        let totalUnrealizedProfit = 0;
+        let totalRealizedProfit = 0;
+        const assetUnrealizedProfits = {};
+        const assetRealizedProfits = {};
+
+        Object.keys(holdings).forEach(assetId => {
+            const holding = holdings[assetId];
+            const currentPrice = assetPrices[assetId] || 0;
+
+            // Realized Profit (already calculated during transaction analysis)
+            totalRealizedProfit += holding.realizedProfitUSD;
+            assetRealizedProfits[assetId] = holding.realizedProfitUSD;
+
+            // Unrealized Profit
+            if (holding.quantity > 0 && holding.costBasis > 0) {
+                const totalCurrentValue = holding.quantity * currentPrice;
+                const unrealizedProfit = totalCurrentValue - holding.costBasis;
+                totalUnrealizedProfit += unrealizedProfit;
+                assetUnrealizedProfits[assetId] = unrealizedProfit;
+            } else {
+                assetUnrealizedProfits[assetId] = 0;
+            }
+        });
+
+        return { 
+            totalUnrealizedProfit, 
+            totalRealizedProfit, 
+            assetUnrealizedProfits, 
+            assetRealizedProfits
+        };
+    }
+
+    function getCommissionAmountInUSD(commissionAmount, commissionCurrencyId) {
+        if (!commissionAmount || commissionAmount === 0) return 0;
+        commissionAmount = parseFloat(commissionAmount);
+
+        if (commissionCurrencyId === 'USD' || commissionCurrencyId === 'usd') {
+            return commissionAmount;
+        }
+        if (commissionCurrencyId === 'ARS' || commissionCurrencyId === 'ars') {
+            return commissionAmount / arsRate;
+        }
+        
+        // Check if commission is paid in an asset (e.g., BNB)
+        const asset = userAssets.find(a => a.id === commissionCurrencyId || a.symbol.toUpperCase() === commissionCurrencyId.toUpperCase());
+        if (asset && assetPrices[asset.id]) {
+            return commissionAmount * assetPrices[asset.id];
+        }
+
+        // Fallback: assume 1:1 if unknown asset
+        return commissionAmount;
+    }
+
+    // --- Transaction Management ---
+
+    function generateId() {
+        return Math.random().toString(36).substring(2, 9);
+    }
+
+    function saveOrUpdateTransaction() {
+        const type = document.getElementById('transactionType').value;
+        const assetId = document.getElementById('transactionAsset').value;
+        const amount = parseFloat(document.getElementById('transactionAmount').value);
+        const price = parseFloat(document.getElementById('transactionPrice').value);
+        const date = document.getElementById('transactionDate').value;
+        const walletId = document.getElementById('transactionWallet').value || null;
+        const commissionAmount = parseFloat(document.getElementById('commissionAmount').value) || 0;
+        const commissionCurrency = document.getElementById('commissionCurrency').value || 'USD';
+        const leverage = parseFloat(document.getElementById('transactionLeverage').value) || 1;
+        const notes = document.getElementById('transactionNotes').value.trim();
+        
+        if (!assetId || !amount || amount <= 0 || !price || price <= 0 || !date) {
+            showError('Por favor, completa todos los campos requeridos (Activo, Cantidad, Precio y Fecha).');
+            return;
+        }
+
+        const transactionData = {
+            id: editingTransactionId || generateId(),
+            type,
+            assetId,
+            amount,
+            originalAmount: amount, // Store original for FIFO calculation
+            price,
+            originalPrice: price, // Store original for FIFO calculation
+            date,
+            walletId,
+            commissionAmount,
+            commissionCurrency,
+            leverage,
+            notes,
+            timestamp: new Date(date).getTime() 
+        };
+
+        if (editingTransactionId) {
+            transactions = transactions.map(t => t.id === editingTransactionId ? transactionData : t);
+            showError('Transacción actualizada exitosamente.');
+        } else {
+            transactions.push(transactionData);
+            showError('Transacción agregada exitosamente.');
+        }
+
+        saveState();
+        clearTransactionForm();
+        updateAllUI();
+    }
+
+    function clearTransactionForm() {
+        editingTransactionId = null;
+        document.getElementById('editingTransactionId').value = '';
+        document.getElementById('transactionType').value = 'compra';
+        document.getElementById('transactionAmount').value = '';
+        document.getElementById('transactionPrice').value = '';
+        document.getElementById('transactionDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('transactionWallet').value = '';
+        document.getElementById('commissionAmount').value = '';
+        document.getElementById('commissionCurrency').value = '';
+        document.getElementById('transactionLeverage').value = '1';
+        document.getElementById('transactionNotes').value = '';
+
+        document.getElementById('addTransaction').textContent = '➕ Agregar';
+        document.getElementById('cancelEdit').classList.add('hidden');
+    }
+
+    function editTransaction(id) {
+        const tx = transactions.find(t => t.id === id);
+        if (!tx) return;
+
+        editingTransactionId = id;
+        document.getElementById('editingTransactionId').value = id;
+        document.getElementById('transactionType').value = tx.type;
+        document.getElementById('transactionAsset').value = tx.assetId;
+        document.getElementById('transactionAmount').value = tx.amount;
+        document.getElementById('transactionPrice').value = tx.price;
+        document.getElementById('transactionDate').value = tx.date;
+        document.getElementById('transactionWallet').value = tx.walletId || '';
+        document.getElementById('commissionAmount').value = tx.commissionAmount || 0;
+        document.getElementById('commissionCurrency').value = tx.commissionCurrency || 'USD';
+        document.getElementById('transactionLeverage').value = tx.leverage || 1;
+        document.getElementById('transactionNotes').value = tx.notes || '';
+
+        document.getElementById('addTransaction').textContent = 'Guardar Edición';
+        document.getElementById('cancelEdit').classList.remove('hidden');
+
+        // Scroll to the form
+        document.getElementById('assetsView').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        clearTransactionForm();
+    }
+
+    function deleteTransaction(id) {
+        showCustomConfirm('¿Estás seguro de que quieres eliminar esta transacción? Esta acción es irreversible.', () => {
+            transactions = transactions.filter(t => t.id !== id);
+            saveState();
+            updateAllUI();
+        });
+    }
+
+    // --- Manual Balance Management ---
+
+    function addManualBalance() {
+        const amount = parseFloat(document.getElementById('manualBalanceAmount').value);
+        const name = document.getElementById('manualBalanceName').value.trim().toUpperCase();
+
+        if (!name || isNaN(amount) || amount <= 0) {
+            showError('Por favor, ingresa un nombre y una cantidad positiva para el saldo.');
+            return;
+        }
+
+        manualBalances[name] = (manualBalances[name] || 0) + amount;
+        
+        saveState();
+        updateAllUI();
+        document.getElementById('manualBalanceAmount').value = '';
+        document.getElementById('manualBalanceName').value = '';
+        showError(`Saldo de ${name} agregado exitosamente.`);
+    }
+
+    function withdrawManualBalance() {
+        const amount = parseFloat(document.getElementById('manualWithdrawAmount').value);
+        const name = document.getElementById('manualWithdrawName').value.trim().toUpperCase();
+
+        if (!name || isNaN(amount) || amount <= 0) {
+            showError('Por favor, ingresa un nombre y una cantidad positiva a retirar.');
+            return;
+        }
+
+        if (!manualBalances[name] || manualBalances[name] < amount) {
+            showError(`Error: No tienes suficiente saldo de ${name} para retirar ${amount}.`);
+            return;
+        }
+
+        manualBalances[name] -= amount;
+        if (manualBalances[name] < 0.000001) { // Avoid floating point residue
+            delete manualBalances[name];
+        }
+
+        saveState();
+        updateAllUI();
+        document.getElementById('manualWithdrawAmount').value = '';
+        document.getElementById('manualWithdrawName').value = '';
+        showError(`Retiro de ${amount} ${name} realizado exitosamente.`);
+    }
+
+    function deleteManualBalance(name) {
+        showCustomConfirm(`¿Estás seguro de que quieres eliminar completamente el saldo de ${name}?`, () => {
+            delete manualBalances[name];
+            saveState();
+            updateAllUI();
+            showError(`Saldo de ${name} eliminado.`);
+        });
+    }
+
+    // --- Staking Management ---
+    
+    function addStakingEntry() {
+        const assetId = document.getElementById('stakingAssetSelect').value;
+        const amount = parseFloat(document.getElementById('stakingAmount').value);
+        const apr = parseFloat(document.getElementById('stakingApr').value) / 100;
+        const date = document.getElementById('stakingDate').value;
+        const imageFile = document.getElementById('stakingAssetImageInput').files[0];
+
+        if (!assetId || !amount || isNaN(apr) || apr < 0 || !date) {
+            showError('Por favor, completa el activo, la cantidad, el APR y la fecha para el staking.');
+            return;
+        }
+
+        const newEntry = {
+            id: generateId(),
+            assetId,
+            amount,
+            apr,
+            startDate: date,
+            imageUrl: userAssets.find(a => a.id === assetId)?.imageUrl, // Use asset's main image as default
+            imageFileBase64: null 
+        };
+
+        if (imageFile) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                newEntry.imageFileBase64 = e.target.result;
+                stakingEntries.push(newEntry);
+                saveState();
+                updateAllUI();
+                clearStakingForm();
+                showError('Staking agregado exitosamente.');
+            };
+            reader.readAsDataURL(imageFile);
+        } else {
+            stakingEntries.push(newEntry);
+            saveState();
+            updateAllUI();
+            clearStakingForm();
+            showError('Staking agregado exitosamente.');
+        }
+    }
+
+    function clearStakingForm() {
+        document.getElementById('stakingAssetSelect').value = '';
+        document.getElementById('stakingAmount').value = '';
+        document.getElementById('stakingApr').value = '';
+        document.getElementById('stakingDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('stakingAssetImageInput').value = '';
+        document.getElementById('stakingAssetImagePreview').classList.add('hidden');
+        document.getElementById('stakingAssetImagePreview').src = '#';
+    }
+
+    function removeStakingEntry(idToRemove) {
+        showCustomConfirm('¿Estás seguro de que quieres eliminar este registro de Staking?', () => {
+            stakingEntries = stakingEntries.filter(e => e.id !== idToRemove);
+            saveState();
+            updateAllUI();
+        });
+    }
+
+    // --- UI Update Functions ---
+
+    function updateAllUI() {
+        updateTransactionFormAssets(); 
+        updateTransactionFormWallets();
+        updateCommissionCurrencyDropdown(); 
+        updateStakingAssetSelect();
+        updateBalances(); 
+        updateAssetHoldingsDisplay(currentModalWalletFilterId); 
+        updateTransactionHistory();
+        updateProfitDisplays();
+        updateAssetProfitList(); 
+        updateChartData(); 
+        updateCharts();
+        renderCalendar('calendarGrid', getDailyProfits(), currentCalendarDate, 'currentMonthYear', 'prevMonthBtn', 'nextMonthBtn'); 
+        updateManualBalancesList();
+        renderStakingEntries();
+        renderManagedAssetList(); 
+        renderBannerSettings(); 
+        renderPriceBanner(); 
+    }
+
+    function updateTransactionFormAssets() {
+        const select = document.getElementById('transactionAsset');
+        select.innerHTML = '';
+        userAssets.forEach(asset => {
+            const option = document.createElement('option');
+            option.value = asset.id;
+            option.textContent = `${asset.symbol} ${asset.name} (${asset.assetType === 'crypto' ? 'Cripto' : 'Stock'})`;
+            select.appendChild(option);
+        });
+        selectedAsset = select.value;
+    }
+
+    function updateTransactionFormWallets() {
+        const select = document.getElementById('transactionWallet');
+        const filterSelect = document.getElementById('walletFilterSelect');
+        select.innerHTML = '<option value="">Selecciona Cartera (Opcional)</option>';
+        filterSelect.innerHTML = '<option value="all">Todas las Carteras</option>';
+        wallets.forEach(wallet => {
+            const option1 = document.createElement('option');
+            option1.value = wallet.id;
+            option1.textContent = wallet.name;
+            select.appendChild(option1);
+
+            const option2 = document.createElement('option');
+            option2.value = wallet.id;
+            option2.textContent = wallet.name;
+            filterSelect.appendChild(option2);
+        });
+        filterSelect.value = currentModalWalletFilterId;
+    }
+    
+    function updateCommissionCurrencyDropdown() {
+        const select = document.getElementById('commissionCurrency');
+        // Clear previous asset options but keep base currencies
+        select.innerHTML = `
+            <option value="">Moneda Comisión</option>
+            <option value="USD">USD</option>
+            <option value="ARS">ARS</option>
+        `;
+
+        // Add user-defined assets (only cryptos for common fee payments)
+        userAssets.filter(a => a.assetType === 'crypto').forEach(asset => {
+            const option = document.createElement('option');
+            option.value = asset.id;
+            option.textContent = `${asset.symbol} ${asset.name}`;
+            select.appendChild(option);
+        });
+    }
+
+    function updateTransactionFormPrice() {
+        const assetId = document.getElementById('transactionAsset').value;
+        const currentPrice = assetPrices[assetId] || 0;
+        document.getElementById('transactionPrice').placeholder = `Precio (USD) - Actual: ${formatCurrency(currentPrice, 'USD')}`;
+    }
+
+    function updateBalances() {
+        const { totalUSD, totalARS, totalBTC } = calculateTotalBalance();
+        document.getElementById('totalUSD').textContent = formatCurrency(totalUSD, 'USD');
+        document.getElementById('totalARS').textContent = formatCurrency(totalARS, 'ARS');
+        
+        const btcAsset = userAssets.find(a => a.id === 'bitcoin');
+        document.getElementById('totalBTC').textContent = formatAssetAmount(totalBTC, btcAsset ? btcAsset.symbol : '₿', 'crypto');
+    }
+    
+    function updateProfitDisplays() {
+        const { totalUnrealizedProfit, totalRealizedProfit } = calculatePortfolioProfits();
+        
+        const unrealizedEl = document.getElementById('totalUnrealizedProfitDisplay');
+        unrealizedEl.textContent = formatCurrency(totalUnrealizedProfit, 'USD', true);
+        unrealizedEl.classList.remove('text-green-400', 'text-red-400', 'text-white');
+        if (totalUnrealizedProfit > 0) {
+            unrealizedEl.classList.add('text-green-400');
+        } else if (totalUnrealizedProfit < 0) {
+            unrealizedEl.classList.add('text-red-400');
+        } else {
+            unrealizedEl.classList.add('text-white');
+        }
+
+        const realizedEl = document.getElementById('totalRealizedProfitDisplay');
+        realizedEl.textContent = formatCurrency(totalRealizedProfit, 'USD', true);
+        realizedEl.classList.remove('text-green-400', 'text-red-400', 'text-white');
+        if (totalRealizedProfit > 0) {
+            realizedEl.classList.add('text-green-400');
+        } else if (totalRealizedProfit < 0) {
+            realizedEl.classList.add('text-red-400');
+        } else {
+            realizedEl.classList.add('text-white');
+        }
+    }
+
+    function updateAssetHoldingsDisplay(filterWalletId = 'all') {
+        const holdings = calculateAssetHoldings(filterWalletId);
+        const grid = document.getElementById('assetHoldingsGrid');
+        grid.innerHTML = '';
+        currentModalWalletFilterId = filterWalletId;
+
+        if (Object.keys(holdings).length === 0) {
+            grid.innerHTML = `
+                <div class="text-center py-8 text-slate-400 col-span-full">
+                    <span class="text-5xl mb-4 block opacity-50">💸</span>
+                    <p>No tienes activos registrados en esta cartera. ¡Registra una transacción!</p>
+                </div>
+            `;
+            return;
+        }
+
+        Object.keys(holdings).forEach(assetId => {
+            const holding = holdings[assetId];
+            if (holding.quantity <= 0 && holding.realizedProfitUSD === 0) return; // Hide zero holdings unless realized profit exists
+
+            const asset = userAssets.find(a => a.id === assetId);
+            if (!asset) return; 
+
+            const currentPrice = assetPrices[assetId] || 0;
+            const totalCurrentValue = holding.quantity * currentPrice;
+            const averageCost = holding.quantity > 0 ? holding.costBasis / holding.quantity : 0;
+            const unrealizedProfit = holding.quantity > 0 ? totalCurrentValue - holding.costBasis : 0;
+            const unrealizedPercent = holding.costBasis > 0 ? (unrealizedProfit / holding.costBasis) * 100 : 0;
+            const isProfit = unrealizedProfit >= 0;
+
+            grid.innerHTML += `
+                <div class="bg-slate-700 rounded-xl p-4 shadow-md flex flex-col justify-between cursor-pointer hover:bg-slate-600 transition-all" onclick="showAssetDetailModal('${assetId}', '${filterWalletId}')">
+                    <div class="flex items-center mb-2">
+                        <img src="${asset.imageUrl}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/FFFFFF/000000?text=${asset.symbol || '?'}'" class="asset-card-image" alt="${asset.name} logo">
+                        <div>
+                            <h4 class="text-lg font-semibold">${asset.name} (${asset.symbol})</h4>
+                            <p class="text-xs text-slate-400">${asset.assetType === 'crypto' ? 'Cripto' : 'Stock'}</p>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-sm">
+                        <p class="font-bold">Cantidad: ${formatAssetAmount(holding.quantity, asset.symbol, asset.assetType)}</p>
+                        <p class="text-slate-300">Valor Actual: ${formatCurrency(totalCurrentValue, 'USD')}</p>
+                        <p class="text-xs text-slate-400 mt-1">Costo Promedio: ${formatCurrency(averageCost, 'USD')}</p>
+                    </div>
+                    <div class="mt-3 p-2 rounded-lg ${isProfit ? 'bg-green-800/50' : 'bg-red-800/50'}">
+                        <p class="text-sm font-bold ${isProfit ? 'text-green-400' : 'text-red-400'}">
+                            P. No Realizado: ${formatCurrency(unrealizedProfit, 'USD', true)} (${unrealizedPercent.toFixed(2)}%)
+                        </p>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function updateTransactionHistory() {
+        const listContainer = document.getElementById('transactionList');
+        listContainer.innerHTML = '';
+        
+        const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        if (sortedTransactions.length === 0) {
+            listContainer.innerHTML = '<p class="text-slate-400">No hay transacciones registradas.</p>';
+            return;
+        }
+
+        sortedTransactions.forEach(t => {
+            const asset = userAssets.find(a => a.id === t.assetId);
+            const wallet = wallets.find(w => w.id === t.walletId);
+            const assetSymbol = asset ? asset.symbol : '¿?';
+            const transactionValue = t.amount * t.price * t.leverage;
+            const typeClass = t.type === 'compra' ? 'text-green-400 bg-green-900/50' : 'text-red-400 bg-red-900/50';
+            const typeLabel = t.type === 'compra' ? 'COMPRA' : 'VENTA';
+
+            listContainer.innerHTML += `
+                <div class="bg-slate-700 rounded-lg p-4 flex justify-between items-center shadow-md">
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex items-center text-lg font-bold">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold mr-2 ${typeClass}">${typeLabel}</span>
+                            ${asset ? asset.name : 'Activo Desconocido'} (${assetSymbol})
+                        </div>
+                        <p class="text-sm text-slate-300">
+                            ${formatAssetAmount(t.amount, assetSymbol, asset ? asset.assetType : 'crypto')} @ ${formatCurrency(t.price, 'USD')} 
+                            <span class="text-xs text-slate-400">(${t.leverage}x Apalancamiento)</span>
+                        </p>
+                        <p class="text-xs text-slate-400">
+                            Total Nocional: ${formatCurrency(transactionValue, 'USD')} | Comisión: ${formatCurrency(t.commissionAmount, t.commissionCurrency)}
+                        </p>
+                        <p class="text-xs text-slate-500">
+                            Fecha: ${t.date} ${wallet ? ` | Cartera: ${wallet.name}` : ''}
+                        </p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition-all text-sm" onclick="editTransaction('${t.id}')">
+                            Editar
+                        </button>
+                        <button class="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-all text-sm" onclick="deleteTransaction('${t.id}')">
+                            Eliminar
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function updateAssetProfitList() {
+        const { assetUnrealizedProfits, assetRealizedProfits } = calculatePortfolioProfits();
+        const listContainer = document.getElementById('assetProfitList');
+        listContainer.innerHTML = '';
+
+        const allAssetIds = [...new Set([...Object.keys(assetUnrealizedProfits), ...Object.keys(assetRealizedProfits)])];
+
+        if (allAssetIds.length === 0) {
+            listContainer.innerHTML = '<p class="text-slate-400">Registra transacciones para ver ganancias.</p>';
+            return;
+        }
+
+        allAssetIds.forEach(assetId => {
+            const unrealized = assetUnrealizedProfits[assetId] || 0;
+            const realized = assetRealizedProfits[assetId] || 0;
+            const totalProfit = unrealized + realized;
+            const asset = userAssets.find(a => a.id === assetId);
+            if (!asset) return;
+
+            const unrealizedClass = unrealized >= 0 ? 'text-green-400' : 'text-red-400';
+            const realizedClass = realized >= 0 ? 'text-green-400' : 'text-red-400';
+            const totalClass = totalProfit >= 0 ? 'text-green-400' : 'text-red-400';
+
+            listContainer.innerHTML += `
+                <div class="bg-slate-700 rounded-xl p-4 shadow-md">
+                    <div class="flex items-center mb-3">
+                        <img src="${asset.imageUrl}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/FFFFFF/000000?text=${asset.symbol || '?'}'" class="asset-card-image" alt="${asset.name} logo">
+                        <h4 class="text-xl font-semibold text-blue-300">${asset.name} (${asset.symbol})</h4>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 text-center border-t border-slate-600 pt-3">
+                        <div>
+                            <p class="text-sm text-slate-400">No Realizado</p>
+                            <p class="text-lg font-bold ${unrealizedClass}">${formatCurrency(unrealized, 'USD', true)}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-400">Realizado</p>
+                            <p class="text-lg font-bold ${realizedClass}">${formatCurrency(realized, 'USD', true)}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-400">Profit Total</p>
+                            <p class="text-xl font-extrabold ${totalClass}">${formatCurrency(totalProfit, 'USD', true)}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function updateManualBalancesList() {
+        const listContainer = document.getElementById('manualBalancesList');
+        listContainer.innerHTML = '<h4 class="text-lg font-semibold text-slate-300 mb-2">Saldos Manuales Existentes:</h4>';
+
+        const keys = Object.keys(manualBalances);
+        if (keys.length === 0) {
+            listContainer.innerHTML += '<p class="text-slate-400">No hay saldos manuales.</p>';
+            return;
+        }
+
+        keys.forEach(name => {
+            const amount = manualBalances[name];
+            const displayAmount = formatCurrency(amount, name); 
+            let convertedValue = amount;
+
+            // Simple conversion check for display
+            if (name.toUpperCase() === 'ARS') {
+                convertedValue = amount / arsRate;
+            } else if (name.toUpperCase() !== 'USD') {
+                const asset = userAssets.find(a => a.symbol.toUpperCase() === name.toUpperCase());
+                if (asset && assetPrices[asset.id]) {
+                    convertedValue = amount * assetPrices[asset.id];
+                }
+            }
+            const displayValue = formatCurrency(convertedValue, 'USD');
+
+            listContainer.innerHTML += `
+                <div class="bg-slate-700 rounded-lg p-3 flex justify-between items-center shadow-md">
+                    <div>
+                        <p class="text-lg font-bold text-yellow-300">${name}</p>
+                        <p class="text-sm text-slate-300">Cantidad: ${displayAmount}</p>
+                        <p class="text-xs text-slate-400">Valor USD Estimado: ${displayValue}</p>
+                    </div>
+                    <button class="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-all text-sm" onclick="deleteManualBalance('${name}')">
+                        Eliminar
+                    </button>
+                </div>
+            `;
+        });
+    }
+
+    function renderStakingEntries() {
+        const listContainer = document.getElementById('stakingList');
+        listContainer.innerHTML = '';
+        
+        if (stakingEntries.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-center py-8 text-slate-400">
+                    <span class="text-5xl mb-4 block opacity-50">🔗</span>
+                    <p>No hay stakings registrados.</p>
+                </div>
+            `;
+            return;
+        }
+
+        stakingEntries.forEach(entry => {
+            const asset = userAssets.find(a => a.id === entry.assetId);
+            if (!asset) return;
+
+            const daysStaked = Math.floor((new Date() - new Date(entry.startDate)) / (1000 * 60 * 60 * 24));
+            const estimatedYield = entry.amount * entry.apr * (daysStaked / 365);
+            const totalYieldValueUSD = estimatedYield * (assetPrices[asset.id] || 0);
+
+            listContainer.innerHTML += `
+                <div class="bg-slate-700 rounded-xl p-4 shadow-md flex justify-between items-center">
+                    <div class="flex items-center">
+                        <img src="${entry.imageFileBase64 || asset.imageUrl}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/FFFFFF/000000?text=S'" class="asset-card-image" alt="Staking logo">
+                        <div>
+                            <h4 class="text-xl font-semibold text-blue-300">${asset.name} Staking</h4>
+                            <p class="text-sm text-slate-400">APR: ${(entry.apr * 100).toFixed(2)}% | Días: ${daysStaked}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-lg font-bold">${formatAssetAmount(entry.amount, asset.symbol, asset.assetType)} Staked</p>
+                        <p class="text-sm text-green-400">Rendimiento Est.: ${formatAssetAmount(estimatedYield, asset.symbol, asset.assetType)}</p>
+                        <p class="text-xs text-slate-300">Valor USD Est.: ${formatCurrency(totalYieldValueUSD, 'USD')}</p>
+                        <button class="mt-2 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded-lg text-xs" onclick="removeStakingEntry('${entry.id}')">
+                            Terminar
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+
+    // --- Asset & Wallet Management ---
+
+    function renderManagedAssetList() {
+        const listContainer = document.getElementById('managedAssetList');
+        listContainer.innerHTML = '';
+
+        userAssets.forEach(asset => {
+            listContainer.innerHTML += `
+                <span class="inline-flex items-center bg-blue-900 text-white text-xs font-medium px-2.5 py-0.5 rounded-full">
+                    ${asset.name} (${asset.symbol})
+                    <button class="ml-1 text-yellow-300 hover:text-yellow-100" onclick="loadAssetForEdit('${asset.id}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </button>
+                    <button class="ml-1 text-red-400 hover:text-red-200" onclick="removeAsset('${asset.id}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </span>
+            `;
+        });
+    }
+
+    function loadAssetForEdit(id) {
+        const asset = userAssets.find(a => a.id === id);
+        if (!asset) return;
+
+        document.getElementById('editingAssetId').value = asset.id;
+        document.getElementById('assetType').value = asset.assetType;
+        document.getElementById('addAssetName').value = asset.name;
+        document.getElementById('addAssetSymbol').value = asset.symbol;
+        
+        const identifierInput = document.getElementById('addAssetIdentifier');
+        if (asset.assetType === 'crypto') {
+            identifierInput.value = asset.coingeckoId;
+            identifierInput.placeholder = 'ID CoinGecko (Ej: cardano)';
+        } else {
+            identifierInput.value = asset.stockSymbol;
+            identifierInput.placeholder = 'Símbolo Stock (Ej: AAPL)';
+        }
+        
+        document.getElementById('addAssetDescription').value = asset.description;
+        
+        const preview = document.getElementById('addAssetImagePreview');
+        preview.src = asset.imageUrl || '#';
+        preview.classList.toggle('hidden', !asset.imageUrl);
+
+        document.getElementById('saveOrUpdateAssetBtn').textContent = 'Guardar Cambios';
+        document.getElementById('cancelAssetEditBtn').classList.remove('hidden');
+    }
+
+    function saveOrUpdateAsset() {
+        const id = document.getElementById('editingAssetId').value || generateId();
+        const type = document.getElementById('assetType').value;
+        const name = document.getElementById('addAssetName').value.trim();
+        const symbol = document.getElementById('addAssetSymbol').value.trim();
+        const identifier = document.getElementById('addAssetIdentifier').value.trim();
+        const description = document.getElementById('addAssetDescription').value.trim();
+        const imageFile = document.getElementById('addAssetImageInput').files[0];
+
+        if (!name || !symbol || !identifier) {
+            showError('El nombre, símbolo e identificador son obligatorios.');
+            return;
+        }
+
+        const newAssetData = {
+            id,
+            name,
+            symbol,
+            assetType: type,
+            description,
+            imageUrl: document.getElementById('addAssetImagePreview').src !== '#' ? document.getElementById('addAssetImagePreview').src : null, // Current URL from preview
+            coingeckoId: type === 'crypto' ? identifier : undefined,
+            stockSymbol: type === 'stock' ? identifier : undefined
+        };
+
+        const saveAndRefresh = (updatedAssetData) => {
+            if (document.getElementById('editingAssetId').value) {
+                userAssets = userAssets.map(a => a.id === id ? updatedAssetData : a);
+                showError('Activo actualizado exitosamente.');
+            } else {
+                userAssets.push(updatedAssetData);
+                showError('Activo agregado exitosamente.');
+            }
+            saveState();
+            cancelAssetEdit();
+            updateAllUI();
+        };
+
+        if (imageFile) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                newAssetData.imageUrl = e.target.result;
+                saveAndRefresh(newAssetData);
+            };
+            reader.readAsDataURL(imageFile);
+        } else {
+            saveAndRefresh(newAssetData);
+        }
+    }
+
+    function cancelAssetEdit() {
+        document.getElementById('editingAssetId').value = '';
+        document.getElementById('assetType').value = 'crypto';
+        document.getElementById('addAssetName').value = '';
+        document.getElementById('addAssetSymbol').value = '';
+        document.getElementById('addAssetIdentifier').value = '';
+        document.getElementById('addAssetDescription').value = '';
+        document.getElementById('addAssetImageInput').value = '';
+        document.getElementById('addAssetImagePreview').classList.add('hidden');
+        document.getElementById('addAssetImagePreview').src = '#';
+
+        document.getElementById('saveOrUpdateAssetBtn').textContent = '➕ Añadir Activo';
+        document.getElementById('cancelAssetEditBtn').classList.add('hidden');
+    }
+
+    function removeAsset(idToRemove) {
+        showCustomConfirm('¿Estás seguro de que quieres eliminar este activo? Esto no eliminará las transacciones asociadas, pero ya no aparecerá en el rastreador.', () => {
+            userAssets = userAssets.filter(a => a.id !== idToRemove);
+            transactions = transactions.filter(t => t.assetId !== idToRemove); // Also remove related transactions for simplicity
+            saveState();
+            updateAllUI();
+        });
+    }
+
+    function renderManagedWalletList() {
+        const listContainer = document.getElementById('managedWalletList');
+        listContainer.innerHTML = '<h4 class="text-lg font-semibold text-slate-300 mb-2">Carteras Existentes:</h4>';
+
+        if (wallets.length === 0) {
+            listContainer.innerHTML += '<p class="text-slate-400">No hay carteras registradas.</p>';
+            return;
+        }
+
+        wallets.forEach(wallet => {
+            listContainer.innerHTML += `
+                <div class="bg-slate-700 rounded-lg p-3 flex justify-between items-center shadow-md">
+                    <div class="flex items-center">
+                        <img src="${wallet.imageUrl || 'https://placehold.co/40x40/4c1d95/FFFFFF?text=W'}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/4c1d95/FFFFFF?text=W'" class="asset-card-image" alt="Wallet logo">
+                        <p class="text-lg font-bold">${wallet.name}</p>
+                    </div>
+                    <button class="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-all text-sm" onclick="removeWallet('${wallet.id}')">
+                        Eliminar
+                    </button>
+                </div>
+            `;
+        });
+    }
+
+    function addWallet() {
+        const name = document.getElementById('walletNameInput').value.trim();
+        const imageFile = document.getElementById('walletImageInput').files[0];
+
+        if (!name) {
+            showError('Por favor, ingresa un nombre para la cartera.');
+            return;
+        }
+
+        const newWallet = {
+            id: generateId(),
+            name,
+            imageUrl: null 
+        };
+
+        const saveAndRefresh = (updatedWallet) => {
+            wallets.push(updatedWallet);
+            saveState();
+            updateAllUI();
+            document.getElementById('walletNameInput').value = '';
+            document.getElementById('walletImageInput').value = '';
+            document.getElementById('walletImagePreview').classList.add('hidden');
+            document.getElementById('walletImagePreview').src = '#';
+            showError('Cartera agregada exitosamente.');
+        };
+
+        if (imageFile) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                newWallet.imageUrl = e.target.result;
+                saveAndRefresh(newWallet);
+            };
+            reader.readAsDataURL(imageFile);
+        } else {
+            saveAndRefresh(newWallet);
+        }
+    }
+
+    function removeWallet(idToRemove) {
+        showCustomConfirm('¿Estás seguro de que quieres eliminar esta cartera? Las transacciones asociadas no se eliminarán, pero se marcarán como "Sin Cartera".', () => {
+            wallets = wallets.filter(w => w.id !== idToRemove);
+            transactions = transactions.map(t => t.walletId === idToRemove ? { ...t, walletId: null } : t);
+            saveState();
+            updateAllUI();
+        });
+    }
+
+    // --- Charting and Calendar Functions ---
+
+    function getDailyProfits() {
+        const dailyProfits = {};
+
+        // Aggregate realized profit
+        transactions.forEach(t => {
+            if (t.type === 'venta') {
+                const txDate = t.date;
+                const realizedProfitUSD = t.realizedProfitUSD || 0; // Assuming realizedProfitUSD is calculated or set in the tx object, or calculated using FIFO/LIFO in real app.
+                
+                // For this example, we'll use a simplified realized profit calculation based on simple cost average
+                const buyTransactions = transactions
+                    .filter(buyT => buyT.type === 'compra' && buyT.assetId === t.assetId && new Date(buyT.date) <= new Date(t.date));
+                
+                if (buyTransactions.length > 0) {
+                    const totalCost = buyTransactions.reduce((sum, tx) => sum + (tx.amount * tx.price * tx.leverage), 0);
+                    const totalAmount = buyTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+                    const avgCost = totalAmount > 0 ? totalCost / totalAmount : t.price;
+                    
+                    const costOfSale = t.amount * avgCost * t.leverage;
+                    const saleProceeds = (t.amount * t.price * t.leverage) - getCommissionAmountInUSD(t.commissionAmount, t.commissionCurrency);
+                    const simplifiedRealizedProfit = saleProceeds - costOfSale;
+
+                    if (!dailyProfits[txDate]) dailyProfits[txDate] = 0;
+                    dailyProfits[txDate] += simplifiedRealizedProfit;
+                }
+            }
+        });
+
+        // Add today's unrealized profit to the current day for the main calendar
+        const today = new Date().toISOString().split('T')[0];
+        const { totalUnrealizedProfit } = calculatePortfolioProfits();
+        if (!dailyProfits[today]) dailyProfits[today] = 0;
+        dailyProfits[today] += totalUnrealizedProfit;
+
+        return dailyProfits;
+    }
+
+    function renderCalendar(calendarId, profitData, currentCalendarDateObj, titleId, prevBtnId, nextBtnId) {
+        const calendarGrid = document.getElementById(calendarId);
+        const monthYearTitle = document.getElementById(titleId);
+
+        calendarGrid.innerHTML = '';
+        
+        const year = currentCalendarDateObj.getFullYear();
+        const month = currentCalendarDateObj.getMonth();
+        const firstDayOfMonth = new Date(year, month, 1);
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        const startDayOfWeek = firstDayOfMonth.getDay(); // 0 for Sunday
+        const daysInMonth = lastDayOfMonth.getDate();
+
+        monthYearTitle.textContent = currentCalendarDateObj.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+
+        // Add empty days for padding
+        for (let i = 0; i < startDayOfWeek; i++) {
+            calendarGrid.innerHTML += `<div class="calendar-day empty"></div>`;
+        }
+
+        // Add days
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dateStr = new Date(year, month, i).toISOString().split('T')[0];
+            const profit = profitData[dateStr] || 0;
+            const profitClass = profit > 0 ? 'positive' : (profit < 0 ? 'negative' : 'zero');
+            
+            calendarGrid.innerHTML += `
+                <div class="calendar-day">
+                    <span class="calendar-day-number">${i}</span>
+                    <span class="calendar-day-profit ${profitClass}">${formatCurrency(profit, 'USD', true)}</span>
+                </div>
+            `;
+        }
+    }
+
+    function changeGlobalMonth(delta) {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+        renderCalendar('calendarGrid', getDailyProfits(), currentCalendarDate, 'currentMonthYear', 'prevMonthBtn', 'nextMonthBtn');
+    }
+
+    function updateChartData() {
+        // Generate historical data points (simplified mock for this app)
+        const sortedTxs = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const historyMap = {}; 
+        let currentBalance = 0; 
+        
+        // Use a 30-day window for simplicity
+        const today = new Date();
+        for (let i = 30; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            historyMap[dateStr] = { realized: 0, unrealized: 0, total: 0 };
+        }
+
+        // 1. Calculate historical realized profit (simple mock, requires complex FIFO/LIFO in real-time)
+        sortedTxs.forEach(t => {
+            if (t.type === 'venta') {
+                const dateStr = t.date;
+                // Simplified estimate of realized profit
+                const realized = (t.amount * t.price) * t.leverage * 0.1; // 10% profit mock
+                if (historyMap[dateStr]) {
+                    historyMap[dateStr].realized += realized;
+                }
+            }
+        });
+
+        // 2. Aggregate total profit (mock total)
+        let runningTotal = 0;
+        chartData = Object.keys(historyMap).sort().map(date => {
+            // Mock unrealized changes daily
+            const dailyChange = Math.random() * 500 - 250; // +- 250 USD random change
+            runningTotal += historyMap[date].realized + dailyChange;
+            return {
+                date,
+                usd: runningTotal,
+                btc: runningTotal / (assetPrices['BTC'] || 50000) // Mock conversion
+            };
+        });
+
+        // Ensure the last point reflects current total profit
+        const { totalUnrealizedProfit, totalRealizedProfit } = calculatePortfolioProfits();
+        const finalTotal = totalUnrealizedProfit + totalRealizedProfit;
+        if (chartData.length > 0) {
+            chartData[chartData.length - 1].usd = finalTotal;
+            chartData[chartData.length - 1].btc = finalTotal / (assetPrices['BTC'] || 50000);
+        }
+    }
+    
+    function updateCharts() {
+        if (!document.getElementById('usdChart')) return;
+
+        const labels = chartData.map(d => d.date);
+        const usdData = chartData.map(d => d.usd);
+        const btcData = chartData.map(d => d.btc);
+
+        // Chart configuration base
+        const baseConfig = (data, label, currency) => ({
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    borderColor: currency === 'USD' ? '#3B82F6' : '#F59E0B',
+                    backgroundColor: currency === 'USD' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0 
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8', callback: (value) => formatCurrency(value, currency) }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // USD Chart
+        if (usdChart) usdChart.destroy();
+        usdChart = new Chart(document.getElementById('usdChart').getContext('2d'), baseConfig(usdData, 'Profit Total (USD)', 'USD'));
+
+        // BTC Chart
+        if (btcChart) btcChart.destroy();
+        btcChart = new Chart(document.getElementById('btcChart').getContext('2d'), baseConfig(btcData, 'Profit Total (BTC)', 'BTC'));
+    }
+
+    // --- Asset Detail Modal Functions ---
+
+    function changeModalUnrealizedMonth(delta) {
+        currentModalUnrealizedCalendarDate.setMonth(currentModalUnrealizedCalendarDate.getMonth() + delta);
+        updateAssetDetailCalendars(currentModalAssetId, currentModalWalletFilterId);
+    }
+    
+    function changeModalRealizedMonth(delta) {
+        currentModalRealizedCalendarDate.setMonth(currentModalRealizedCalendarDate.getMonth() + delta);
+        updateAssetDetailCalendars(currentModalAssetId, currentModalWalletFilterId);
+    }
+
+    async function showAssetDetailModal(assetId, filterWalletId) {
+        const asset = userAssets.find(a => a.id === assetId);
+        if (!asset) return;
+
+        currentModalAssetId = assetId;
+        currentModalWalletFilterId = filterWalletId;
+        const holdings = calculateAssetHoldings(filterWalletId)[assetId] || { quantity: 0, costBasis: 0, realizedProfitUSD: 0 };
+        
+        document.getElementById('modalAssetName').textContent = `${asset.name} (${asset.symbol})`;
+        document.getElementById('modalAssetDescription').textContent = asset.description || 'No hay descripción disponible.';
+
+        const currentPrice = assetPrices[assetId] || 0;
+        const totalCurrentValue = holdings.quantity * currentPrice;
+        const averageCost = holdings.quantity > 0 ? holdings.costBasis / holdings.quantity : 0;
+        const unrealizedProfit = totalCurrentValue - holdings.costBasis;
+
+        document.getElementById('modalAssetQuantity').textContent = formatAssetAmount(holdings.quantity, asset.symbol, asset.assetType);
+        document.getElementById('modalAssetValue').textContent = `Valor: ${formatCurrency(totalCurrentValue, 'USD')}`;
+
+        const unrealizedEl = document.getElementById('modalAssetUnrealizedProfit');
+        unrealizedEl.textContent = formatCurrency(unrealizedProfit, 'USD', true);
+        unrealizedEl.className = `text-2xl font-bold ${unrealizedProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
+        const realizedEl = document.getElementById('modalAssetRealizedProfit');
+        realizedEl.textContent = formatCurrency(holdings.realizedProfitUSD, 'USD', true);
+        realizedEl.className = `text-2xl font-bold ${holdings.realizedProfitUSD >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
+        // Update charts and calendars for the specific asset
+        await updateAssetDetailCharts(assetId, filterWalletId);
+        updateAssetDetailCalendars(assetId, filterWalletId);
+        
+        // Show transactions filtered by asset
+        const modalTxList = document.getElementById('modalAssetTransactions');
+        modalTxList.innerHTML = '';
+        const assetTxs = transactions.filter(t => t.assetId === assetId && (filterWalletId === 'all' || t.walletId === filterWalletId)).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        if (assetTxs.length === 0) {
+            modalTxList.innerHTML = '<p class="text-slate-400">No hay transacciones para este activo en esta cartera.</p>';
+        } else {
+            assetTxs.forEach(t => {
+                const typeClass = t.type === 'compra' ? 'text-green-400 bg-green-900/50' : 'text-red-400 bg-red-900/50';
+                const typeLabel = t.type === 'compra' ? 'C' : 'V';
+                modalTxList.innerHTML += `
+                    <div class="bg-slate-600 rounded-lg p-3 flex justify-between items-center text-xs">
+                        <span class="px-2 py-0.5 rounded-full font-semibold mr-2 ${typeClass}">${typeLabel}</span>
+                        <div class="flex-grow">
+                            ${formatAssetAmount(t.amount, asset.symbol, asset.assetType)} @ ${formatCurrency(t.price, 'USD')}
+                        </div>
+                        <span class="text-slate-400">${t.date}</span>
+                    </div>
+                `;
+            });
+        }
+
+
+        document.getElementById('assetDetailModal').classList.remove('hidden');
+    }
+    
+    function closeAssetDetailModal() {
+        document.getElementById('assetDetailModal').classList.add('hidden');
+        currentModalAssetId = null;
+    }
+    
+    async function updateAssetDetailCharts(assetId, filterWalletId) {
+        // Mock historical data generation for asset detail charts
+        const asset = userAssets.find(a => a.id === assetId);
+        if (!asset) return;
+
+        const assetTxs = transactions.filter(t => t.assetId === assetId && (filterWalletId === 'all' || t.walletId === filterWalletId)).sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const priceHistory = [];
+        const quantityHistory = [];
+        const unrealizedProfitHistory = [];
+        
+        let runningQuantity = 0;
+        let runningCostBasis = 0;
+        
+        // Use a time range based on first and last transaction dates
+        const minDate = assetTxs.length > 0 ? new Date(assetTxs[0].date) : new Date();
+        const maxDate = new Date();
+        
+        for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            
+            // 1. Accumulate quantity and cost basis up to this date
+            assetTxs.filter(t => t.date === dateStr).forEach(t => {
+                const amount = t.amount;
+                const cost = amount * t.price * t.leverage;
+                
+                if (t.type === 'compra') {
+                    runningQuantity += amount;
+                    runningCostBasis += cost + getCommissionAmountInUSD(t.commissionAmount, t.commissionCurrency);
+                } else if (t.type === 'venta') {
+                    runningQuantity -= amount;
+                    // Simplified: just deduct the value of sold asset from cost basis
+                    const avgCostPerUnit = runningCostBasis / (runningQuantity + amount);
+                    runningCostBasis -= amount * avgCostPerUnit;
+                }
+            });
+            
+            // 2. Mock Price (For simplicity, if no real API is used, mock it)
+            // A real app would query historical price data here.
+            const mockPrice = (assetPrices[assetId] || 0) * (1 + (Math.sin(d.getTime() / (1000 * 60 * 60 * 24 * 5)) * 0.1) + (Math.random() * 0.05));
+
+            // 3. Calculate Unrealized Profit for this day
+            const unrealized = (runningQuantity * mockPrice) - runningCostBasis;
+            
+            // Push data points
+            priceHistory.push({ date: dateStr, value: mockPrice });
+            quantityHistory.push({ date: dateStr, value: runningQuantity });
+            unrealizedProfitHistory.push({ date: dateStr, value: runningQuantity > 0 ? unrealized : 0 });
+        }
+
+        // Chart render function helper
+        const renderSingleChart = (canvasId, data, label, currency, type = 'line') => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const config = {
+                type: type,
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: label,
+                        data: data.map(d => d.value),
+                        borderColor: currency === 'USD' ? '#3B82F6' : (currency === 'Profit' ? '#10B981' : '#F59E0B'),
+                        backgroundColor: currency === 'USD' ? 'rgba(59, 130, 246, 0.2)' : (currency === 'Profit' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'),
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                        y: {
+                            grid: { color: '#334155' },
+                            ticks: { 
+                                color: '#94a3b8', 
+                                callback: (value) => {
+                                    if (currency === 'USD' || currency === 'Profit') return formatCurrency(value, 'USD');
+                                    return value.toFixed(asset.assetType === 'crypto' ? 6 : 2);
+                                }
+                            }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            };
+            
+            if (canvasId === 'modalAssetPriceChart' && modalAssetPriceChart) modalAssetPriceChart.destroy();
+            if (canvasId === 'modalAssetQuantityChart' && modalAssetQuantityChart) modalAssetQuantityChart.destroy();
+            if (canvasId === 'modalAssetUnrealizedProfitChart' && modalAssetUnrealizedProfitChart) modalAssetUnrealizedProfitChart.destroy();
+
+            if (canvasId === 'modalAssetPriceChart') modalAssetPriceChart = new Chart(ctx, config);
+            if (canvasId === 'modalAssetQuantityChart') modalAssetQuantityChart = new Chart(ctx, config);
+            if (canvasId === 'modalAssetUnrealizedProfitChart') modalAssetUnrealizedProfitChart = new Chart(ctx, config);
+        };
+
+        renderSingleChart('modalAssetPriceChart', priceHistory, 'Precio (USD)', 'USD');
+        renderSingleChart('modalAssetQuantityChart', quantityHistory, 'Cantidad', 'Asset');
+        renderSingleChart('modalAssetUnrealizedProfitChart', unrealizedProfitHistory, 'Profit No Realizado', 'Profit');
+    }
+    
+    function getDailyUnrealizedProfits(assetId, filterWalletId = 'all') {
+        // Simplified: return unrealized profit only for today, or 0 for past days in a real app
+        // For the calendar mock, we distribute today's unrealized profit over the last 7 days
+        const dailyProfits = {};
+        const { assetUnrealizedProfits } = calculatePortfolioProfits();
+        const unrealizedToday = assetUnrealizedProfits[assetId] || 0;
+        
+        const today = new Date();
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            dailyProfits[dateStr] = unrealizedToday / 7; // Mock distribution
+        }
+        return dailyProfits;
+    }
+
+    function getDailyRealizedProfits(assetId, filterWalletId = 'all') {
+        const dailyProfits = {};
+
+        transactions.filter(t => t.assetId === assetId && t.type === 'venta' && (filterWalletId === 'all' || t.walletId === filterWalletId)).forEach(t => {
+            const txDate = t.date;
+            // Simple mock of realized profit (real calculation is complex)
+            const mockProfit = (t.amount * t.price * t.leverage * 0.1) - getCommissionAmountInUSD(t.commissionAmount, t.commissionCurrency);
+            
+            if (!dailyProfits[txDate]) dailyProfits[txDate] = 0;
+            dailyProfits[txDate] += mockProfit;
+        });
+
+        return dailyProfits;
+    }
+
+    function updateAssetDetailCalendars(assetId, filterWalletId) {
+        // Unrealized Calendar
+        const unrealizedProfits = getDailyUnrealizedProfits(assetId, filterWalletId);
+        renderCalendar('modalUnrealizedCalendarGrid', unrealizedProfits, currentModalUnrealizedCalendarDate, 'modalUnrealizedCurrentMonthYear', 'modalUnrealizedPrevMonthBtn', 'modalUnrealizedNextMonthBtn');
+        
+        // Realized Calendar
+        const realizedProfits = getDailyRealizedProfits(assetId, filterWalletId);
+        renderCalendar('modalRealizedCalendarGrid', realizedProfits, currentModalRealizedCalendarDate, 'modalRealizedCurrentMonthYear', 'modalRealizedPrevMonthBtn', 'modalRealizedNextMonthBtn');
+    }
+
+    // --- Price Banner Logic ---
+    
+    function renderBannerSettings() {
+        const container = document.getElementById('bannerAssetSelection');
+        container.innerHTML = '';
+
+        userAssets.filter(a => a.assetType === 'crypto' && a.coingeckoId).forEach(asset => {
+            const isChecked = bannerAssetIds.includes(asset.id);
+            container.innerHTML += `
+                <div class="flex items-center">
+                    <input id="banner-check-${asset.id}" type="checkbox" value="${asset.id}" class="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500" ${isChecked ? 'checked' : ''}>
+                    <label for="banner-check-${asset.id}" class="ml-2 text-sm font-medium text-gray-300">${asset.name} (${asset.symbol})</label>
+                </div>
+            `;
+        });
+    }
+
+    function saveBannerSettings() {
+        bannerAssetIds = Array.from(document.querySelectorAll('#bannerAssetSelection input:checked')).map(input => input.value);
+        saveState();
+        renderPriceBanner();
+        showError('Configuración del Banner guardada.');
+    }
+
+    function renderPriceBanner() {
+        const bannerEl = document.getElementById('priceBanner');
+        
+        let content = '';
+        const assetsToShow = userAssets.filter(a => bannerAssetIds.includes(a.id));
+
+        if (assetsToShow.length === 0) {
+            bannerEl.innerHTML = '<span class="text-slate-400 mx-6">Por favor, selecciona activos para el banner en Configuración.</span>';
+            return;
+        }
+
+        assetsToShow.forEach(asset => {
+            const price = assetPrices[asset.id] || 0;
+            const formattedPrice = formatCurrency(price, 'USD');
+            const change = (Math.random() * 10 - 5); // Mock change for visual appeal
+            const changeClass = change >= 0 ? 'text-green-400' : 'text-red-400';
+            const changeSign = change >= 0 ? '▲' : '▼';
+
+            content += `
+                <span class="mx-6 text-sm font-semibold">
+                    ${asset.symbol} ${asset.name}: ${formattedPrice} 
+                    <span class="${changeClass} ml-2">${changeSign} ${Math.abs(change).toFixed(2)}%</span>
+                </span>
+            `;
+        });
+
+        // Duplicate content for smooth marquee effect
+        bannerEl.innerHTML = content + content; 
+        
+        // Marquee animation is handled by CSS
+    }
+    
+    // --- Custom Confirmation Modal ---
+    
+    function showCustomConfirm(message, onConfirm) {
+        const modalId = 'customConfirmModal';
+        let modal = document.getElementById(modalId);
+
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = modalId;
+            modal.className = 'modal hidden';
+            modal.innerHTML = `
+                <div class="modal-content max-w-sm">
+                    <h3 class="text-xl font-bold mb-4 text-red-300">Confirmar Acción</h3>
+                    <p id="confirmMessage" class="mb-6 text-slate-300"></p>
+                    <div class="flex justify-end space-x-3">
+                        <button id="confirmCancelBtn" class="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg transition-all">Cancelar</button>
+                        <button id="confirmOkBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-all">Confirmar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        document.getElementById('confirmMessage').textContent = message;
+        modal.classList.remove('hidden');
+
+        const okBtn = document.getElementById('confirmOkBtn');
+        const cancelBtn = document.getElementById('confirmCancelBtn');
+
+        // Clone and replace buttons to clear event listeners
+        const newOkBtn = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+        const newCancelBtn = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+        newOkBtn.onclick = () => {
+            onConfirm();
+            modal.classList.add('hidden');
+        };
+
+        newCancelBtn.onclick = () => {
+            modal.classList.add('hidden');
+        };
+
+        // Close on outside click
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        };
+    }
+    
+    // --- Event Listeners ---
+
+    document.getElementById('assetsBtn').addEventListener('click', () => switchView('assets')); 
+    document.getElementById('profitBtn').addEventListener('click', () => switchView('profit'));
+    document.getElementById('stakingBtn').addEventListener('click', () => switchView('staking'));
+    document.getElementById('addBalanceBtn').addEventListener('click', () => switchView('addBalance'));
+    document.getElementById('historyBtn').addEventListener('click', () => switchView('history'));
+    document.getElementById('chartsBtn').addEventListener('click', () => switchView('charts'));
+    document.getElementById('settingsBtn').addEventListener('click', () => switchView('settings'));
+    document.getElementById('aiAssistantBtn').addEventListener('click', () => switchView('aiAssistant')); 
+
+    // AI Assistant Event Listener
+    document.getElementById('sendAiQueryBtn').addEventListener('click', sendAiQuery);
+
+    // PWA Install Prompt Listener
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        const installBanner = document.getElementById('pwaInstallBanner');
+        if (!isPromptDismissed) {
+            installBanner.classList.remove('hidden');
+            setTimeout(() => installBanner.classList.add('show'), 10); 
+        }
+    });
+
+    document.getElementById('installAppBtn').addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response to the install prompt: ${outcome}`);
+            deferredPrompt = null;
+            document.getElementById('pwaInstallBanner').classList.remove('show');
+            document.getElementById('pwaInstallBanner').classList.add('hidden');
+        }
+    });
+
+    document.getElementById('dismissPwaBannerBtn').addEventListener('click', () => {
+        const installBanner = document.getElementById('pwaInstallBanner');
+        installBanner.classList.remove('show');
+        installBanner.classList.add('hidden');
+        isPromptDismissed = true;
+        localStorage.setItem('pwaPromptDismissed', 'true');
+    });
+
+    function switchView(viewName) {
+        document.querySelectorAll('div[id$="View"]').forEach(view => view.classList.add('hidden'));
+        document.getElementById(`${viewName}View`).classList.remove('hidden');
+
+        document.querySelectorAll('button[id$="Btn"]').forEach(btn => {
+            if (btn.id !== 'installAppBtn' && btn.id !== 'dismissPwaBannerBtn') {
+                btn.classList.remove('bg-blue-600', 'text-white', 'shadow-lg');
+                btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+            }
+        });
+        document.getElementById(`${viewName}Btn`).classList.add('bg-blue-600', 'text-white', 'shadow-lg');
+        document.getElementById(`${viewName}Btn`).classList.remove('bg-slate-700', 'hover:bg-slate-600');
+
+        currentView = viewName;
+        if (viewName === 'charts') updateCharts();
+        if (viewName === 'history') updateTransactionHistory();
+        if (viewName === 'profit') updateAssetProfitList(); 
+        if (viewName === 'settings') {
+            renderManagedAssetList(); 
+            renderManagedWalletList();
+            renderBannerSettings(); 
+            cancelAssetEdit(); 
+        }
+        if (viewName === 'addBalance') {
+            updateManualBalancesList();
+        }
+        if (viewName === 'staking') {
+            updateStakingAssetSelect();
+            renderStakingEntries();
+        }
+    }
+    
+    document.getElementById('walletFilterSelect').addEventListener('change', (e) => updateAssetHoldingsDisplay(e.target.value)); 
+    document.getElementById('transactionAsset').addEventListener('change', (e) => { 
+        selectedAsset = e.target.value; 
+        updateTransactionFormPrice();
+    });
+    document.getElementById('addTransaction').addEventListener('click', saveOrUpdateTransaction);
+    document.getElementById('cancelEdit').addEventListener('click', cancelEdit);
+    document.getElementById('refreshPrices').addEventListener('click', fetchAssetPrices); 
+    document.getElementById('prevMonthBtn').addEventListener('click', () => changeGlobalMonth(-1));
+    document.getElementById('nextMonthBtn').addEventListener('click', () => changeGlobalMonth(1));
+    document.getElementById('modalUnrealizedPrevMonthBtn').addEventListener('click', () => changeModalUnrealizedMonth(-1));
+    document.getElementById('modalUnrealizedNextMonthBtn').addEventListener('click', () => changeModalUnrealizedMonth(1));
+    document.getElementById('modalRealizedPrevMonthBtn').addEventListener('click', () => changeModalRealizedMonth(-1));
+    document.getElementById('modalRealizedNextMonthBtn').addEventListener('click', () => changeModalRealizedMonth(1));
+    document.getElementById('addManualBalance').addEventListener('click', addManualBalance);
+    document.getElementById('withdrawManualBalanceBtn').addEventListener('click', withdrawManualBalance);
+    document.getElementById('saveOrUpdateAssetBtn').addEventListener('click', saveOrUpdateAsset); 
+    document.getElementById('cancelAssetEditBtn').addEventListener('click', cancelAssetEdit); 
+    document.getElementById('addWalletBtn').addEventListener('click', addWallet);
+    document.getElementById('assetType').addEventListener('change', function() {
+        const assetType = this.value;
+        const identifierInput = document.getElementById('addAssetIdentifier');
+        if (assetType === 'crypto') {
+            identifierInput.placeholder = 'ID CoinGecko (Ej: cardano)';
+        } else {
+            identifierInput.placeholder = 'Símbolo Stock (Ej: AAPL)';
+        }
+    });
+    document.getElementById('walletImageInput').addEventListener('change', function(event) {
+        const preview = document.getElementById('walletImagePreview');
+        if (event.target.files.length > 0) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.classList.add('hidden');
+            preview.src = '#';
+        }
+    });
+    document.getElementById('addAssetImageInput').addEventListener('change', function(event) { 
+        const preview = document.getElementById('addAssetImagePreview'); 
+        if (event.target.files.length > 0) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.classList.add('hidden');
+            preview.src = '#';
+        }
+    });
+    document.getElementById('addStakingEntryBtn').addEventListener('click', addStakingEntry);
+    document.getElementById('stakingAssetImageInput').addEventListener('change', function(event) {
+        const preview = document.getElementById('stakingAssetImagePreview');
+        if (event.target.files.length > 0) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.classList.add('hidden');
+            preview.src = '#';
+        }
+    });
+    document.getElementById('saveBannerSettingsBtn').addEventListener('click', saveBannerSettings);
+    document.getElementById('closeAssetDetailModal').addEventListener('click', closeAssetDetailModal); 
+    window.addEventListener('click', (event) => {
+        if (event.target === document.getElementById('assetDetailModal')) { 
+            closeAssetDetailModal(); 
+        }
+    });
+
+    // --- Initial Setup on Page Load ---
+    window.onload = async function() {
+        loadState(); 
+        await fetchArsRate(); 
+        document.getElementById('transactionDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('stakingDate').value = new Date().toISOString().split('T')[0];
+        await fetchAssetPrices(); 
+        setInterval(fetchAssetPrices, 60000); 
+        updateAllUI(); 
+        switchView('assets'); 
+    };
+  </script>
+</body>
+</html>
