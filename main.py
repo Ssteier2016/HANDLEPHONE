@@ -21,7 +21,7 @@ from pydub import AudioSegment
 from dotenv import load_dotenv
 from cachetools import TTLCache
 from pydantic import BaseModel, validator
-from passlib.context import CryptContext
+import bcrypt
 from gtts import gTTS
 
 # Configurar logging
@@ -48,7 +48,7 @@ app_state = {
 }
 
 # Configurar hash de contraseñas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt es usado directamente para evitar problemas de compatibilidad en python 3.11+
 
 # Configurar CORS
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://handyhandle.onrender.com").split(",")
@@ -184,7 +184,7 @@ async def health_check():
 
 @app.get("/sw.js")
 async def get_service_worker():
-    return FileResponse("sw.js", media_type="application/javascript")
+    return FileResponse("handlysw.js", media_type="application/javascript")
 
 # Inicializar base de datos SQLite
 def init_db():
@@ -238,7 +238,7 @@ async def register_user(request: RegisterRequest):
             logger.error(f"Usuario ya registrado: {surname}")
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
-        hashed_password = pwd_context.hash(password)
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
                   (surname, employee_id, sector, hashed_password))
         conn.commit()
@@ -303,7 +303,8 @@ async def login_user(request: LoginRequest):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
     stored_password = user[3]
-    if not pwd_context.verify(password, stored_password):
+    stored_bytes = stored_password.encode('utf-8') if isinstance(stored_password, str) else stored_password
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_bytes):
         logger.error(f"Contraseña incorrecta para {surname}: {employee_id}")
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
