@@ -1,19 +1,38 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#2196f3">
-    <title>HANDLEPHONE - Comunicación Aeronáutica</title>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#030712">
+    <title>HANDLEPHONE - Rampa SABE</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Orbitron', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts & Leaflet -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/templates/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
     <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
     <link rel="manifest" href="/templates/manifest.json">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -29,17 +48,40 @@
         }
     </script>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-full font-sans antialiased flex flex-col items-center justify-center p-4 relative selection:bg-sky-500 selection:text-white">
+    
+    <!-- Red de coordenadas / Radar Grid Background Effect -->
+    <div class="fixed inset-0 bg-[radial-gradient(ellipse_at_center,rgba(15,23,42,0.65),rgba(3,7,18,1))] z-[-10] pointer-events-none"></div>
+    <div class="fixed inset-0 bg-[linear-gradient(rgba(30,41,59,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.06)_1px,transparent_1px)] bg-[size:30px_30px] z-[-9] pointer-events-none"></div>
+    
     <!-- Pantalla de autenticación -->
-    <div id="auth-section" style="display: block;">
-        <img src="/templates/handlywalkie-talkie.png" alt="HANDLEPHONE Logo" class="logo">
+    <div id="auth-section" class="w-full max-w-md bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6" style="display: block;">
+        <div class="text-center">
+            <img src="/templates/handlywalkie-talkie.png" alt="HANDLEPHONE Logo" class="h-16 w-16 mx-auto mb-3 object-contain">
+            <h1 class="text-3xl font-extrabold text-white tracking-wider font-sans">HANDLEPHONE</h1>
+            <p class="text-xs text-sky-400 font-mono mt-1 uppercase tracking-widest">Consola de Rampa Unificada</p>
+        </div>
+        
+        <!-- Aerolineas & LATAM Logos side by side -->
+        <div class="flex justify-center items-center gap-4 bg-slate-950/60 p-3 rounded-xl border border-slate-800/40">
+            <div class="bg-white rounded-lg p-1.5 h-10 w-20 flex items-center justify-center shadow-md">
+                <img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="Aerolíneas Argentinas" class="h-7 object-contain">
+            </div>
+            <div class="text-slate-600 text-xs font-bold font-mono">&amp;</div>
+            <div class="bg-white rounded-lg p-1.5 h-10 w-20 flex items-center justify-center shadow-md">
+                <img src="https://i.pinimg.com/1200x/6a/f0/e0/6af0e032470f2d35acb5e3f225fe1da7.jpg" alt="LATAM" class="h-7 object-contain">
+            </div>
+        </div>
+        
+        <div id="error-message" class="text-red-400 text-sm text-center bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl hidden"></div>
+
         <!-- Formulario de registro -->
-        <form id="register-form" style="display: block;">
-            <h1>Registro</h1>
-            <input id="surname" placeholder="Apellido" required aria-label="Apellido">
-            <input id="employee_id" placeholder="Legajo" type="number" maxlength="5" required aria-label="Legajo">
-            <select id="sector" required aria-label="Selecciona una función">
-                <option value="" disabled selected>Selecciona una función</option>
+        <form id="register-form" class="space-y-4" style="display: block;">
+            <h2 class="text-md font-bold text-slate-300 border-b border-slate-800 pb-2">Registro de Operador</h2>
+            <input id="surname" placeholder="Apellido" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+            <input id="employee_id" placeholder="Legajo (5 o 6 dígitos)" type="number" maxlength="6" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono">
+            <select id="sector" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-300 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+                <option value="" disabled selected>Selecciona tu función/sector</option>
                 <option value="Maletero">Maletero</option>
                 <option value="Cintero">Cintero</option>
                 <option value="Tractorista">Tractorista</option>
@@ -51,181 +93,308 @@
                 <option value="Pañolero">Pañolero</option>
                 <option value="Combustible">Combustible</option>
             </select>
-            <input id="password" type="password" placeholder="Contraseña" required aria-label="Contraseña">
-            <button type="submit" aria-label="Registrarse">Registrarse</button>
-            <p><a href="#" id="show-login">¿Ya tienes cuenta? Inicia sesión</a></p>
+            <input id="password" type="password" placeholder="Contraseña (mín. 4 caracteres)" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+            <button type="submit" class="w-full bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-semibold py-2.5 rounded-xl transition duration-200 shadow-md shadow-sky-600/10 active:scale-[0.98]">Registrar y Entrar</button>
+            <p class="text-center text-xs text-slate-400 mt-2"><a href="#" id="show-login" class="text-sky-400 hover:underline">¿Ya tienes cuenta? Inicia sesión aquí</a></p>
         </form>
+
         <!-- Formulario de inicio de sesión -->
-        <form id="login-form" style="display: none;">
-            <h1>Iniciar Sesión</h1>
-            <input id="surname-login" placeholder="Apellido" required aria-label="Apellido">
-            <input id="employee_id-login" placeholder="Legajo" type="number" maxlength="5" required aria-label="Legajo">
-            <input id="password-login" type="password" placeholder="Contraseña" required aria-label="Contraseña">
-            <button type="submit" aria-label="Iniciar Sesión">Iniciar Sesión</button>
-            <p><a href="#" id="show-register">¿No tienes cuenta? Regístrate</a></p>
+        <form id="login-form" class="space-y-4" style="display: none;">
+            <h2 class="text-md font-bold text-slate-300 border-b border-slate-800 pb-2">Iniciar Sesión</h2>
+            <input id="surname-login" placeholder="Apellido" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+            <input id="employee_id-login" placeholder="Legajo" type="number" maxlength="6" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono">
+            <input id="password-login" type="password" placeholder="Contraseña" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono">
+            <button type="submit" class="w-full bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-semibold py-2.5 rounded-xl transition duration-200 shadow-md shadow-sky-600/10 active:scale-[0.98]">Iniciar Sesión</button>
+            <p class="text-center text-xs text-slate-400 mt-2"><a href="#" id="show-register" class="text-sky-400 hover:underline">¿No tienes cuenta? Regístrate aquí</a></p>
         </form>
     </div>
 
-    <!-- Pantalla principal -->
-    <div id="main" style="display: none;">
-        <button id="logout-button" class="logout-btn" aria-label="Cerrar sesión"></button>
-        <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
-        <h1>HandyHandle</h1>
-        <div id="error-message" style="color: red; display: none; text-align: center;"></div>
-        <div id="user-profile" style="font-size: 16px; color: #4682B4; margin-bottom: 10px;"></div>
-        <h2>Comunicación Aeronáutica</h2>
-        <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
-        <button id="return-to-group-btn" style="display: none;" aria-label="Volver al Grupo">Volver al Grupo</button>
-        <div id="search-container">
-            <input type="text" id="search-input" placeholder="Ej. Vuelo AR1234 o matrícula" aria-label="Buscar vuelos">
-            <button id="search-button" aria-label="Consultar">Consultar</button>
-        </div>
-        <button id="toggle-departure-announcements">Activar anuncios de despegues</button>
-        <button id="toggle-announcements">Activar anuncios de llegadas</button>
-        <button id="toggle-token-limit">Desactivar límite de tokens</button>
-        <button id="updates-toggle" class="toggle-btn" aria-label="Activar/desactivar actualizaciones de vuelos">Activar Actualizaciones</button>
-        <div id="flights-window">
-            <h3>Información de Vuelos</h3>
-            <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
-                <div id="departures" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
-                    <h4>Salidas</h4>
-                    <table class="tams-table">
-                        <thead>
-                            <tr>
-                                <th>Matrícula</th>
-                                <th>N° Vuelo</th>
-                                <th>Hr Programada</th>
-                                <th>Posición</th>
-                                <th>Destino</th>
-                                <th>Hr Real</th>
-                                <th>Ver Más</th>
-                            </tr>
-                        </thead>
-                        <tbody id="departures-table"></tbody>
-                    </table>
+    <!-- Pantalla principal (Dashboard) -->
+    <div id="main" class="w-full max-w-7xl bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative flex-col" style="display: none;">
+        
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="flex items-center gap-3">
+                <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="h-8 w-8 object-contain">
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wide text-white">HandyHandle</h1>
+                    <p class="text-xs text-sky-400 font-semibold tracking-wider font-mono">PANEL DE COMUNICACIÓN Y RAMPA</p>
                 </div>
-                <div id="arrivals" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
-                    <h4>Llegadas</h4>
-                    <table class="tams-table">
-                        <thead>
-                            <tr>
-                                <th>Matrícula</th>
-                                <th>N° Vuelo</th>
-                                <th>Hr Programada</th>
-                                <th>Posición</th>
-                                <th>Origen</th>
-                                <th>Hr Real</th>
-                                <th>Ver Más</th>
-                            </tr>
-                        </thead>
-                        <tbody id="arrivals-table"></tbody>
-                    </table>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-4">
+                <div id="user-profile" class="text-sm bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800/80 text-slate-300 font-sans flex items-center gap-2"></div>
+                <button id="logout-button" class="logout-btn rounded-xl" aria-label="Cerrar sesión"></button>
+            </div>
+        </div>
+
+        <div id="swipe-hint" class="text-center text-xs text-slate-400 py-1 bg-sky-500/5 rounded border border-sky-500/10 hidden"></div>
+        <button id="return-to-group-btn" class="w-full bg-amber-600/90 hover:bg-amber-500 text-white font-bold py-2 rounded-xl border border-amber-700 transition shadow-lg" style="display: none;">Volver al Grupo Activo</button>
+
+        <!-- Main Dashboard Grid Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Side: Flights and Search (2/3 width on lg) -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Search container -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row gap-3 items-center">
+                    <div class="relative w-full sm:w-auto sm:flex-grow">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">🔍</span>
+                        <input type="text" id="search-input" placeholder="Ej. AR1234, LV-XYZ, etc." class="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-all font-sans text-sm">
+                    </div>
+                    <button id="search-button" class="w-full sm:w-32 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold py-2 rounded-xl transition border border-slate-700">Buscar</button>
+                </div>
+
+                <!-- Flight Info Module -->
+                <div id="flights-window" class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <h3 class="text-sm font-extrabold uppercase text-slate-300 font-mono">Tablero de Operaciones SABE</h3>
+                        <button id="updates-toggle" class="toggle-btn w-auto bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold px-3 py-1 rounded border border-slate-700 m-0">Activar Actualizaciones</button>
+                    </div>
+
+                    <!-- Departures and Arrivals Panels -->
+                    <div class="space-y-6">
+                        <!-- Salidas -->
+                        <div id="departures" class="space-y-2">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-amber-500">Partidas (Salidas)</h4>
+                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
+                                            <th class="px-4 py-2.5">Matrícula</th>
+                                            <th class="px-4 py-2.5">N° Vuelo</th>
+                                            <th class="px-4 py-2.5">Hora Prog</th>
+                                            <th class="px-4 py-2.5">Posición</th>
+                                            <th class="px-4 py-2.5">Destino</th>
+                                            <th class="px-4 py-2.5">Hora Real</th>
+                                            <th class="px-4 py-2.5">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="departures-table" class="divide-y divide-slate-800/50"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Llegadas -->
+                        <div id="arrivals" class="space-y-2">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-emerald-500">Arribos (Llegadas)</h4>
+                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
+                                            <th class="px-4 py-2.5">Matrícula</th>
+                                            <th class="px-4 py-2.5">N° Vuelo</th>
+                                            <th class="px-4 py-2.5">Hora Prog</th>
+                                            <th class="px-4 py-2.5">Posición</th>
+                                            <th class="px-4 py-2.5">Origen</th>
+                                            <th class="px-4 py-2.5">Hora Real</th>
+                                            <th class="px-4 py-2.5">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="arrivals-table" class="divide-y divide-slate-800/50"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Action Switches -->
+                <div class="flex flex-wrap gap-3 bg-slate-950/40 p-4 border border-slate-800/60 rounded-2xl">
+                    <button id="toggle-departure-announcements" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Anuncios Despegue Off</button>
+                    <button id="toggle-announcements" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Anuncios Llegada Off</button>
+                    <button id="toggle-token-limit" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Límite Tokens Activo</button>
+                </div>
+            </div>
+
+            <!-- Right Side: Communications and Groups (1/3 width on lg) -->
+            <div class="space-y-6">
+                
+                <!-- Walkie-Talkie Button and Mute Panel -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col items-center justify-center space-y-4 shadow-xl">
+                    <span class="text-xs text-sky-400 font-mono tracking-widest uppercase">Canal Walkie-Talkie</span>
+                    <div class="relative w-28 h-28 flex items-center justify-center">
+                        <button id="talk" class="z-10 focus:outline-none" aria-label="Hablar"></button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button id="mute" class="focus:outline-none active:scale-95" aria-label="Mutear"></button>
+                        <span class="text-xs text-slate-400 font-medium">Silenciar otros audios</span>
+                    </div>
+                </div>
+
+                <!-- Chat & Conversation -->
+                <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-3">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Transcripciones en vivo</h3>
+                    <div id="chat-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- Private Groups Console -->
+                <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Grupo Privado</h3>
+                    <div id="group-join" class="space-y-3">
+                        <input id="group-id" placeholder="Nombre del grupo" maxlength="20" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="group-private" class="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0">
+                            <label for="group-private" class="text-xs text-slate-400 cursor-pointer">Hacer grupo privado</label>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="join-group-btn" class="bg-sky-600 hover:bg-sky-500 text-white font-semibold py-2 rounded-xl text-xs transition">Unirme</button>
+                            <button id="create-group-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 rounded-xl text-xs transition border border-slate-700">Crear Grupo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extra controls: Radar, Historial, Users -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-4 text-center">
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="radar" class="w-full bg-slate-900 hover:bg-slate-800 text-sky-400 border border-sky-500/20 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📡 Ver Radar</button>
+                        <button id="history" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📜 Historial</button>
+                    </div>
+                    <div id="users" class="text-xs font-mono text-slate-400 bg-slate-950/80 py-1.5 px-3 rounded-lg border border-slate-800/60">Usuarios conectados: 0</div>
                 </div>
             </div>
         </div>
-        <div id="chat-window">
-            <h3>Conversación</h3>
-            <div id="chat-list"></div>
-        </div>
-        <div id="group-join">
-            <label for="group-id">Nombre del grupo</label>
-            <input id="group-id" placeholder="Nombre del grupo" maxlength="20" aria-label="Nombre del grupo">
-            <label for="group-private">Grupo Privado</label>
-            <input type="checkbox" id="group-private" aria-label="Grupo Privado">
-            <button id="join-group-btn" aria-label="Unirme al grupo">Unirme</button>
-            <button id="create-group-btn" aria-label="Crear grupo">Crear Grupo</button>
-        </div>
-        <button id="talk" aria-label="Hablar"></button>
-        <button id="mute" class="active" aria-label="Mutear"></button>
-        <button id="radar" aria-label="Ver radar">Radar</button>
-        <button id="history" aria-label="Ver historial">Historial</button>
-        <div id="users">Usuarios conectados: 0</div>
     </div>
 
-    <!-- Pantalla de grupo -->
-    <div id="group-screen" style="display: none;">
-        <button id="back-to-main" aria-label="Volver">
-            <img src="/templates/volver.png" alt="Volver" class="back-icon">
-        </button>
-        <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="logo">
-        <h2>Grupo Privado</h2>
-        <div id="swipe-hint" style="font-size: 12px; color: #4682B4; margin-bottom: 10px;"></div>
-        <div id="group-flights-window">
-            <h3>Datos de Vuelos</h3>
-            <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
-                <div id="group-departures" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
-                    <h4>Salidas</h4>
-                    <table class="tams-table">
-                        <thead>
-                            <tr>
-                                <th>Matrícula</th>
-                                <th>Número de Vuelo</th>
-                                <th>STA</th>
-                                <th>Posición</th>
-                                <th>Destino</th>
-                                <th>Hora Real</th>
-                                <th>Ver Más</th>
-                            </tr>
-                        </thead>
-                        <tbody id="group-departures-table"></tbody>
-                    </table>
+    <!-- Pantalla de grupo privado -->
+    <div id="group-screen" class="w-full max-w-7xl bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative flex-col" style="display: none;">
+        
+        <!-- Group Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="flex items-center gap-3">
+                <button id="back-to-main" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition" aria-label="Volver">
+                    <img src="/templates/volver.png" alt="Volver" class="h-4 w-4">
+                </button>
+                <div>
+                    <h2 id="group-title-label" class="text-xl font-extrabold text-white">Grupo de Rampa</h2>
+                    <p class="text-xs text-amber-500 font-semibold tracking-wider font-mono">CANAL PRIVADO DE COMUNICACIONES</p>
                 </div>
-                <div id="group-arrivals" style="width: 48%; min-width: 300px; margin-bottom: 20px;">
-                    <h4>Llegadas</h4>
-                    <table class="tams-table">
-                        <thead>
-                            <tr>
-                                <th>Matrícula</th>
-                                <th>Número de Vuelo</th>
-                                <th>STA</th>
-                                <th>Posición</th>
-                                <th>Origen</th>
-                                <th>Hora Real</th>
-                                <th>Ver Más</th>
-                            </tr>
-                        </thead>
-                        <tbody id="group-arrivals-table"></tbody>
-                    </table>
+            </div>
+            <button id="leave-group-btn" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-xs font-bold border border-red-500/20 transition m-0 w-auto">Salir del Grupo</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Side: Group Flights -->
+            <div class="lg:col-span-2 space-y-6">
+                <div id="group-flights-window" class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
+                    <h3 class="text-sm font-extrabold uppercase text-slate-300 font-mono border-b border-slate-800 pb-2">Panel Operativo del Grupo</h3>
+                    
+                    <div class="space-y-6">
+                        <!-- Salidas -->
+                        <div id="group-departures" class="space-y-2">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-amber-500">Salidas (Partidas)</h4>
+                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
+                                            <th class="px-4 py-2.5">Matrícula</th>
+                                            <th class="px-4 py-2.5">N° Vuelo</th>
+                                            <th class="px-4 py-2.5">STA</th>
+                                            <th class="px-4 py-2.5">Posición</th>
+                                            <th class="px-4 py-2.5">Destino</th>
+                                            <th class="px-4 py-2.5">Hora Real</th>
+                                            <th class="px-4 py-2.5">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="group-departures-table" class="divide-y divide-slate-800/50"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Llegadas -->
+                        <div id="group-arrivals" class="space-y-2">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-emerald-500">Llegadas (Arribos)</h4>
+                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
+                                            <th class="px-4 py-2.5">Matrícula</th>
+                                            <th class="px-4 py-2.5">N° Vuelo</th>
+                                            <th class="px-4 py-2.5">STA</th>
+                                            <th class="px-4 py-2.5">Posición</th>
+                                            <th class="px-4 py-2.5">Origen</th>
+                                            <th class="px-4 py-2.5">Hora Real</th>
+                                            <th class="px-4 py-2.5">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="group-arrivals-table" class="divide-y divide-slate-800/50"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Group Chat -->
+            <div class="space-y-6">
+                <!-- Group Walkie Talkie -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col items-center justify-center space-y-4">
+                    <span class="text-xs text-amber-500 font-mono tracking-widest uppercase">Canal de Grupo</span>
+                    <div class="relative w-28 h-28 flex items-center justify-center">
+                        <button id="group-talk" class="z-10 focus:outline-none" aria-label="Hablar en grupo"></button>
+                    </div>
+                    
+                    <div class="flex flex-col gap-2 w-full">
+                        <button id="mute-non-group" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold py-1.5 rounded-xl border border-slate-800 text-xs transition">Mutear fuera del grupo</button>
+                        <div class="flex items-center justify-center gap-3 mt-1">
+                            <button id="group-mute" class="focus:outline-none active:scale-95" aria-label="Mutear grupo"></button>
+                            <span class="text-xs text-slate-400 font-medium">Silenciar audio grupo</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group Chat Window -->
+                <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-3">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Historial del Grupo</h3>
+                    <div id="group-chat-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- Group Navigation and Status -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="group-radar" class="bg-slate-900 hover:bg-slate-850 text-sky-400 border border-sky-500/20 py-2 rounded-xl font-semibold text-xs transition m-0">📡 Radar</button>
+                        <button id="group-history" class="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 py-2 rounded-xl font-semibold text-xs transition m-0">📜 Historial</button>
+                    </div>
+                    <div id="group-users" class="text-xs font-mono text-slate-400 text-center bg-slate-950/80 py-1.5 px-3 rounded-lg border border-slate-800/60">Usuarios conectados: 0</div>
                 </div>
             </div>
         </div>
-        <div id="group-chat-window">
-            <h3>Conversación</h3>
-            <div id="group-chat-list"></div>
-        </div>
-        <button id="group-talk" aria-label="Hablar en grupo"></button>
-        <button id="mute-non-group" aria-label="Mutear fuera del grupo">Mutear grupo</button>
-        <button id="group-mute" class="active" aria-label="Mutear grupo">Mutear Grupo</button>
-        <button id="group-radar" aria-label="Ver radar del grupo">Radar</button>
-        <button id="group-history" aria-label="Ver historial del grupo">Historial</button>
-        <button id="leave-group-btn" aria-label="Salir del grupo">Salir del Grupo</button>
-        <div id="group-users">Usuarios conectados: 0</div>
     </div>
 
     <!-- Pantalla de radar -->
-    <div id="radar-screen" style="display: none;">
-        <div class="radar-header">
-            <h2>Radar en Vivo</h2>
-            <input id="search-bar" placeholder="Buscar matrícula o vuelo (4 caracteres)" maxlength="10" aria-label="Buscar vuelo o matrícula">
-            <button class="close-btn" aria-label="Cerrar radar">✖</button>
+    <div id="radar-screen" class="w-full max-w-5xl bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl p-4 shadow-2xl space-y-4 flex flex-col h-[85vh] relative" style="display: none;">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 gap-4">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">📡</span>
+                <h2 class="text-lg font-bold text-white">Radar SABE en Vivo</h2>
+            </div>
+            <div class="flex-grow max-w-sm">
+                <input id="search-bar" placeholder="Buscar matrícula o vuelo..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm font-sans">
+            </div>
+            <button class="close-btn p-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 text-red-400 transition w-auto m-0" aria-label="Cerrar radar">✖</button>
         </div>
-        <div id="map" style="height: 400px;"></div>
+        <div id="map" class="w-full flex-grow rounded-xl overflow-hidden border border-slate-800 shadow-inner" style="height: 400px;"></div>
     </div>
 
     <!-- Pantalla de historial -->
-    <div id="history-screen" style="display: none;">
-        <button class="logout-btn" aria-label="Cerrar sesión"></button>
-        <button aria-label="Volver">Volver</button>
-        <h2>Historial</h2>
-        <div id="history-list"></div>
+    <div id="history-screen" class="w-full max-w-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 flex flex-col relative" style="display: none;">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2"><span>📜</span> Historial de Transmisiones</h2>
+            <button id="history-back-btn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 text-xs font-semibold transition w-auto m-0" aria-label="Volver">Volver</button>
+        </div>
+        <div id="history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1"></div>
     </div>
 
     <!-- Modal para detalles de vuelo -->
-    <div id="flight-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-        <div style="background: white; margin: 10% auto; padding: 20px; max-width: 500px; border-radius: 8px;">
-            <h3>Detalles del Vuelo</h3>
-            <div id="flight-details-content"></div>
-            <button aria-label="Cerrar detalles">Cerrar</button>
+    <div id="flight-details-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300" style="display: none;">
+        <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 transform scale-95 transition-all">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 class="text-md font-bold text-white flex items-center gap-2"><span>✈</span> Detalles del Vuelo</h3>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-red-400 text-lg">✖</button>
+            </div>
+            <div id="flight-details-content" class="space-y-2 text-sm text-slate-300"></div>
+            <button id="close-modal-footer-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2 rounded-xl transition border border-slate-700">Cerrar</button>
         </div>
     </div>
 

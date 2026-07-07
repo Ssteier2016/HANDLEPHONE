@@ -34,6 +34,26 @@ function isTargetAirline(flightNumber) {
     return prefixes.some(p => flightNumber.toUpperCase().startsWith(p));
 }
 
+function getAirlineLogoHtml(flightNumber) {
+    if (!flightNumber) return '';
+    const fn = flightNumber.trim().toUpperCase();
+    
+    // Aerolineas Argentinas logo
+    if (fn.startsWith('AR') || fn.startsWith('ARG')) {
+        return `<img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="AR Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
+    }
+    
+    // LATAM divisions logo
+    const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
+    const matchesLatam = latamPrefixes.some(pref => fn.startsWith(pref));
+    if (matchesLatam) {
+        return `<img src="https://i.pinimg.com/1200x/6a/f0/e0/6af0e032470f2d35acb5e3f225fe1da7.jpg" alt="LA Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
+    }
+    
+    // Fallback: plane icon
+    return `<span class="inline-block mr-2 text-slate-500">✈</span>`;
+}
+
 function showError(message) {
     const errorDiv = document.getElementById('error-message');
     if (errorDiv) {
@@ -460,6 +480,16 @@ function backToMainFromGroup() {
     updateSwipeHint();
 }
 
+function backToMainFromHistory() {
+    document.getElementById('history-screen').style.display = 'none';
+    if (currentGroup) {
+        document.getElementById('group-screen').style.display = 'block';
+    } else {
+        document.getElementById('main').style.display = 'block';
+    }
+    updateSwipeHint();
+}
+
 function showHistory() {
     document.getElementById('main').style.display = 'none';
     document.getElementById('history-screen').style.display = 'block';
@@ -582,9 +612,9 @@ function initMap() {
     }
     try {
         map = L.map('map').setView([-34.5597, -58.4116], 10);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        L.tileLayer('https://{s.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap'
+            attribution: '© OpenStreetMap, © CartoDB'
         }).addTo(map);
         const aeroparqueIcon = L.icon({
             iconUrl: '/templates/airport.png',
@@ -663,19 +693,21 @@ function updateFlightInfo() {
         console.log(`Vuelos para ${id}:`, flights);
         flights.forEach(flight => {
             const row = document.createElement('tr');
-            row.className = 'tams-row';
+            row.className = 'tams-row border-b border-slate-800 hover:bg-slate-900/40 transition duration-150';
             const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
             const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
             const originDest = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
             row.innerHTML = `
-                <td>${flight.registration || 'N/A'}</td>
-                <td>${flight.flight_number || 'N/A'}</td>
-                <td>${sta}</td>
-                <td>${flight.position || 'N/A'}</td>
-                <td>${originDest}</td>
-                <td>${eta}</td>
-                <td><button class="tams-details-btn" onclick="showFlightDetails(${JSON.stringify(flight).replace(/"/g, '"')})">Ver Más</button></td>
+                <td class="px-4 py-3 text-slate-200 font-mono text-xs">${flight.registration || 'N/A'}</td>
+                <td class="px-4 py-3 text-slate-100 font-bold text-xs flex items-center">${getAirlineLogoHtml(flight.flight_number)}${flight.flight_number || 'N/A'}</td>
+                <td class="px-4 py-3 text-slate-300 text-xs">${sta}</td>
+                <td class="px-4 py-3 text-slate-100 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold border border-slate-700">${flight.position || 'N/A'}</span></td>
+                <td class="px-4 py-3 text-slate-300 text-xs">${originDest}</td>
+                <td class="px-4 py-3 text-slate-300 text-xs font-mono">${eta}</td>
+                <td class="px-4 py-3 text-xs"><button class="tams-details-btn px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[10px] font-medium transition duration-200">Ver Más</button></td>
             `;
+            const btn = row.querySelector('.tams-details-btn');
+            btn.addEventListener('click', () => showFlightDetails(flight));
             tbody.appendChild(row);
         });
     });
@@ -932,6 +964,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backToMainBtn) backToMainBtn.addEventListener('click', backToMainFromGroup);
     const radarCloseBtn = document.querySelector('#radar-screen .close-btn');
     if (radarCloseBtn) radarCloseBtn.addEventListener('click', backToMainFromRadar);
+    
+    // Bindings de modal close e historial back agregados para solucionar fallas de navegación originales
+    document.getElementById('close-modal-btn')?.addEventListener('click', closeFlightDetails);
+    document.getElementById('close-modal-footer-btn')?.addEventListener('click', closeFlightDetails);
+    document.getElementById('history-back-btn')?.addEventListener('click', backToMainFromHistory);
     const updatesToggleBtn = document.getElementById('updates-toggle');
     if (updatesToggleBtn) updatesToggleBtn.addEventListener('click', toggleUpdates);
     const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
