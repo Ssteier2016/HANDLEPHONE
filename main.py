@@ -133,8 +133,8 @@ class RegisterRequest(BaseModel):
 
     @validator('password')
     def validate_password(cls, v):
-        if len(v) < 6:
-            raise ValueError('La contraseña debe tener al menos 6 caracteres')
+        if len(v) < 4:
+            raise ValueError('La contraseña debe tener al menos 4 caracteres')
         return v
 
 class LoginRequest(BaseModel):
@@ -181,6 +181,10 @@ async def root_head():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/sw.js")
+async def get_service_worker():
+    return FileResponse("sw.js", media_type="application/javascript")
 
 # Inicializar base de datos SQLite
 def init_db():
