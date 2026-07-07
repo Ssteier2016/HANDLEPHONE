@@ -528,7 +528,8 @@ async def get_combined_flights() -> List[Dict]:
                 "position": "N/A",
                 "sta": None,
                 "eta": None,
-                "airline": iata_flight[:2]
+                "airline": iata_flight[:2],
+                "aircraft_type": plane.get("t", "N/A"),
             }
             
             # Cruzar con TAMS para rellenar horarios y posiciones
@@ -602,7 +603,8 @@ async def get_combined_flights() -> List[Dict]:
                 "lon": None,
                 "altitude": None,
                 "ground_speed": None,
-                "vertical_rate": None
+                "vertical_rate": None,
+                "aircraft_type": "N/A",
             })
             
     return combined_data
@@ -738,14 +740,14 @@ async def process_audio_queue():
             
             disconnected_users = []
             for user_token, user in list(users.items()):
-                if user_token == token:
-                    continue
+                # FIXED: Send to everyone including the sender so they see their own message
                 if not user["logged_in"] or not user["websocket"]:
                     disconnected_users.append(user_token)
                     continue
                 muted_users = user.get("muted_users", set())
                 sender_id = f"{sender}_{function}"
-                if sender_id in muted_users:
+                # Only skip if this user muted the sender (not if they are the sender)
+                if sender_id in muted_users and user_token != token:
                     continue
                 try:
                     await user["websocket"].send_json(broadcast_payload)
@@ -1019,8 +1021,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 app_state["updates_enabled"] = message.get("enabled", True)
                 await websocket.send_json({"type": "updates_status", "enabled": app_state["updates_enabled"]})
                 
-            elif msg_type == "audio":
-                audio_data = message.get("data")
+            elif msg_type == "audio" or msg_type == "message":
+                # Accept both 'audio' (legacy) and 'message' (new frontend) types
+                audio_data = message.get("data") or message.get("audio")
+                if not message.get("sender"):
+                    message["sender"] = users[token].get("name", "Unknown")
+                if not message.get("function"):
+                    message["function"] = users[token].get("function", "Unknown")
                 if audio_data:
                     await audio_queue.put((token, audio_data, message))
                     

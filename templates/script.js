@@ -114,49 +114,57 @@ function updateCountdowns() {
     cells.forEach(cell => {
         const targetMsStr = cell.getAttribute('data-target-ms');
         const flightNumber = cell.getAttribute('data-flight-number') || 'Unknown';
+        const bellEnabled = bellAlerts.has(flightNumber);
+        
         if (!targetMsStr) {
-            cell.innerHTML = '<span class="text-slate-500">-</span>';
+            cell.querySelector('.countdown-text')?.setAttribute('data-val', '-');
             return;
         }
+        
         const targetMs = parseInt(targetMsStr, 10);
         const diffMs = targetMs - nowMs;
-        
-        let bellClass = 'text-slate-600';
         let timeText = '';
+        let timeClass = 'text-slate-400';
+        let bellClass = bellEnabled ? 'text-amber-400 cursor-pointer' : 'text-slate-600 cursor-pointer';
+        let bellTitle = bellEnabled ? 'Desactivar alerta' : 'Activar alerta para este vuelo';
         
-        if (diffMs > 0) {
+        if (isNaN(targetMs) || targetMsStr === '') {
+            timeText = 'N/A';
+        } else if (diffMs > 0) {
             const totalSeconds = Math.floor(diffMs / 1000);
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = totalSeconds % 60;
-            
             const hStr = hours > 0 ? `${hours}:` : '';
             const mStr = String(minutes).padStart(2, '0');
             const sStr = String(seconds).padStart(2, '0');
             timeText = `${hStr}${mStr}:${sStr}`;
-            
-            if (diffMs < 300000) { // Menos de 5 minutos: campana naranja palpitante
-                bellClass = 'text-amber-500 animate-pulse';
+            if (bellEnabled && diffMs < 300000) {
+                timeClass = 'text-amber-400 font-bold font-mono animate-pulse';
             } else {
-                bellClass = 'text-slate-500';
+                timeClass = 'text-slate-300 font-mono';
             }
         } else {
             timeText = '00:00';
-            bellClass = 'text-red-500 font-bold animate-bounce';
-            
-            if (!playedBellAlerts.has(flightNumber)) {
-                playedBellAlerts.add(flightNumber);
+            timeClass = 'text-red-400 font-bold font-mono animate-bounce';
+            if (bellEnabled && !firedBellAlerts.has(flightNumber)) {
+                firedBellAlerts.add(flightNumber);
                 playBellSound();
                 showError(`¡Vuelo ${flightNumber} en hora cero!`);
             }
         }
         
-        cell.innerHTML = `
-            <div class="flex items-center gap-1.5 justify-start">
-                <span class="${diffMs <= 0 ? 'text-red-400 font-bold' : 'text-slate-300'} font-mono">${timeText}</span>
-                <span class="${bellClass}" title="Alerta de tiempo cero">🔔</span>
-            </div>
-        `;
+        const existingText = cell.querySelector('.countdown-text');
+        const existingBell = cell.querySelector('.bell-btn');
+        
+        if (existingText) {
+            existingText.textContent = timeText;
+            existingText.className = `countdown-text ${timeClass}`;
+        }
+        if (existingBell) {
+            existingBell.className = `bell-btn text-base ${bellClass}`;
+            existingBell.title = bellTitle;
+        }
     });
 }
 
@@ -338,16 +346,34 @@ function updateUserList(users) {
 }
 
 function displayMessage(data) {
+    const isMine = data.sender === userId;
     const chatList = data.type === 'group_message' ? document.getElementById('group-chat-list') : document.getElementById('chat-list');
     if (!chatList) return;
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'chat-message';
-    messageDiv.innerHTML = `<span class="play-icon">▶</span>${data.sender}: ${data.text || 'Audio'}`;
-    messageDiv.onclick = () => {
-        if (data.audio) {
+    messageDiv.className = `chat-message flex items-start gap-2 p-2 rounded-xl mb-1 ${isMine ? 'bg-sky-900/30 border border-sky-800/30' : 'bg-slate-800/40'}`;
+    const name = data.sender ? data.sender.split('_')[0] : (isMine ? 'Tú' : 'Desconocido');
+    const timestamp = data.timestamp || '';
+    messageDiv.innerHTML = `
+        <div class="flex-shrink-0 w-7 h-7 rounded-full ${isMine ? 'bg-sky-600' : 'bg-slate-700'} flex items-center justify-center text-xs font-bold text-white">
+            ${name[0]?.toUpperCase() || '?'}
+        </div>
+        <div class="flex-grow min-w-0">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold ${isMine ? 'text-sky-400' : 'text-slate-300'}">${isMine ? 'Tú' : name}</span>
+                <span class="text-[10px] text-slate-500 font-mono">${timestamp}</span>
+                ${data.audio ? '<span class="text-[10px] text-slate-400 bg-slate-800 px-1 rounded">🎤 Audio</span>' : ''}
+            </div>
+            <p class="text-sm text-slate-200 leading-snug mt-0.5">${data.text || 'Mensaje de voz'}</p>
+        </div>
+        ${data.audio ? '<button class="play-btn flex-shrink-0 w-7 h-7 rounded-full bg-sky-600/20 hover:bg-sky-600/40 text-sky-400 flex items-center justify-center text-xs transition">▶</button>' : ''}
+    `;
+    if (data.audio) {
+        const playBtn = messageDiv.querySelector('.play-btn');
+        playBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
             playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
-        }
-    };
+        });
+    }
     chatList.appendChild(messageDiv);
     chatList.scrollTop = chatList.scrollHeight;
 }
@@ -849,27 +875,63 @@ function updateFlightInfo() {
         flights.forEach(flight => {
             const row = document.createElement('tr');
             row.className = 'tams-row border-b border-slate-800 hover:bg-slate-900/40 transition duration-150';
-            const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
-            const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+            const sta = flight.sta ? (flight.sta.includes('/') ? flight.sta.split(' ')[1] : flight.sta) : 'N/A';
+            const eta = (flight.eta && flight.eta !== 'N/A') ? (flight.eta.includes('/') ? flight.eta.split(' ')[1] : flight.eta) : 'N/A';
             const originDest = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
             
             const targetTime = getFlightTargetTime(flight);
             const targetMs = targetTime ? targetTime.getTime() : '';
+            const flightNum = flight.flight_number || 'Unknown';
+            const bellEnabled = bellAlerts.has(flightNum);
+            const bellClass = bellEnabled ? 'text-amber-400' : 'text-slate-600';
+            const bellTitle = bellEnabled ? 'Desactivar alerta' : 'Activar alerta';
+            
+            // Aircraft type and PAX
+            const acType = flight.aircraft_type || 'N/A';
+            const pax = PAX_LOOKUP[acType] ? `~${PAX_LOOKUP[acType]}` : 'N/A';
             
             row.innerHTML = `
-                <td class="px-4 py-3 text-slate-200 font-mono text-xs">${flight.registration || 'N/A'}</td>
-                <td class="px-4 py-3 text-slate-100 font-bold text-xs flex items-center">${getAirlineLogoHtml(flight.flight_number)}${flight.flight_number || 'N/A'}</td>
-                <td class="px-4 py-3 text-slate-300 text-xs">${sta}</td>
-                <td class="px-4 py-3 text-slate-100 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold border border-slate-700">${flight.position || 'N/A'}</span></td>
-                <td class="px-4 py-3 text-slate-300 text-xs">${originDest}</td>
-                <td class="px-4 py-3 text-slate-300 text-xs font-mono">${eta}</td>
-                <td class="px-4 py-3 text-xs font-mono flight-countdown-cell" data-target-ms="${targetMs}" data-flight-number="${flight.flight_number || 'Unknown'}">
-                    <span class="text-slate-500">Calculando...</span>
+                <td class="px-3 py-2.5 text-slate-200 font-mono text-xs">${flight.registration || 'N/A'}</td>
+                <td class="px-3 py-2.5 text-slate-100 font-bold text-xs">
+                    <div class="flex items-center gap-1">${getAirlineLogoHtml(flightNum)}<span>${flightNum}</span></div>
                 </td>
-                <td class="px-4 py-3 text-xs"><button class="tams-details-btn px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[10px] font-medium transition duration-200">Ver Más</button></td>
+                <td class="px-3 py-2.5 text-slate-300 text-xs font-mono">${sta}</td>
+                <td class="px-3 py-2.5 text-slate-100 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold border border-slate-700">${flight.position || 'N/A'}</span></td>
+                <td class="px-3 py-2.5 text-slate-300 text-xs">${originDest}</td>
+                <td class="px-3 py-2.5 text-slate-300 text-xs font-mono">${eta}</td>
+                <td class="px-3 py-2.5 text-xs">
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-mono text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-sky-300" title="Tipo aeronave">${acType}</span>
+                        <span class="font-mono text-[10px] text-slate-400" title="Pasajeros aprox.">${pax} pax</span>
+                    </div>
+                </td>
+                <td class="px-3 py-2.5 text-xs flight-countdown-cell" data-target-ms="${targetMs}" data-flight-number="${flightNum}">
+                    <div class="flex items-center gap-1.5">
+                        <span class="countdown-text font-mono text-slate-400">...</span>
+                        <button class="bell-btn text-base ${bellClass} hover:scale-110 transition-transform" title="${bellTitle}">🔔</button>
+                    </div>
+                </td>
+                <td class="px-3 py-2.5 text-xs"><button class="tams-details-btn px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[10px] font-medium transition duration-200">Info</button></td>
             `;
             const btn = row.querySelector('.tams-details-btn');
             btn.addEventListener('click', () => showFlightDetails(flight));
+            // Per-flight bell toggle
+            const bellBtn = row.querySelector('.bell-btn');
+            bellBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (bellAlerts.has(flightNum)) {
+                    bellAlerts.delete(flightNum);
+                    firedBellAlerts.delete(flightNum); // Allow re-firing if re-enabled
+                    bellBtn.classList.remove('text-amber-400');
+                    bellBtn.classList.add('text-slate-600');
+                    bellBtn.title = 'Activar alerta';
+                } else {
+                    bellAlerts.add(flightNum);
+                    bellBtn.classList.add('text-amber-400');
+                    bellBtn.classList.remove('text-slate-600');
+                    bellBtn.title = 'Desactivar alerta';
+                }
+            });
             tbody.appendChild(row);
         });
     });
