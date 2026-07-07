@@ -22,6 +22,14 @@ let dailyTokenCount = parseInt(localStorage.getItem('dailyTokenCount') || '0', 1
 const MAX_TOKENS_DAILY = 2000;
 const TOKENS_PER_FLIGHT = 1;
 const MAX_FLIGHTS_PER_REQUEST = 20;
+
+// VU Meter state
+let vuAudioContext = null;
+let vuAnalyser = null;
+let vuDataArray = null;
+let vuAnimFrame = null;
+let vuStream = null;
+
 const AIRPORT_MAPPING = {
     'SABE': 'Aeroparque',
     'SAEZ': 'Ezeiza',
@@ -33,6 +41,82 @@ function isTargetAirline(flightNumber) {
     const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
     return prefixes.some(p => flightNumber.toUpperCase().startsWith(p));
 }
+
+// ─── VU METER ─────────────────────────────────────────────────────────────────
+function startVuMeter(stream) {
+    try {
+        vuAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        vuAnalyser = vuAudioContext.createAnalyser();
+        vuAnalyser.fftSize = 256;
+        vuAnalyser.smoothingTimeConstant = 0.6;
+        vuDataArray = new Uint8Array(vuAnalyser.frequencyBinCount);
+        const source = vuAudioContext.createMediaStreamSource(stream);
+        source.connect(vuAnalyser);
+        animateVuMeter();
+    } catch (e) {
+        console.warn('VU meter no disponible:', e);
+    }
+}
+
+function stopVuMeter() {
+    if (vuAnimFrame) {
+        cancelAnimationFrame(vuAnimFrame);
+        vuAnimFrame = null;
+    }
+    if (vuAudioContext) {
+        vuAudioContext.close().catch(() => {});
+        vuAudioContext = null;
+        vuAnalyser = null;
+        vuDataArray = null;
+    }
+    // Reset all bars to idle state
+    const bars = document.querySelectorAll('#vu-meter .vu-bar');
+    bars.forEach(bar => {
+        bar.style.height = '4px';
+        bar.style.background = '#1e293b';
+    });
+}
+
+function animateVuMeter() {
+    if (!vuAnalyser || !vuDataArray) return;
+    vuAnimFrame = requestAnimationFrame(animateVuMeter);
+    vuAnalyser.getByteFrequencyData(vuDataArray);
+
+    // Average across frequency bins — take lower half for voice range
+    const voiceBins = vuDataArray.slice(0, vuDataArray.length / 3);
+    const avg = voiceBins.reduce((s, v) => s + v, 0) / voiceBins.length;
+    // Normalize 0..255 to 0..1
+    const level = Math.min(1, avg / 160);
+
+    const bars = document.querySelectorAll('#vu-meter .vu-bar');
+    const NUM_BARS = bars.length; // 16
+    const MAX_HEIGHT = 40; // px (h-10 = 40px)
+    const MIN_HEIGHT = 3;
+
+    bars.forEach((bar, i) => {
+        const barThreshold = (i + 1) / NUM_BARS; // 0.0625 .. 1.0
+        const isActive = level >= barThreshold;
+        // Height: active bars grow taller towards the right
+        const h = isActive
+            ? Math.max(MIN_HEIGHT, barThreshold * MAX_HEIGHT * (1 + level * 0.3))
+            : MIN_HEIGHT;
+        bar.style.height = Math.min(MAX_HEIGHT, h) + 'px';
+
+        // Color gradient: green (low) → amber (mid) → red (high)
+        if (!isActive) {
+            bar.style.background = '#1e293b'; // slate-900 idle
+        } else if (barThreshold < 0.6) {
+            bar.style.background = '#22c55e'; // green-500
+        } else if (barThreshold < 0.85) {
+            bar.style.background = '#f59e0b'; // amber-500
+        } else {
+            bar.style.background = '#ef4444'; // red-500
+        }
+    });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 
 function getAirlineLogoHtml(flightNumber) {
     if (!flightNumber) return '';
@@ -447,6 +531,7 @@ async function toggleTalk() {
             };
             mediaRecorder.start();
             isRecording = true;
+            startVuMeter(stream); // Start VU meter with same mic stream
             // Visual feedback: red button + pulse rings
             talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-red-600 to-red-800 border-4 border-red-400/60 shadow-lg shadow-red-900/60 flex items-center justify-center transition-all animate-pulse">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
@@ -461,6 +546,7 @@ async function toggleTalk() {
     } else {
         mediaRecorder.stop();
         isRecording = false;
+        stopVuMeter(); // Stop VU meter and reset bars
         // Restore button to normal
         talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-sky-600 to-sky-800 hover:from-sky-500 hover:to-sky-700 active:scale-95 border-4 border-sky-400/40 shadow-lg shadow-sky-900/50 flex items-center justify-center transition-all">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
