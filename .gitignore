@@ -1,0 +1,15 @@
+# Local SQLite database
+chat_history.db
+chat.db
+users.db
+
+# Temp announcements
+temp_announcements/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+Thumbs.db
+.DS_Store

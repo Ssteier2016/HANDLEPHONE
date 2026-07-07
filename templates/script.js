@@ -28,6 +28,12 @@ const AIRPORT_MAPPING = {
     // Agrega más mapeos según sea necesario
 };
 
+function isTargetAirline(flightNumber) {
+    if (!flightNumber) return false;
+    const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
+    return prefixes.some(p => flightNumber.toUpperCase().startsWith(p));
+}
+
 function showError(message) {
     const errorDiv = document.getElementById('error-message');
     if (errorDiv) {
@@ -604,7 +610,7 @@ function updateMap() {
     console.log("Actualizando mapa con flightData:", flightData);
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
-    const validFlights = flightData.filter(f => f && f.lat && f.lon && f.flight_number && f.flight_number.startsWith('AR'));
+    const validFlights = flightData.filter(f => f && f.lat && f.lon && f.flight_number && isTargetAirline(f.flight_number));
     console.log("Vuelos válidos para el mapa:", validFlights);
     validFlights.forEach(flight => {
         try {
@@ -653,7 +659,7 @@ function updateFlightInfo() {
         }
         const tbody = table.querySelector('tbody') || table;
         tbody.innerHTML = '';
-        const flights = flightData.filter(f => f && f.flight_number && f.flight_number.startsWith('AR') && filter(f));
+        const flights = flightData.filter(f => f && f.flight_number && isTargetAirline(f.flight_number) && filter(f));
         console.log(`Vuelos para ${id}:`, flights);
         flights.forEach(flight => {
             const row = document.createElement('tr');
