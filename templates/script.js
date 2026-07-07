@@ -145,12 +145,20 @@ function updateCountdowns() {
                 timeClass = 'text-slate-300 font-mono';
             }
         } else {
+            // Flight is at or past its scheduled time
             timeText = '00:00';
-            timeClass = 'text-red-400 font-bold font-mono animate-bounce';
+            timeClass = 'text-red-400 font-bold font-mono';
+            // Only fire bell if: bell is enabled AND not already fired AND app has been running for at least 5s (not startup)
             if (bellEnabled && !firedBellAlerts.has(flightNumber)) {
                 firedBellAlerts.add(flightNumber);
-                playBellSound();
-                showError(`¡Vuelo ${flightNumber} en hora cero!`);
+                // Only play sound if we're past the startup grace period (5 seconds)
+                if (Date.now() - startupTime > 5000) {
+                    playBellSound();
+                    showError(`¡Vuelo ${flightNumber} en hora cero!`);
+                }
+            } else if (!bellEnabled && !firedBellAlerts.has(flightNumber)) {
+                // Silently mark past flights as fired so they don't trigger on bell enable
+                firedBellAlerts.add(flightNumber);
             }
         }
         
@@ -807,9 +815,10 @@ function initMap() {
     }
     try {
         map = L.map('map').setView([-34.5597, -58.4116], 10);
-        L.tileLayer('https://{s.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
             maxZoom: 19,
-            attribution: '© OpenStreetMap, © CartoDB'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         }).addTo(map);
         const aeroparqueIcon = L.icon({
             iconUrl: '/templates/airport.png',

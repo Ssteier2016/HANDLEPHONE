@@ -1,7 +1,7 @@
-const CACHE_NAME = 'handyhandle-cache-v4';
+const CACHE_NAME = 'handyhandle-cache-v5';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
-const API_CACHE = 'api-cache';
+const API_CACHE = 'api-cache-v5';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 const urlsToCache = [
@@ -12,56 +12,41 @@ const urlsToCache = [
     '/templates/manifest.json',
     '/templates/aero.png',
     '/templates/airport.png',
-    '/templates/logoutred.png',
     '/templates/icon-192x192.png',
-    '/templates/handlywalkie-talkie.png',
-    '/templates/volver.png',
-    '/templates/mic.png',
-    '/templates/mute.png',
-    '/templates/mic-off.png',
-    '/templates/mic-on.png',
+    '/templates/app-logo.png',
     '/templates/airplane.png'
 ];
 
 self.addEventListener('install', event => {
-    console.log('Service Worker instalado');
+    console.log('Service Worker v5 instalando...');
     event.waitUntil(
-        Promise.all([
-            caches.open(CACHE_NAME).then(cache => {
-                console.log('Cache abierto:', CACHE_NAME);
-                return cache.addAll(urlsToCache);
-            }),
-            caches.open('v1').then(cache => {
-                console.log('Cache v1 abierto');
-                return cache.addAll([
-                    '/',
-                    '/templates/index.html',
-                    '/templates/style.css',
-                    '/templates/script.js'
-                ]);
-            })
-        ]).catch(err => {
-            console.error('Error al abrir caches:', err);
+        caches.open(CACHE_NAME).then(cache => {
+            console.log('Cache abierto:', CACHE_NAME);
+            return cache.addAll(urlsToCache).catch(err => {
+                console.warn('Error al precargar (no crítico):', err);
+            });
         })
     );
+    // Forzar activación inmediata sin esperar a que cierren tabs viejos
     self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-    console.log('Service Worker activado');
+    console.log('Service Worker v5 activado - limpiando caches antiguos');
     event.waitUntil(
         Promise.all([
             caches.keys().then(cacheNames => {
                 return Promise.all(
                     cacheNames.map(cacheName => {
-                        if (cacheName !== CACHE_NAME && cacheName !== API_CACHE && cacheName !== 'v1') {
+                        // Delete ALL old caches - keep only the current versions
+                        if (cacheName !== CACHE_NAME && cacheName !== API_CACHE) {
                             console.log('Eliminando cache antiguo:', cacheName);
                             return caches.delete(cacheName);
                         }
                     })
                 );
             }),
-            self.clients.claim()
+            self.clients.claim() // Take control of all pages immediately
         ])
     );
 });
