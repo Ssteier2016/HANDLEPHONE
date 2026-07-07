@@ -54,6 +54,112 @@ function getAirlineLogoHtml(flightNumber) {
     return `<span class="inline-block mr-2 text-slate-500">✈</span>`;
 }
 
+const playedBellAlerts = new Set();
+
+function playBellSound() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioCtx.currentTime;
+        const frequencies = [880, 1200, 1500, 1800];
+        frequencies.forEach((freq, index) => {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            const duration = 1.2 / (index + 1);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + duration);
+        });
+    } catch (err) {
+        console.error("Error al reproducir timbre de campana:", err);
+    }
+}
+
+function getFlightTargetTime(flight) {
+    if (!flight) return null;
+    const timeStr = (flight.eta && flight.eta !== 'N/A') ? flight.eta : flight.sta;
+    if (!timeStr || timeStr === 'N/A') return null;
+    
+    const now = new Date();
+    // Caso 1: "DD/MM HH:MM" (ej., "07/07 04:40")
+    if (timeStr.includes('/')) {
+        const parts = timeStr.split(' ');
+        const dateParts = parts[0].split('/');
+        const timeParts = parts[1].split(':');
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const hour = parseInt(timeParts[0], 10);
+        const minute = parseInt(timeParts[1], 10);
+        return new Date(now.getFullYear(), month, day, hour, minute, 0);
+    }
+    
+    // Caso 2: "HH:MM" (ej., "04:15")
+    if (timeStr.includes(':')) {
+        const timeParts = timeStr.split(':');
+        const hour = parseInt(timeParts[0], 10);
+        const minute = parseInt(timeParts[1], 10);
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+    }
+    return null;
+}
+
+function updateCountdowns() {
+    const cells = document.querySelectorAll('.flight-countdown-cell');
+    const nowMs = Date.now();
+    
+    cells.forEach(cell => {
+        const targetMsStr = cell.getAttribute('data-target-ms');
+        const flightNumber = cell.getAttribute('data-flight-number') || 'Unknown';
+        if (!targetMsStr) {
+            cell.innerHTML = '<span class="text-slate-500">-</span>';
+            return;
+        }
+        const targetMs = parseInt(targetMsStr, 10);
+        const diffMs = targetMs - nowMs;
+        
+        let bellClass = 'text-slate-600';
+        let timeText = '';
+        
+        if (diffMs > 0) {
+            const totalSeconds = Math.floor(diffMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            const hStr = hours > 0 ? `${hours}:` : '';
+            const mStr = String(minutes).padStart(2, '0');
+            const sStr = String(seconds).padStart(2, '0');
+            timeText = `${hStr}${mStr}:${sStr}`;
+            
+            if (diffMs < 300000) { // Menos de 5 minutos: campana naranja palpitante
+                bellClass = 'text-amber-500 animate-pulse';
+            } else {
+                bellClass = 'text-slate-500';
+            }
+        } else {
+            timeText = '00:00';
+            bellClass = 'text-red-500 font-bold animate-bounce';
+            
+            if (!playedBellAlerts.has(flightNumber)) {
+                playedBellAlerts.add(flightNumber);
+                playBellSound();
+                showError(`¡Vuelo ${flightNumber} en hora cero!`);
+            }
+        }
+        
+        cell.innerHTML = `
+            <div class="flex items-center gap-1.5 justify-start">
+                <span class="${diffMs <= 0 ? 'text-red-400 font-bold' : 'text-slate-300'} font-mono">${timeText}</span>
+                <span class="${bellClass}" title="Alerta de tiempo cero">🔔</span>
+            </div>
+        `;
+    });
+}
+
 function showError(message) {
     const errorDiv = document.getElementById('error-message');
     if (errorDiv) {
@@ -490,16 +596,65 @@ function backToMainFromHistory() {
     updateSwipeHint();
 }
 
-function showHistory() {
+async function showHistory() {
     document.getElementById('main').style.display = 'none';
     document.getElementById('history-screen').style.display = 'block';
-    // Implementar lógica para cargar historial
+    
+    const historyList = document.getElementById('history-list');
+    if (!historyList) return;
+    historyList.innerHTML = '<div class="text-center text-slate-400 py-4 font-sans text-sm">Cargando historial...</div>';
+    
+    try {
+        const token = localStorage.getItem('userToken') || '';
+        const response = await fetch(`/api/history?token=${encodeURIComponent(token)}`);
+        if (!response.ok) {
+            throw new Error(`Error del servidor: ${response.status}`);
+        }
+        const messages = await response.json();
+        historyList.innerHTML = '';
+        if (messages.length === 0) {
+            historyList.innerHTML = '<div class="text-center text-slate-400 py-4 font-sans text-sm">No hay mensajes grabados.</div>';
+            return;
+        }
+        messages.forEach(msg => {
+            const item = document.createElement('div');
+            const parts = msg.user_id.split('_');
+            const name = parts[0] || 'Desconocido';
+            const sector = parts[1] || 'Sin sector';
+            
+            item.className = 'p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between gap-4 hover:bg-slate-800/40 transition duration-150 cursor-pointer';
+            item.innerHTML = `
+                <div class="flex-grow">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-xs font-bold text-sky-400 font-sans">${name}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-semibold border border-slate-700 text-slate-300 font-sans">${sector}</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${msg.timestamp || ''}</span>
+                    </div>
+                    <p class="text-sm text-slate-200 font-sans font-medium">${msg.text || 'Mensaje de voz'}</p>
+                </div>
+                <div>
+                    <button class="play-btn w-9 h-9 rounded-full bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 flex items-center justify-center transition border border-sky-500/10">
+                        <span class="text-xs">▶</span>
+                    </button>
+                </div>
+            `;
+            item.addEventListener('click', () => {
+                if (msg.audio) {
+                    playAudio(msg.audio, name, null);
+                }
+            });
+            historyList.appendChild(item);
+        });
+    } catch (err) {
+        console.error("Error al cargar historial:", err);
+        historyList.innerHTML = `<div class="text-center text-red-400 py-4 font-sans text-sm">Error al cargar historial: ${err.message}</div>`;
+    }
 }
 
 function showGroupHistory() {
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('history-screen').style.display = 'block';
-    // Implementar lógica para cargar historial
+    showHistory();
 }
 
 function showFlightDetails(flight) {
@@ -697,6 +852,10 @@ function updateFlightInfo() {
             const sta = flight.sta ? new Date(flight.sta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
             const eta = flight.eta ? new Date(flight.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
             const originDest = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
+            
+            const targetTime = getFlightTargetTime(flight);
+            const targetMs = targetTime ? targetTime.getTime() : '';
+            
             row.innerHTML = `
                 <td class="px-4 py-3 text-slate-200 font-mono text-xs">${flight.registration || 'N/A'}</td>
                 <td class="px-4 py-3 text-slate-100 font-bold text-xs flex items-center">${getAirlineLogoHtml(flight.flight_number)}${flight.flight_number || 'N/A'}</td>
@@ -704,6 +863,9 @@ function updateFlightInfo() {
                 <td class="px-4 py-3 text-slate-100 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold border border-slate-700">${flight.position || 'N/A'}</span></td>
                 <td class="px-4 py-3 text-slate-300 text-xs">${originDest}</td>
                 <td class="px-4 py-3 text-slate-300 text-xs font-mono">${eta}</td>
+                <td class="px-4 py-3 text-xs font-mono flight-countdown-cell" data-target-ms="${targetMs}" data-flight-number="${flight.flight_number || 'Unknown'}">
+                    <span class="text-slate-500">Calculando...</span>
+                </td>
                 <td class="px-4 py-3 text-xs"><button class="tams-details-btn px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[10px] font-medium transition duration-200">Ver Más</button></td>
             `;
             const btn = row.querySelector('.tams-details-btn');
@@ -1007,6 +1169,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkNotificationPermission();
     registerServiceWorker();
     initMap();
+    setInterval(updateCountdowns, 1000);
 });
 
 const style = document.createElement('style');

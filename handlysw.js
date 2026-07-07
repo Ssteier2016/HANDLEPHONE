@@ -1,4 +1,4 @@
-const CACHE_NAME = 'handyhandle-cache-v3';
+const CACHE_NAME = 'handyhandle-cache-v4';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
 const API_CACHE = 'api-cache';
@@ -67,6 +67,10 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    // Solo interceptar peticiones GET (evita errores con POST de login/registro)
+    if (event.request.method !== 'GET') {
+        return;
+    }
     const requestUrl = new URL(event.request.url);
     if (requestUrl.protocol === 'wss:' ||
         requestUrl.pathname === '/opensky' ||
