@@ -275,7 +275,8 @@ function connectWebSocket(token) {
             console.log("Mensaje WebSocket:", data);
             if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
-                if (data.audio) {
+                // Only auto-play audio from OTHER users, not yourself
+                if (data.audio && data.sender !== userId) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
@@ -380,19 +381,22 @@ function displayMessage(data) {
 
 async function playAudio(audioData, sender, groupId) {
     try {
+        // Stop any currently playing audio
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.src = '';
+            currentAudio = null;
+        }
         const audioBlob = base64ToBlob(audioData, 'audio/webm');
         if (!audioBlob) throw new Error("No se pudo convertir el audio");
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
+        currentAudio = audio;
         audio.play();
-        if ('mediaSession' in navigator && typeof MediaSessionMetadata !== 'undefined') {
-            navigator.mediaSession.metadata = new MediaSessionMetadata({
-                title: `Mensaje de ${sender}`,
-                artist: groupId ? `Grupo ${groupId}` : 'HandyHandle',
-                album: 'Comunicación Aeronáutica'
-            });
-        }
-        audio.onended = () => URL.revokeObjectURL(audioUrl);
+        audio.onended = () => { 
+            URL.revokeObjectURL(audioUrl);
+            if (currentAudio === audio) currentAudio = null;
+        };
     } catch (err) {
         console.error("Error al reproducir audio:", err);
         showError("Error al reproducir el mensaje de audio.");
@@ -401,6 +405,9 @@ async function playAudio(audioData, sender, groupId) {
 
 async function toggleTalk() {
     const talkButton = document.getElementById('talk');
+    const statusText = document.getElementById('talk-status');
+    const ring1 = document.getElementById('talk-ring-1');
+    const ring2 = document.getElementById('talk-ring-2');
     if (!talkButton) return;
     if (!isRecording) {
         try {
@@ -414,30 +421,31 @@ async function toggleTalk() {
                 reader.readAsDataURL(audioBlob);
                 reader.onloadend = () => {
                     const base64Audio = reader.result.split(',')[1];
+                    const now = new Date();
+                    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                    const userFunction = localStorage.getItem('userFunction') || 'Operador';
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                             type: 'message',
                             audio: base64Audio,
                             sender: userId,
-                            text: 'Mensaje de voz'
+                            function: userFunction,
+                            timestamp: ts,
+                            text: 'Pendiente de transcripción'
                         }));
-                    } else {
-                        navigator.serviceWorker.controller?.postMessage({
-                            type: 'QUEUE_MESSAGE',
-                            message: {
-                                type: 'message',
-                                audio: base64Audio,
-                                sender: userId,
-                                text: 'Mensaje de voz'
-                            }
-                        });
                     }
                 };
                 stream.getTracks().forEach(track => track.stop());
             };
             mediaRecorder.start();
             isRecording = true;
-            talkButton.classList.add('recording');
+            // Visual feedback: red button + pulse rings
+            talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-red-600 to-red-800 border-4 border-red-400/60 shadow-lg shadow-red-900/60 flex items-center justify-center transition-all animate-pulse">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+            </div>`;
+            if (statusText) { statusText.textContent = '🔴 TRANSMITIENDO...'; statusText.className = 'text-xs text-red-400 font-mono font-bold animate-pulse'; }
+            if (ring1) ring1.className = 'absolute w-28 h-28 rounded-full border-2 border-red-400/40 animate-ping';
+            if (ring2) ring2.className = 'absolute w-36 h-36 rounded-full border-2 border-red-400/20 animate-ping';
         } catch (err) {
             showError("Error al acceder al micrófono.");
             console.error("Error al grabar:", err);
@@ -445,7 +453,13 @@ async function toggleTalk() {
     } else {
         mediaRecorder.stop();
         isRecording = false;
-        talkButton.classList.remove('recording');
+        // Restore button to normal
+        talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-sky-600 to-sky-800 hover:from-sky-500 hover:to-sky-700 active:scale-95 border-4 border-sky-400/40 shadow-lg shadow-sky-900/50 flex items-center justify-center transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </div>`;
+        if (statusText) { statusText.textContent = 'Presioná para hablar'; statusText.className = 'text-xs text-slate-500 font-mono'; }
+        if (ring1) ring1.className = 'absolute w-28 h-28 rounded-full border-2 border-sky-400/0 transition-all duration-300';
+        if (ring2) ring2.className = 'absolute w-36 h-36 rounded-full border-2 border-sky-400/0 transition-all duration-300';
     }
 }
 
@@ -1232,6 +1246,45 @@ document.addEventListener('DOMContentLoaded', () => {
     registerServiceWorker();
     initMap();
     setInterval(updateCountdowns, 1000);
+    
+    // AUTO-LOGIN: restore session from localStorage if token exists
+    const savedToken = localStorage.getItem('sessionToken');
+    const savedName = localStorage.getItem('userName');
+    const savedFunction = localStorage.getItem('userFunction');
+    const savedLegajo = localStorage.getItem('userLegajo');
+    if (savedToken && savedName) {
+        try {
+            userId = `${savedLegajo}_${savedName}_${savedFunction}`;
+            connectWebSocket(savedToken);
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+            displayUserProfile();
+            updateOpenSkyData();
+        } catch (e) {
+            console.warn('Auto-login failed, clearing session:', e);
+            localStorage.clear();
+        }
+    }
+    
+    // SVG Icons for buttons
+    const talkBtn = document.getElementById('talk');
+    if (talkBtn) {
+        talkBtn.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-sky-600 to-sky-800 hover:from-sky-500 hover:to-sky-700 active:scale-95 border-4 border-sky-400/40 shadow-lg shadow-sky-900/50 flex items-center justify-center transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </div>`;
+        talkBtn.classList.add('block');
+    }
+    const muteBtn = document.getElementById('mute');
+    if (muteBtn) {
+        muteBtn.innerHTML = `<div class="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center hover:bg-slate-700 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-slate-300" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+        </div>`;
+    }
+    const logoutBtn = document.getElementById('logout-button');
+    if (logoutBtn) {
+        logoutBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg> Salir`;
+        logoutBtn.className = logoutBtn.className + ' flex items-center gap-2';
+    }
 });
 
 const style = document.createElement('style');
