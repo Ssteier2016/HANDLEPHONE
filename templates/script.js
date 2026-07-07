@@ -1199,8 +1199,39 @@ function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').then(registration => {
             console.log('Service Worker registrado:', registration.scope);
+            
+            // Check for updates periodically (every 30 seconds)
+            setInterval(() => {
+                registration.update();
+            }, 30000);
+
+            // Handle updates
+            registration.onupdatefound = () => {
+                const installingWorker = registration.installing;
+                if (installingWorker) {
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed') {
+                            if (navigator.serviceWorker.controller) {
+                                console.log('Nuevo contenido disponible. Actualizando automáticamente...');
+                                // Force skipWaiting on the new worker
+                                installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        }
+                    };
+                }
+            };
         }).catch(error => {
             console.error('Error al registrar Service Worker:', error);
+        });
+
+        // Reload the page when the active service worker changes
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+                refreshing = true;
+                console.log('Service Worker actualizado. Recargando página...');
+                window.location.reload();
+            }
         });
     } else {
         console.warn("Service Worker no soportado");
