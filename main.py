@@ -207,7 +207,21 @@ def init_db():
 users: Dict[str, Dict[str, any]] = {}
 audio_queue: asyncio.Queue = asyncio.Queue()
 groups: Dict[str, List[str]] = {}
-valid_tokens = set()
+
+# Persistence helper for valid tokens (SQLite fallback)
+def load_all_valid_tokens() -> Set[str]:
+    tokens = set()
+    try:
+        with sqlite3.connect("chat_history.db") as conn:
+            c = conn.cursor()
+            c.execute("SELECT token FROM sessions")
+            for row in c.fetchall():
+                tokens.add(row[0])
+    except Exception as e:
+        logger.error(f"Error cargando tokens persistentes: {e}")
+    return tokens
+
+valid_tokens = load_all_valid_tokens()
 
 # Registro de usuarios
 @app.post("/register")
@@ -312,6 +326,7 @@ async def login_user(request: LoginRequest):
     token_data = f"{employee_id}_{surname}_{sector}"
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
     valid_tokens.add(token)
+    save_session(token, token_data, surname, sector)
     logger.info(f"Login exitoso: {surname} ({employee_id}, {sector})")
     return {"token": token, "message": "Inicio de sesión exitoso"}
 
@@ -536,10 +551,16 @@ async def get_combined_flights() -> List[Dict]:
             for tams_flight in tams_data:
                 t_reg = tams_flight["registration"].replace("-", "").replace(" ", "").upper()
                 p_reg = registration.replace("-", "").replace(" ", "").upper()
+                
+                # Normalizar números de vuelo (ej: AR1361 vs AR 1361)
                 t_fl = tams_flight["flight_number"].replace(" ", "").upper()
                 p_fl = iata_flight.replace(" ", "").upper()
                 
-                if (t_reg != "N/A" and t_reg == p_reg) or t_fl == p_fl:
+                # Intentar cruce también por el número numérico puro de vuelo (ej: 1361)
+                t_num = "".join(filter(str.isdigit, t_fl))
+                p_num = "".join(filter(str.isdigit, p_fl))
+                
+                if (t_reg != "N/A" and t_reg == p_reg) or t_fl == p_fl or (t_num != "" and t_num == p_num):
                     status = tams_flight.get("status", "En vuelo")
                     color = "green"
                     if "demorado" in status.lower() or "dem" in status.lower():
@@ -932,6 +953,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             c.execute("SELECT surname, employee_id, sector FROM users WHERE surname = ? AND employee_id = ? AND sector = ?",
                       (surname, employee_id, sector))
             user = c.fetchone()
+
+        # Dynamically restore valid token inside set to prevent disconnect rejection on reboot
+        valid_tokens.add(token)
 
         if not user:
             logger.error(f"Usuario del token no registrado: {surname}")

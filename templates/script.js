@@ -36,6 +36,17 @@ const AIRPORT_MAPPING = {
     // Agrega más mapeos según sea necesario
 };
 
+// PAX lookup by ICAO aircraft type code
+const PAX_LOOKUP = {
+    'B738': 189, 'B737': 149, 'B739': 215, 'B38M': 178, 'B39M': 220,
+    'A319': 128, 'A320': 150, 'A321': 185, 'A20N': 165, 'A21N': 210,
+    'E190': 106, 'E195': 124, 'E170': 80, 'E175': 88,
+    'AT72': 70, 'AT43': 50, 'CRJ7': 70, 'CRJ9': 90,
+    'B744': 416, 'B748': 467, 'B77W': 396, 'A333': 296, 'A332': 253,
+    'A359': 315, 'A388': 555, 'B789': 296, 'B788': 242,
+    'N/A': 'N/A'
+};
+
 function isTargetAirline(flightNumber) {
     if (!flightNumber) return false;
     const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
@@ -339,9 +350,33 @@ async function registerUser(event) {
         const data = await response.json();
         console.log("Respuesta de /register:", response.status, data);
         if (response.ok) {
-            showError('Registro exitoso. Por favor, inicia sesión.');
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
+            // Auto login user after registration so it's a true one-time process
+            showError('Registro exitoso. Iniciando sesión automáticamente...');
+            // Attempt to login programmatically immediately
+            const loginResponse = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ surname, employee_id, password }),
+            });
+            const loginData = await loginResponse.json();
+            if (loginResponse.ok) {
+                localStorage.setItem('sessionToken', loginData.token);
+                localStorage.setItem('userName', surname);
+                localStorage.setItem('userFunction', sector);
+                localStorage.setItem('userLegajo', employee_id);
+                // Also persist registration flag
+                localStorage.setItem('isRegistered', 'true');
+                
+                userId = `${employee_id}_${surname}_${sector}`;
+                connectWebSocket(loginData.token);
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('main').style.display = 'block';
+                displayUserProfile();
+                updateOpenSkyData();
+            } else {
+                document.getElementById('register-form').style.display = 'none';
+                document.getElementById('login-form').style.display = 'block';
+            }
         } else {
             const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
             showError(`Error al registrarse: ${errorMessage}`);
@@ -442,9 +477,33 @@ function displayMessage(data) {
     const isMine = data.sender === userId;
     const chatList = data.type === 'group_message' ? document.getElementById('group-chat-list') : document.getElementById('chat-list');
     if (!chatList) return;
+
+    // Check if we already have this message with "Pendiente de transcripción" to update it
+    const messages = chatList.querySelectorAll('.chat-message');
+    let existingMsgDiv = null;
+    const name = data.sender ? data.sender.split('_')[0] : (isMine ? 'Tú' : 'Desconocido');
+    
+    for (const msg of messages) {
+        const msgSender = msg.querySelector('.sender-name')?.textContent;
+        const msgTime = msg.querySelector('.msg-time')?.textContent;
+        const msgText = msg.querySelector('.msg-text')?.textContent;
+        if ((msgSender === name || msgSender === 'Tú') && msgTime === data.timestamp && (msgText === 'Pendiente de transcripción' || msgText === 'Mensaje de voz')) {
+            existingMsgDiv = msg;
+            break;
+        }
+    }
+
+    if (existingMsgDiv) {
+        // Update text content with final transcription
+        const textElement = existingMsgDiv.querySelector('.msg-text');
+        if (textElement) {
+            textElement.textContent = data.text || 'Mensaje de voz';
+        }
+        return;
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message flex items-start gap-2 p-2 rounded-xl mb-1 ${isMine ? 'bg-sky-900/30 border border-sky-800/30' : 'bg-slate-800/40'}`;
-    const name = data.sender ? data.sender.split('_')[0] : (isMine ? 'Tú' : 'Desconocido');
     const timestamp = data.timestamp || '';
     messageDiv.innerHTML = `
         <div class="flex-shrink-0 w-7 h-7 rounded-full ${isMine ? 'bg-sky-600' : 'bg-slate-700'} flex items-center justify-center text-xs font-bold text-white">
@@ -452,11 +511,11 @@ function displayMessage(data) {
         </div>
         <div class="flex-grow min-w-0">
             <div class="flex items-center gap-2">
-                <span class="text-xs font-bold ${isMine ? 'text-sky-400' : 'text-slate-300'}">${isMine ? 'Tú' : name}</span>
-                <span class="text-[10px] text-slate-500 font-mono">${timestamp}</span>
+                <span class="sender-name text-xs font-bold ${isMine ? 'text-sky-400' : 'text-slate-300'}">${isMine ? 'Tú' : name}</span>
+                <span class="msg-time text-[10px] text-slate-500 font-mono">${timestamp}</span>
                 ${data.audio ? '<span class="text-[10px] text-slate-400 bg-slate-800 px-1 rounded">🎤 Audio</span>' : ''}
             </div>
-            <p class="text-sm text-slate-200 leading-snug mt-0.5">${data.text || 'Mensaje de voz'}</p>
+            <p class="msg-text text-sm text-slate-200 leading-snug mt-0.5">${data.text || 'Mensaje de voz'}</p>
         </div>
         ${data.audio ? '<button class="play-btn flex-shrink-0 w-7 h-7 rounded-full bg-sky-600/20 hover:bg-sky-600/40 text-sky-400 flex items-center justify-center text-xs transition">▶</button>' : ''}
     `;
@@ -1378,6 +1437,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('userName');
     const savedFunction = localStorage.getItem('userFunction');
     const savedLegajo = localStorage.getItem('userLegajo');
+    const isRegistered = localStorage.getItem('isRegistered');
+    
     if (savedToken && savedName) {
         try {
             userId = `${savedLegajo}_${savedName}_${savedFunction}`;
@@ -1390,6 +1451,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('Auto-login failed, clearing session:', e);
             localStorage.clear();
         }
+    } else if (isRegistered === 'true') {
+        // If they registered once, direct them to login rather than register form
+        document.getElementById('register-form').style.display = 'none';
+        document.getElementById('login-form').style.display = 'block';
     }
     
     // SVG Icons for buttons
