@@ -462,7 +462,10 @@ async def get_combined_flights() -> List[Dict]:
         "TAM": "JJ",
         "LPE": "LP",
         "LNE": "XL",
-        "DSM": "4M"
+        "DSM": "4M",
+        "FBZ": "FO",
+        "JAT": "WJ",
+        "GLO": "G3"
     }
     
     # 3. Cruzar datos de radares activos
@@ -475,7 +478,9 @@ async def get_combined_flights() -> List[Dict]:
         if flight:
             if flight.startswith("ARG"):
                 is_target = True
-            elif any(flight.startswith(prefix) for prefix in ["LAN", "TAM", "LPE", "LNE", "DSM", "LAP"]):
+            elif any(flight.startswith(prefix) for prefix in ["LAN", "TAM", "LPE", "LNE", "DSM", "LAP", "FBZ", "JAT", "GLO"]):
+                is_target = True
+            elif any(flight.startswith(prefix) for prefix in TARGET_AIRLINES):
                 is_target = True
                 
         if is_target:

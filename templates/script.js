@@ -14,6 +14,8 @@ let markers = [];
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
+let currentAudio = null;
+let clientMutedUsers = new Set();
 let updatesEnabled = true;
 let departureAnnouncementsEnabled = false;
 let announcementsEnabled = false;
@@ -403,8 +405,7 @@ function connectWebSocket(token) {
             if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
                 // Only auto-play audio from OTHER users, not yourself
-                const localName = localStorage.getItem('userName') || '';
-                if (data.audio && data.sender !== localName) {
+                if (data.audio) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
@@ -425,6 +426,8 @@ function connectWebSocket(token) {
                 if (data.message.includes('Usuario no registrado') || data.message.includes('Token no registrado') || data.message.includes('Sesión inválida')) {
                     completeLogout();
                 }
+            } else if (data.type === 'logout_success') {
+                completeLogout();
             } else if (data.type === 'flight_update') {
                 flightData = data.flights.filter(f => f && f.flight_number);
                 updateFlightInfo();
@@ -464,13 +467,100 @@ function displayUserProfile() {
 }
 
 function updateUserList(users) {
-    const usersDiv = document.getElementById('users');
-    const groupUsersDiv = document.getElementById('group-users');
-    if (usersDiv) {
-        usersDiv.textContent = `Usuarios conectados: ${users.length}`;
+    const listContainer = document.getElementById('users-list-container');
+    const groupListContainer = document.getElementById('group-users-list-container');
+    
+    // Clear and build main operators list
+    if (listContainer) {
+        listContainer.innerHTML = '';
+        if (users.length === 0) {
+            listContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1">No hay operadores activos</div>';
+        } else {
+            users.forEach(user => {
+                const isMuted = clientMutedUsers.has(user.user_id);
+                const isSelf = user.user_id === userId;
+                
+                const card = document.createElement('div');
+                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs";
+                card.innerHTML = `
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-slate-200 font-bold truncate">${user.display}</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
+                    </div>
+                    ${!isSelf ? `
+                        <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
+                            ${isMuted ? 'Silenciado' : 'Mutear'}
+                        </button>
+                    ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
+                `;
+                
+                const muteBtn = card.querySelector('.mute-user-btn');
+                if (muteBtn) {
+                    muteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleIndividualMute(user.user_id, muteBtn);
+                    });
+                }
+                listContainer.appendChild(card);
+            });
+        }
     }
-    if (groupUsersDiv && currentGroup) {
-        groupUsersDiv.textContent = `Usuarios conectados: ${users.filter(u => u.group_id === currentGroup).length}`;
+
+    // Clear and build group members list
+    if (groupListContainer) {
+        groupListContainer.innerHTML = '';
+        const groupMembers = users.filter(u => u.group_id === currentGroup);
+        if (groupMembers.length === 0) {
+            groupListContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1">No hay miembros en el canal</div>';
+        } else {
+            groupMembers.forEach(user => {
+                const isMuted = clientMutedUsers.has(user.user_id);
+                const isSelf = user.user_id === userId;
+                
+                const card = document.createElement('div');
+                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs";
+                card.innerHTML = `
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-slate-200 font-bold truncate">${user.display}</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
+                    </div>
+                    ${!isSelf ? `
+                        <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
+                            ${isMuted ? 'Silenciado' : 'Mutear'}
+                        </button>
+                    ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
+                `;
+                
+                const muteBtn = card.querySelector('.mute-user-btn');
+                if (muteBtn) {
+                    muteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleIndividualMute(user.user_id, muteBtn);
+                    });
+                }
+                groupListContainer.appendChild(card);
+            });
+        }
+    }
+}
+
+function toggleIndividualMute(targetUserId, btnElement) {
+    if (clientMutedUsers.has(targetUserId)) {
+        clientMutedUsers.delete(targetUserId);
+        btnElement.textContent = 'Mutear';
+        btnElement.className = "mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700";
+        // Notify backend too (sync state)
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'unmute_user', target_user_id: targetUserId }));
+        }
+    } else {
+        clientMutedUsers.add(targetUserId);
+        btnElement.textContent = 'Silenciado';
+        btnElement.className = "mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto bg-red-500/20 text-red-400 border-red-500/30";
+        // Notify backend too (sync state)
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'mute_user', target_user_id: targetUserId }));
+        }
     }
 }
 
@@ -524,30 +614,58 @@ function displayMessage(data) {
         const playBtn = messageDiv.querySelector('.play-btn');
         playBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
-            playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
+            playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null, playBtn);
         });
     }
     chatList.appendChild(messageDiv);
     chatList.scrollTop = chatList.scrollHeight;
 }
 
-async function playAudio(audioData, sender, groupId) {
+async function playAudio(audioData, sender, groupId, btnElement = null) {
     try {
+        // Skip playback if this user has been individually muted
+        if (sender && clientMutedUsers.has(sender)) {
+            console.log(`Audio de ${sender} omitido porque el usuario está silenciado.`);
+            return;
+        }
+
+        // If same audio is clicked, toggle play/pause
+        if (currentAudio && currentAudio._audioData === audioData) {
+            if (currentAudio.paused) {
+                currentAudio.play();
+                if (btnElement) btnElement.textContent = '⏸';
+            } else {
+                currentAudio.pause();
+                if (btnElement) btnElement.textContent = '▶';
+            }
+            return;
+        }
+
         // Stop any currently playing audio
         if (currentAudio) {
             currentAudio.pause();
             currentAudio.src = '';
-            currentAudio = null;
+            // Reset all buttons to play state
+            document.querySelectorAll('.play-btn').forEach(btn => btn.textContent = '▶');
         }
+
         const audioBlob = base64ToBlob(audioData, 'audio/webm');
         if (!audioBlob) throw new Error("No se pudo convertir el audio");
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
+        audio._audioData = audioData; // unique key identifier
         currentAudio = audio;
+        
+        if (btnElement) btnElement.textContent = '⏸';
         audio.play();
+        
         audio.onended = () => { 
             URL.revokeObjectURL(audioUrl);
+            if (btnElement) btnElement.textContent = '▶';
             if (currentAudio === audio) currentAudio = null;
+        };
+        audio.onpause = () => {
+            if (btnElement && currentAudio === audio) btnElement.textContent = '▶';
         };
     } catch (err) {
         console.error("Error al reproducir audio:", err);

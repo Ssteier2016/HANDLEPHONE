@@ -287,7 +287,12 @@
                         <button id="radar" class="w-full bg-slate-900 hover:bg-slate-800 text-sky-400 border border-sky-500/20 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📡 Ver Radar</button>
                         <button id="history" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📜 Historial</button>
                     </div>
-                    <div id="users" class="text-xs font-mono text-slate-400 bg-slate-950/80 py-1.5 px-3 rounded-lg border border-slate-800/60">Usuarios conectados: 0</div>
+                    <div class="border-t border-slate-800/80 pt-3 text-left">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Operadores Activos</h4>
+                        <div id="users-list-container" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -399,7 +404,12 @@
                         <button id="group-radar" class="bg-slate-900 hover:bg-slate-850 text-sky-400 border border-sky-500/20 py-2 rounded-xl font-semibold text-xs transition m-0">📡 Radar</button>
                         <button id="group-history" class="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 py-2 rounded-xl font-semibold text-xs transition m-0">📜 Historial</button>
                     </div>
-                    <div id="group-users" class="text-xs font-mono text-slate-400 text-center bg-slate-950/80 py-1.5 px-3 rounded-lg border border-slate-800/60">Usuarios conectados: 0</div>
+                    <div class="border-t border-slate-800/80 pt-3 text-left">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Miembros del Canal</h4>
+                        <div id="group-users-list-container" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
