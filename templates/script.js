@@ -928,7 +928,10 @@ async function updateOpenSkyData() {
         const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
         tables.forEach(id => {
             const table = document.getElementById(id);
-            if (table) table.innerHTML = "<tr><td colspan='7'>Error al cargar datos</td></tr>";
+            if (table) {
+                const tbody = table.querySelector('tbody') || table;
+                tbody.innerHTML = "<tr><td colspan='9' class='text-center py-4 text-slate-500'>Error al cargar datos</td></tr>";
+            }
         });
     }
     setTimeout(updateOpenSkyData, 15000);
