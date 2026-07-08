@@ -49,7 +49,7 @@ const PAX_LOOKUP = {
 
 function isTargetAirline(flightNumber) {
     if (!flightNumber) return false;
-    const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
+    const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP', 'WJ', 'FO', 'FB', 'G3', 'GLO'];
     return prefixes.some(p => flightNumber.toUpperCase().startsWith(p));
 }
 
@@ -1134,6 +1134,12 @@ function filterFlights(searchTerm = '') {
             } else if (airlineFilter === 'LA') {
                 const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
                 airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
+            } else if (airlineFilter === 'FO') {
+                airlineMatches = flightNumber.startsWith('FO') || flightNumber.startsWith('FB');
+            } else if (airlineFilter === 'WJ') {
+                airlineMatches = flightNumber.startsWith('WJ');
+            } else if (airlineFilter === 'G3') {
+                airlineMatches = flightNumber.startsWith('G3') || flightNumber.startsWith('GLO');
             }
             
             row.style.display = (textMatches && airlineMatches) ? '' : 'none';
@@ -1153,6 +1159,12 @@ function filterFlights(searchTerm = '') {
             } else if (airlineFilter === 'LA') {
                 const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
                 airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
+            } else if (airlineFilter === 'FO') {
+                airlineMatches = flightNumber.startsWith('FO') || flightNumber.startsWith('FB');
+            } else if (airlineFilter === 'WJ') {
+                airlineMatches = flightNumber.startsWith('WJ');
+            } else if (airlineFilter === 'G3') {
+                airlineMatches = flightNumber.startsWith('G3') || flightNumber.startsWith('GLO');
             }
             
             if (textMatches && airlineMatches) {

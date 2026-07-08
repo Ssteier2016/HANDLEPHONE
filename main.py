@@ -83,8 +83,8 @@ ALLOWED_SECTORS = [
     "Jefatura", "Movilero", "Señalero", "Pañolero"
 ]
 
-# Prefijos de aerolíneas objetivo (Aerolíneas Argentinas y LATAM)
-TARGET_AIRLINES = ["AR", "LA", "JJ", "LP", "XL", "4M"]
+# Prefijos de aerolíneas objetivo (Aerolíneas Argentinas, LATAM, Flybondi, JetSmart, Gol, etc.)
+TARGET_AIRLINES = ["AR", "ARG", "LA", "LAN", "JJ", "TAM", "LP", "LPE", "XL", "LNE", "4M", "DSM", "WJ", "FO", "FB", "G3", "GLO"]
 
 # Caché global para servir vuelos en tiempo real
 global_flights_cache = {"flights": []}
@@ -376,7 +376,7 @@ def scrape_tams_side(mov_type="A") -> List[Dict]:
             # Saltar fila de encabezado
             for row in rows[1:]:
                 cells = [td.text.strip() for td in row.find_all('td')]
-                if len(cells) < 12:
+                if len(cells) < 6:
                     continue
                 
                 airline = cells[0].strip().upper()
@@ -385,22 +385,22 @@ def scrape_tams_side(mov_type="A") -> List[Dict]:
                 
                 flight_number = cells[1].strip()
                 scheduled_time = cells[2].strip()
-                registration = cells[3].strip()
-                position = cells[4].strip()
+                registration = cells[3].strip() if len(cells) > 3 else "N/A"
+                position = cells[4].strip() if len(cells) > 4 else "N/A"
                 
                 if mov_type == "A":
-                    origin = cells[11].strip()
+                    origin = cells[11].strip() if len(cells) > 11 else (cells[9].strip() if len(cells) > 9 else "Desconocido")
                     destination = "SABE"
-                    eta = cells[5].strip()
-                    status = cells[13].strip()
+                    eta = cells[5].strip() if len(cells) > 5 else "N/A"
+                    status = cells[13].strip() if len(cells) > 13 else (cells[12].strip() if len(cells) > 12 else "Programado")
                 else:
                     origin = "SABE"
-                    destination = cells[11].strip()
-                    eta = cells[5].strip()
-                    gate = cells[10].strip()
+                    destination = cells[11].strip() if len(cells) > 11 else (cells[9].strip() if len(cells) > 9 else "Desconocido")
+                    eta = cells[5].strip() if len(cells) > 5 else "N/A"
+                    gate = cells[10].strip() if len(cells) > 10 else "N/A"
                     if gate and gate != "" and gate != "N/A":
                         position = gate
-                    status = cells[13].strip()
+                    status = cells[13].strip() if len(cells) > 13 else (cells[12].strip() if len(cells) > 12 else "Programado")
                 
                 flights.append({
                     "flight_number": f"{airline}{flight_number}",
@@ -666,10 +666,29 @@ def get_history() -> List[Dict]:
         rows = c.fetchall()
     return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
 
-# Transcribir audio a texto (Google Speech Recognition)
+# Transcribir audio a texto (Google Speech Recognition con fallback sf)
 async def transcribe_audio(audio_data: str) -> str:
     try:
         audio_bytes = base64.b64decode(audio_data)
+        
+        # 1. Intentar con soundfile primero para evitar dependencia de ffmpeg/Pydub
+        try:
+            with io.BytesIO(audio_bytes) as audio_file:
+                data, samplerate = sf.read(audio_file)
+                # Exportar a WAV en memoria
+                with io.BytesIO() as wav_io:
+                    sf.write(wav_io, data, samplerate, format='WAV', subtype='PCM_16')
+                    wav_io.seek(0)
+                    recognizer = sr.Recognizer()
+                    with sr.AudioFile(wav_io) as source:
+                        recorded_audio = recognizer.record(source)
+                        text = recognizer.recognize_google(recorded_audio, language="es-ES")
+                        logger.info("Audio transcrito exitosamente usando SoundFile.")
+                        return text
+        except Exception as sf_err:
+            logger.warn(f"SoundFile no pudo transcribir, intentando Pydub: {sf_err}")
+            
+        # 2. Fallback a Pydub/FFmpeg tradicional
         with io.BytesIO(audio_bytes) as audio_file:
             audio_segment = AudioSegment.from_file(audio_file, format="webm")
             audio_segment = audio_segment.set_channels(1).set_frame_rate(16000)
@@ -680,10 +699,10 @@ async def transcribe_audio(audio_data: str) -> str:
                 with sr.AudioFile(wav_io) as source:
                     recorded_audio = recognizer.record(source)
                     text = recognizer.recognize_google(recorded_audio, language="es-ES")
-                    logger.info("Audio transcrito exitosamente.")
+                    logger.info("Audio transcrito exitosamente usando Pydub.")
                     return text
     except Exception as e:
-        logger.error(f"Error al transcribir el audio: {e}")
+        logger.error(f"Error al transcribir el audio en todos los métodos: {e}")
         return "Transcripción no disponible"
 
 # Procesar cola de audio de WebSockets
