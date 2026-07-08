@@ -389,7 +389,46 @@ async function registerUser(event) {
     }
 }
 
+let wakeLock = null;
+let keepAliveAudio = null;
+
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Wake Lock activo en pantalla');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock fue liberado');
+            });
+        }
+    } catch (err) {
+        console.warn('Wake Lock no soportado o fallido:', err);
+    }
+}
+
+function startAudioKeepAlive() {
+    try {
+        if (!keepAliveAudio) {
+            // Generar un audio silencioso en loop de 1 segundo
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.loop = true;
+            source.connect(audioCtx.destination);
+            source.start();
+            keepAliveAudio = audioCtx;
+            console.log('Audio Keep-Alive iniciado');
+        }
+    } catch (e) {
+        console.warn('Audio Keep-Alive no soportado:', e);
+    }
+}
+
 function connectWebSocket(token) {
+    requestWakeLock();
+    startAudioKeepAlive();
+    
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
     }
@@ -404,7 +443,6 @@ function connectWebSocket(token) {
             console.log("Mensaje WebSocket:", data);
             if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
-                // Only auto-play audio from OTHER users, not yourself
                 if (data.audio) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
