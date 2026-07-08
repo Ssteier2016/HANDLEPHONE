@@ -17,7 +17,7 @@ let currentX = 0;
 let updatesEnabled = true;
 let departureAnnouncementsEnabled = false;
 let announcementsEnabled = false;
-let restrictTokens = JSON.parse(localStorage.getItem('restrictTokens') || 'true');
+let restrictTokens = JSON.parse(localStorage.getItem('restrictTokens') || 'false');
 let dailyTokenCount = parseInt(localStorage.getItem('dailyTokenCount') || '0', 10);
 const MAX_TOKENS_DAILY = 2000;
 const TOKENS_PER_FLIGHT = 1;
@@ -421,7 +421,7 @@ function connectWebSocket(token) {
                 updateSwipeHint();
             } else if (data.type === 'error') {
                 showError(data.message);
-                if (data.message.includes('Token no registrado') || data.message.includes('Sesión inválida')) {
+                if (data.message.includes('Usuario no registrado') || data.message.includes('Token no registrado') || data.message.includes('Sesión inválida')) {
                     completeLogout();
                 }
             } else if (data.type === 'flight_update') {
@@ -1412,6 +1412,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
     if (toggleTokenLimitBtn) {
+        toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
         toggleTokenLimitBtn.addEventListener('click', () => {
             restrictTokens = !restrictTokens;
             localStorage.setItem('restrictTokens', JSON.stringify(restrictTokens));

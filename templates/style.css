@@ -38,20 +38,17 @@
     color: #94a3b8 !important;
 }
 
-/* Estilo moderno para el botón de Hablar (Micrófono) */
 #talk, #group-talk {
     background-color: #0284c7; /* bg-sky-600 */
-    background-image: url('/templates/mic-off.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 45%;
     border: 4px solid #1e293b; /* border-slate-800 */
     border-radius: 9999px;
     box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3), 0 4px 6px -4px rgba(14, 165, 233, 0.3);
     cursor: pointer;
-    height: 76px;
-    width: 76px;
-    margin: 15px auto;
+    height: 96px;
+    width: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -67,7 +64,6 @@
 
 #talk.recording, #group-talk.recording {
     background-color: #ef4444; /* bg-red-500 */
-    background-image: url('/templates/mic-on.png');
     animation: microphone-pulse 1.5s infinite;
     border-color: #450a0a;
 }
@@ -84,18 +80,16 @@
     }
 }
 
-/* Estilo moderno para el botón de Mute (Altavoz) */
 #mute, #group-mute {
     background-color: #10b981; /* bg-emerald-500 */
-    background-image: url('/templates/mic.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 50%;
     border: 2px solid #1e293b;
     border-radius: 9999px;
     cursor: pointer;
-    height: 38px;
-    width: 38px;
+    height: 48px;
+    width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
@@ -106,22 +100,21 @@
 
 #mute.muted, #group-mute.muted {
     background-color: #ef4444; /* bg-red-500 */
-    background-image: url('/templates/mute.png');
     box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
 }
 
 /* Botón de Logout */
 .logout-btn {
-    background: url('/templates/logoutred.png') no-repeat center / 50% !important;
     background-color: rgba(239, 68, 68, 0.1) !important;
     border: 1px solid rgba(239, 68, 68, 0.2) !important;
     border-radius: 12px !important;
-    height: 38px;
-    width: 38px;
+    padding: 8px 16px !important;
+    color: #f87171 !important;
+    font-weight: 600;
     transition: all 0.2s;
 }
 
 .logout-btn:hover {
     background-color: rgba(239, 68, 68, 0.2) !important;
-    transform: scale(1.05);
+    transform: scale(1.02);
 }

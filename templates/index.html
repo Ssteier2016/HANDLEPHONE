@@ -58,9 +58,13 @@
     <div id="auth-section" class="w-full max-w-md bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6" style="display: block;">
         <div class="text-center">
             <div class="flex justify-center items-center gap-6 mb-2">
-                <img src="/templates/aero.png" alt="Aerolíneas Argentinas" class="h-12 object-contain">
-                <img src="/templates/app-logo.png" alt="HANDLEPHONE" class="h-20 w-20 mx-auto object-contain rounded-2xl shadow-lg shadow-sky-900/40">
-                <img src="/templates/latam.png" alt="LATAM" class="h-12 object-contain">
+                <div class="bg-white rounded-lg p-1 h-10 w-16 flex items-center justify-center shadow-md">
+                    <img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="Aerolíneas Argentinas" class="h-6 object-contain">
+                </div>
+                <img src="/templates/app-logo.png" alt="HANDLEPHONE" class="h-16 w-16 mx-auto object-contain rounded-2xl shadow-lg shadow-sky-900/40">
+                <div class="bg-white rounded-lg p-1 h-10 w-16 flex items-center justify-center shadow-md">
+                    <img src="https://i.pinimg.com/1200x/6a/f0/e0/6af0e032470f2d35acb5e3f225fe1da7.jpg" alt="LATAM" class="h-6 object-contain">
+                </div>
             </div>
             <h1 class="text-3xl font-extrabold text-white tracking-wider font-sans">HANDLEPHONE</h1>
             <p class="text-xs text-sky-400 font-mono mt-1 uppercase tracking-widest">Consola de Rampa Unificada</p>
@@ -119,7 +123,9 @@
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
             <div class="flex items-center gap-3">
-                <img src="/templates/aero.png" alt="HANDLEPHONE Logo" class="h-8 w-8 object-contain">
+                <div class="bg-white rounded-lg p-1 h-8 w-14 flex items-center justify-center shadow-md">
+                    <img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="Aerolíneas Argentinas" class="h-5 object-contain">
+                </div>
                 <div>
                     <h1 class="text-xl font-extrabold tracking-wide text-white">HandyHandle</h1>
                     <p class="text-xs text-sky-400 font-semibold tracking-wider font-mono">PANEL DE COMUNICACIÓN Y RAMPA</p>
@@ -219,18 +225,22 @@
             <div class="space-y-6">
                 
                 <!-- Walkie-Talkie Button and Mute Panel -->
-                <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col items-center justify-center space-y-4 shadow-xl">
+                <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col items-center justify-center space-y-6 shadow-xl w-full">
                     <span class="text-xs text-sky-400 font-mono tracking-widest uppercase">Canal Walkie-Talkie</span>
-                    <div class="relative w-28 h-28 flex items-center justify-center">
-                        <!-- Pulse rings when recording -->
-                        <div id="talk-ring-1" class="absolute w-28 h-28 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
-                        <div id="talk-ring-2" class="absolute w-36 h-36 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
-                        <button id="talk" class="z-10 focus:outline-none" aria-label="Hablar"></button>
+                    
+                    <!-- Unified flex wrapper for mic and VU meter to prevent overlapping -->
+                    <div class="flex flex-col items-center justify-center w-full space-y-4">
+                        <div class="relative w-28 h-28 flex items-center justify-center">
+                            <!-- Pulse rings when recording -->
+                            <div id="talk-ring-1" class="absolute w-28 h-28 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
+                            <div id="talk-ring-2" class="absolute w-36 h-36 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
+                            <button id="talk" class="z-10 focus:outline-none" aria-label="Hablar"></button>
+                        </div>
+                        <p id="talk-status" class="text-xs text-slate-500 font-mono">Presioná para hablar</p>
                     </div>
-                    <p id="talk-status" class="text-xs text-slate-500 font-mono">Presioná para hablar</p>
 
                     <!-- VU Meter -->
-                    <div class="w-full px-1">
+                    <div class="w-full px-1 pt-2 border-t border-slate-850">
                         <div class="flex items-end justify-between gap-0.5 h-10" id="vu-meter">
                             <div class="vu-bar flex-1 rounded-sm transition-all duration-75" style="height:4px;background:#1e293b"></div>
                             <div class="vu-bar flex-1 rounded-sm transition-all duration-75" style="height:4px;background:#1e293b"></div>
