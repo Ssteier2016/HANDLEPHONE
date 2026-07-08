@@ -341,11 +341,13 @@ def scrape_tams_side(mov_type="A") -> List[Dict]:
         session = requests.Session()
         # 1. Obtener claves ASP.NET
         r = session.get(url, headers=headers, timeout=10)
+        logger.info(f"TAMS GET status: {r.status_code} | len={len(r.text)}")
         soup = BeautifulSoup(r.text, 'html.parser')
         
         viewstate = soup.find('input', {'name': '__VIEWSTATE'}).get('value') if soup.find('input', {'name': '__VIEWSTATE'}) else ''
         eventvalidation = soup.find('input', {'name': '__EVENTVALIDATION'}).get('value') if soup.find('input', {'name': '__EVENTVALIDATION'}) else ''
         viewstategenerator = soup.find('input', {'name': '__VIEWSTATEGENERATOR'}).get('value') if soup.find('input', {'name': '__VIEWSTATEGENERATOR'}) else ''
+        logger.info(f"TAMS VIEWSTATE len={len(viewstate)} EVENTVALIDATION len={len(eventvalidation)}")
         
         # 2. Hacer consulta POST para el aeropuerto SABE (Aeroparque)
         payload = {
@@ -366,11 +368,14 @@ def scrape_tams_side(mov_type="A") -> List[Dict]:
         
         r_post = session.post(url, data=payload, headers=headers, timeout=10)
         r_post.encoding = r_post.apparent_encoding or 'utf-8'
+        logger.info(f"TAMS POST status: {r_post.status_code} | len={len(r_post.text)}")
+
         soup_post = BeautifulSoup(r_post.text, 'html.parser')
         
         grid_id = "dgGrillaA" if mov_type == "A" else "dgGrillaD"
         table = soup_post.find('table', {'id': grid_id})
         
+        logger.info(f"TAMS {mov_type}: tabla '{grid_id}' {'encontrada' if table else 'NO encontrada'}")
         if table:
             rows = table.find_all('tr')
             # Saltar fila de encabezado
@@ -437,23 +442,94 @@ async def get_airplanes_live_data() -> List[Dict]:
         logger.error(f"Excepción al obtener datos de Airplanes.Live: {str(e)}")
         return []
 
+# FR24 API token
+FR24_TOKEN = os.getenv("FLIGHTRADAR24_TOKEN_PRIMARY", "")
+
+async def get_fr24_flights(airport_iata: str = "AEP") -> List[Dict]:
+    """Fetch live flight data from FlightRadar24 API for a given airport."""
+    if not FR24_TOKEN:
+        logger.warning("No FR24 token available")
+        return []
+    token = FR24_TOKEN.split("|")[1] if "|" in FR24_TOKEN else FR24_TOKEN
+    url = f"https://fr24api.flightradar24.com/api/live/flight-positions/light"
+    headers = {
+        "Accept": "application/json",
+        "Accept-Version": "v1",
+        "Authorization": f"Bearer {token}"
+    }
+    params = {"airports": airport_iata, "limit": 100}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params, timeout=15) as resp:
+                logger.info(f"FR24 API status for {airport_iata}: {resp.status}")
+                if resp.status == 200:
+                    data = await resp.json()
+                    flights = data.get("data", [])
+                    logger.info(f"FR24 {airport_iata}: {len(flights)} vuelos obtenidos")
+                    return flights
+                else:
+                    body = await resp.text()
+                    logger.error(f"FR24 API error {resp.status}: {body[:200]}")
+                    return []
+    except Exception as e:
+        logger.error(f"Error consultando FR24 API: {e}", exc_info=True)
+        return []
+
 async def get_combined_flights() -> List[Dict]:
     loop = asyncio.get_event_loop()
     # 1. Scrapear TAMS en paralelo
     try:
         tams_arr = await loop.run_in_executor(None, scrape_tams_side, "A")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error scraping arrivals: {e}", exc_info=True)
         tams_arr = []
         
     try:
         tams_dep = await loop.run_in_executor(None, scrape_tams_side, "D")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error scraping departures: {e}", exc_info=True)
         tams_dep = []
         
     tams_data = tams_arr + tams_dep
+    logger.info(f"TAMS arrivals: {len(tams_arr)} | TAMS departures: {len(tams_dep)} | Total TAMS: {len(tams_data)}")
     
     # 2. Consultar radares geográficos de Airplanes.Live
     airplanes_data = await get_airplanes_live_data()
+    logger.info(f"Airplanes.Live raw planes cerca del área: {len(airplanes_data)}")
+    
+    # 2b. Consultar FlightRadar24 API (token disponible) como fuente adicional
+    fr24_data = await get_fr24_flights("AEP")
+    logger.info(f"FR24 vuelos AEP: {len(fr24_data)}")
+    
+    # Merge FR24 data into airplanes_data format if FR24 returned data
+    if fr24_data:
+        # FR24 data format: {callsign, lat, lon, alt_baro, gspeed, reg, type, ...}
+        for fr in fr24_data:
+            callsign = (fr.get("callsign") or fr.get("flightId") or "").strip()
+            if not callsign:
+                continue
+            # Check if this plane is already in airplanes_data by registration
+            reg = fr.get("reg", "").strip()
+            already_exists = any(
+                (a.get("r", "").strip().upper() == reg.upper() and reg) or
+                (a.get("flight", "").strip().upper() == callsign.upper())
+                for a in airplanes_data
+            )
+            if not already_exists:
+                airplanes_data.append({
+                    "flight": callsign,
+                    "r": reg,
+                    "lat": fr.get("lat"),
+                    "lon": fr.get("lon"),
+                    "alt_geom": fr.get("alt_baro") or fr.get("alt"),
+                    "gs": fr.get("gspeed") or fr.get("spd"),
+                    "vert_rate": fr.get("vspeed"),
+                    "t": fr.get("type", "N/A"),
+                    "orig": fr.get("orig_iata") or fr.get("orig") or "N/A",
+                    "dest": fr.get("dest_iata") or fr.get("dest") or "N/A",
+                })
+    logger.info(f"Total airplanes tras merge FR24+Airplanes.Live: {len(airplanes_data)}")
+
     
     combined_data = []
     icao_to_iata = {
@@ -490,6 +566,11 @@ async def get_combined_flights() -> List[Dict]:
                     iata_flight = flight.replace(icao, iata, 1)
                     break
             
+            raw_orig = plane.get("orig") or ""
+            raw_dest = plane.get("dest") or ""
+            # Default to SABE for planes without origin/destination (they're within AEP radius)
+            origin = raw_orig if raw_orig and raw_orig not in ("", "N/A") else "SABE"
+            destination = raw_dest if raw_dest and raw_dest not in ("", "N/A") else "SABE"
             plane_info = {
                 "flight_number": iata_flight,
                 "registration": registration if registration else "N/A",
@@ -498,8 +579,8 @@ async def get_combined_flights() -> List[Dict]:
                 "altitude": plane.get("alt_geom"),
                 "ground_speed": plane.get("gs"),
                 "vertical_rate": plane.get("vert_rate"),
-                "origin": plane.get("orig", "N/A"),
-                "destination": plane.get("dest", "N/A"),
+                "origin": origin,
+                "destination": destination,
                 "status": "En vuelo",
                 "color": "green",
                 "position": "N/A",
@@ -590,6 +671,7 @@ async def get_combined_flights() -> List[Dict]:
                 "aircraft_type": "N/A",
             })
             
+    logger.info(f"Combined flights total: {len(combined_data)}")
     return combined_data
 
 # Helper para parsear la hora STD del TAMS (ej: "14:30")
@@ -731,9 +813,14 @@ async def process_audio_queue():
             user_id = f"{sender}_{function}"
             save_message(user_id, audio_data, text, timestamp)
 
+            # Include sender_id so clients can properly detect if message is theirs
+            sender_id = f"{sender}_{function}"
+            sender_token = message.get("sender_token", token)
             broadcast_payload = {
                 "type": "message",
                 "sender": sender,
+                "sender_id": sender_id,
+                "sender_token": sender_token,
                 "function": function,
                 "text": text,
                 "timestamp": timestamp,
@@ -910,7 +997,7 @@ async def update_flights_loop():
         except Exception as e:
             logger.error(f"Error en update_flights_loop: {e}")
             
-        await asyncio.sleep(120)  # Actualizar cada 2 minutos
+        await asyncio.sleep(60)  # Actualizar cada 1 minuto para mayor tiempo real
 
 # Endpoint de WebSockets principal
 @app.websocket("/ws/{token}")
@@ -984,14 +1071,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             parts = msg['user_id'].split('_')
             snd = parts[0] if len(parts) > 0 else 'Unknown'
             fn = parts[1] if len(parts) > 1 else 'Rampa'
+            sender_id = f"{snd}_{fn}"
             await websocket.send_json({
                 "type": "message",
                 "sender": snd,
+                "sender_id": sender_id,
                 "function": fn,
                 "text": msg["text"],
                 "timestamp": msg["timestamp"],
                 "audio": msg["audio"]
             })
+        
+        # Señal para que el frontend sepa que terminó el historial y active el auto-play
+        await websocket.send_json({"type": "history_end"})
             
         # Enviar lista de vuelos inicial
         await websocket.send_json({
@@ -1026,13 +1118,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 app_state["updates_enabled"] = message.get("enabled", True)
                 await websocket.send_json({"type": "updates_status", "enabled": app_state["updates_enabled"]})
                 
+            elif msg_type == "refresh_users":
+                # Client requests fresh user list (called periodically for live updates)
+                await broadcast_users()
+                
             elif msg_type == "audio" or msg_type == "message":
                 # Accept both 'audio' (legacy) and 'message' (new frontend) types
                 audio_data = message.get("data") or message.get("audio")
-                if not message.get("sender"):
-                    message["sender"] = users[token].get("name", "Unknown")
-                if not message.get("function"):
-                    message["function"] = users[token].get("function", "Unknown")
+                # Always normalize sender to the authenticated user's name/function from the server
+                message["sender"] = users[token].get("name", "Unknown")
+                message["function"] = users[token].get("function", "Unknown")
+                message["sender_token"] = token  # Include token so broadcast can match sender
                 if audio_data:
                     await audio_queue.put((token, audio_data, message))
                     

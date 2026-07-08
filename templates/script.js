@@ -429,6 +429,8 @@ function connectWebSocket(token) {
     requestWakeLock();
     startAudioKeepAlive();
     
+    window.isWsHistoryLoaded = false;
+    
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
     }
@@ -441,9 +443,17 @@ function connectWebSocket(token) {
         try {
             const data = JSON.parse(event.data);
             console.log("Mensaje WebSocket:", data);
-            if (data.type === 'message' || data.type === 'group_message') {
+            if (data.type === 'connection_success') {
+                // connection_success arrives BEFORE history - reset flag
+                window.isWsHistoryLoaded = false;
+            } else if (data.type === 'history_end') {
+                // All history has been sent - from now on new messages auto-play
+                window.isWsHistoryLoaded = true;
+                console.log('Historial cargado. Auto-play de audio activado.');
+            } else if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
-                if (data.audio) {
+                // Only auto-play if it's not from history loading (checked by comparing message timestamps or simple loaded flag)
+                if (data.audio && window.isWsHistoryLoaded) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
@@ -488,7 +498,9 @@ function connectWebSocket(token) {
 function startPing() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'ping' }));
-    setTimeout(startPing, 30000);
+    // Also request fresh user list on each ping
+    ws.send(JSON.stringify({ type: 'refresh_users' }));
+    setTimeout(startPing, 10000);
 }
 
 function stopPing() {
@@ -603,7 +615,12 @@ function toggleIndividualMute(targetUserId, btnElement) {
 }
 
 function displayMessage(data) {
-    const isMine = data.sender === userId;
+    // Best detection: compare sender_token with our own session token
+    const myToken = localStorage.getItem('sessionToken');
+    const myName = localStorage.getItem('userName');
+    const isMine = data.sender_token 
+        ? (data.sender_token === myToken)
+        : (data.sender === myName || data.sender === userId);
     const chatList = data.type === 'group_message' ? document.getElementById('group-chat-list') : document.getElementById('chat-list');
     if (!chatList) return;
 
@@ -1184,11 +1201,13 @@ function updateMap() {
 
 function updateFlightInfo() {
     console.log("Actualizando tablas con flightData:", flightData);
+    // Accept both ICAO (SABE) and IATA (AEP) codes for Aeroparque
+    const isAeroparque = (code) => code === 'SABE' || code === 'AEP';
     const tables = {
-        'departures-table': { filter: f => f.origin === 'SABE', isArrival: false },
-        'arrivals-table': { filter: f => f.destination === 'SABE', isArrival: true },
-        'group-departures-table': { filter: f => f.origin === 'SABE', isArrival: false },
-        'group-arrivals-table': { filter: f => f.destination === 'SABE', isArrival: true }
+        'departures-table': { filter: f => isAeroparque(f.origin), isArrival: false },
+        'arrivals-table': { filter: f => isAeroparque(f.destination), isArrival: true },
+        'group-departures-table': { filter: f => isAeroparque(f.origin), isArrival: false },
+        'group-arrivals-table': { filter: f => isAeroparque(f.destination), isArrival: true }
     };
     Object.entries(tables).forEach(([id, { filter, isArrival }]) => {
         const table = document.getElementById(id);
