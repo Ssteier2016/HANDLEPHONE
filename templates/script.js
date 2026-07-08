@@ -403,7 +403,8 @@ function connectWebSocket(token) {
             if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
                 // Only auto-play audio from OTHER users, not yourself
-                if (data.audio && data.sender !== userId) {
+                const localName = localStorage.getItem('userName') || '';
+                if (data.audio && data.sender !== localName) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
