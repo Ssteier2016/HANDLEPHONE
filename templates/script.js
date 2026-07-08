@@ -1109,27 +1109,50 @@ function updateFlightInfo() {
 
 function filterFlights(searchTerm = '') {
     searchTerm = searchTerm.toUpperCase().trim();
-    console.log("Filtrando vuelos con término:", searchTerm);
+    const airlineFilter = document.getElementById('airline-filter')?.value || 'ALL';
+    console.log("Filtrando vuelos con término:", searchTerm, "y aerolínea:", airlineFilter);
+    
     const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
     tables.forEach(id => {
         const table = document.getElementById(id);
         if (!table) return;
         const rows = table.querySelectorAll('tr.tams-row');
-        console.log(`Filtrando ${rows.length} filas en ${id}`);
         rows.forEach(row => {
             const registration = row.cells[0].textContent.toUpperCase();
             const flightNumber = row.cells[1].textContent.toUpperCase();
-            const matches = searchTerm === '' || registration.includes(searchTerm) || flightNumber.includes(searchTerm);
-            row.style.display = matches ? '' : 'none';
+            
+            // Match search text term
+            const textMatches = searchTerm === '' || registration.includes(searchTerm) || flightNumber.includes(searchTerm);
+            
+            // Match selected airline filter
+            let airlineMatches = true;
+            if (airlineFilter === 'AR') {
+                airlineMatches = flightNumber.startsWith('AR') || flightNumber.startsWith('ARG');
+            } else if (airlineFilter === 'LA') {
+                const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
+                airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
+            }
+            
+            row.style.display = (textMatches && airlineMatches) ? '' : 'none';
         });
     });
     if (map) {
         markers.forEach(marker => {
             const flight = marker.flight || {};
             const registration = flight.registration || '';
-            const flightNumber = flight.flight_number || '';
-            const matches = searchTerm === '' || registration.toUpperCase().includes(searchTerm) || flightNumber.toUpperCase().includes(searchTerm);
-            if (matches) {
+            const flightNumber = (flight.flight_number || '').toUpperCase();
+            
+            const textMatches = searchTerm === '' || registration.toUpperCase().includes(searchTerm) || flightNumber.includes(searchTerm);
+            
+            let airlineMatches = true;
+            if (airlineFilter === 'AR') {
+                airlineMatches = flightNumber.startsWith('AR') || flightNumber.startsWith('ARG');
+            } else if (airlineFilter === 'LA') {
+                const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
+                airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
+            }
+            
+            if (textMatches && airlineMatches) {
                 if (!map.hasLayer(marker)) marker.addTo(map);
             } else {
                 if (map.hasLayer(marker)) map.removeLayer(marker);
@@ -1426,6 +1449,13 @@ document.addEventListener('DOMContentLoaded', () => {
         searchButton.addEventListener('click', () => {
             const searchTerm = document.getElementById('search-input')?.value || '';
             localStorage.setItem('lastSearchQuery', searchTerm);
+            filterFlights(searchTerm);
+        });
+    }
+    const airlineFilterSelect = document.getElementById('airline-filter');
+    if (airlineFilterSelect) {
+        airlineFilterSelect.addEventListener('change', () => {
+            const searchTerm = document.getElementById('search-input')?.value || '';
             filterFlights(searchTerm);
         });
     }

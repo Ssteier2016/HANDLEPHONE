@@ -77,19 +77,6 @@ except Exception as e:
     logger.error(f"Error al cargar index.html: {e}")
     INDEX_HTML = "<html><body><h1>Error: No se pudo cargar index.html</h1></body></html>"
 
-# Lista de usuarios permitidos
-# Soporta legajos de 5 o 6 dígitos (ej. Mamani)
-ALLOWED_USERS = {
-    "Souto": "35127", "Vázquez": "35806", "Vazquez": "35806", 
-    "Giménez": "35145", "Gimenez": "35145", 
-    "Gómez": "35128", "Gomez": "35128",
-    "Benítez": "33366", "Benitez": "33366", 
-    "Contartese": "38818", "Leites": "38880", "Duartero": "36000",
-    "Arena": "35596", "Brandariz": "35417", "Fossati": "35152", 
-    "Test": "12345", "Test2": "12345", "Bot": "00000", "Binda": "38530",
-    "France": "35574", "Galofalo": "39157", "Mamani": ["335753", "33753"], "Leto": "38546"
-}
-
 # Sectores disponibles en rampa
 ALLOWED_SECTORS = [
     "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
@@ -223,7 +210,6 @@ def load_all_valid_tokens() -> Set[str]:
 
 valid_tokens = load_all_valid_tokens()
 
-# Registro de usuarios
 @app.post("/register")
 async def register_user(request: RegisterRequest):
     surname = request.surname
@@ -231,26 +217,12 @@ async def register_user(request: RegisterRequest):
     sector = request.sector
     password = request.password
 
-    if surname not in ALLOWED_USERS:
-        logger.error(f"Intento de registro con apellido no permitido: {surname}")
-        raise HTTPException(status_code=403, detail="Usuario no permitido")
-    
-    expected = ALLOWED_USERS[surname]
-    if isinstance(expected, list):
-        if employee_id not in expected:
-            logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
-            raise HTTPException(status_code=403, detail="Legajo incorrecto")
-    else:
-        if expected != employee_id:
-            logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
-            raise HTTPException(status_code=403, detail="Legajo incorrecto")
-
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT surname FROM users WHERE surname = ?", (surname,))
+        c.execute("SELECT surname FROM users WHERE employee_id = ?", (employee_id,))
         if c.fetchone():
-            logger.error(f"Usuario ya registrado: {surname}")
-            raise HTTPException(status_code=400, detail="Usuario ya registrado")
+            logger.error(f"Legajo ya registrado: {employee_id}")
+            raise HTTPException(status_code=400, detail="Legajo ya registrado")
 
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
@@ -285,31 +257,16 @@ async def validate_token(request: TokenValidationRequest):
         logger.error(f"Error al validar token {token}: {str(e)}")
         raise HTTPException(status_code=401, detail="Token inválido")
 
-# Inicio de sesión
 @app.post("/login")
 async def login_user(request: LoginRequest):
     surname = request.surname
     employee_id = request.employee_id
     password = request.password
 
-    if surname not in ALLOWED_USERS:
-        logger.error(f"Intento de login con apellido no permitido: {surname}")
-        raise HTTPException(status_code=403, detail="Usuario no permitido")
-
-    expected = ALLOWED_USERS[surname]
-    if isinstance(expected, list):
-        if employee_id not in expected:
-            logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
-            raise HTTPException(status_code=403, detail="Legajo incorrecto")
-    else:
-        if expected != employee_id:
-            logger.error(f"Legajo incorrecto para {surname}: {employee_id}")
-            raise HTTPException(status_code=403, detail="Legajo incorrecto")
-
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE surname = ? AND employee_id = ?",
-                  (surname, employee_id))
+        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE employee_id = ?",
+                  (employee_id,))
         user = c.fetchone()
 
     if not user:
