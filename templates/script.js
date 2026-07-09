@@ -1638,6 +1638,25 @@ function registerServiceWorker() {
             }, 15000);
 
             // Handle updates
+            const showUpdateBanner = (worker) => {
+                const updateBanner = document.getElementById('app-update-banner');
+                const updateBtn = document.getElementById('app-update-btn');
+                if (updateBanner) {
+                    updateBanner.classList.remove('hidden');
+                    updateBanner.classList.add('flex');
+                }
+                if (updateBtn && worker) {
+                    updateBtn.onclick = () => {
+                        worker.postMessage({ type: 'SKIP_WAITING' });
+                    };
+                }
+            };
+
+            // If there's already a waiting worker, show the update banner immediately
+            if (registration.waiting) {
+                showUpdateBanner(registration.waiting);
+            }
+
             registration.onupdatefound = () => {
                 const installingWorker = registration.installing;
                 if (installingWorker) {
@@ -1645,18 +1664,7 @@ function registerServiceWorker() {
                         if (installingWorker.state === 'installed') {
                             if (navigator.serviceWorker.controller) {
                                 console.log('Nuevo contenido disponible en segundo plano.');
-                                // Show the update banner to the user
-                                const updateBanner = document.getElementById('app-update-banner');
-                                const updateBtn = document.getElementById('app-update-btn');
-                                if (updateBanner) {
-                                    updateBanner.classList.remove('hidden');
-                                    updateBanner.classList.add('flex');
-                                }
-                                if (updateBtn) {
-                                    updateBtn.onclick = () => {
-                                        installingWorker.postMessage({ type: 'SKIP_WAITING' });
-                                    };
-                                }
+                                showUpdateBanner(installingWorker);
                             }
                         }
                     };
