@@ -30,6 +30,8 @@ const TOKENS_PER_FLIGHT = 1;
 const MAX_FLIGHTS_PER_REQUEST = 20;
 
 // VU Meter state
+let bellAlerts = new Set();
+let firedBellAlerts = new Set();
 let vuAudioContext = null;
 let vuAnalyser = null;
 let vuDataArray = null;
