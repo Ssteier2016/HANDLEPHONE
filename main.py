@@ -1156,8 +1156,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 # Client requests fresh user list (called periodically for live updates)
                 await broadcast_users()
                 
-            elif msg_type in ["audio", "message", "group_message"]:
-                # Accept 'audio' (legacy), 'message' (normal chat) and 'group_message' types
+            elif msg_type in ["audio", "message", "group_message", "direct_message"]:
+                # Accept 'audio', 'message', 'group_message' and 'direct_message' types
                 audio_data = message.get("data") or message.get("audio")
                 # Always normalize sender to the authenticated user's name/function from the server
                 message["sender"] = users[token].get("name", "Unknown")

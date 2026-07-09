@@ -742,7 +742,20 @@ function displayMessage(data) {
     const chatList = data.type === 'group_message' ? document.getElementById('group-chat-list') : document.getElementById('chat-list');
     if (!chatList) return;
 
-    // Check if we already have this message with "Pendiente de transcripción" to update it
+    // Check if message is already displayed by unique ID to prevent duplicates
+    if (data.id) {
+        const duplicate = chatList.querySelector(`[data-msg-id="${data.id}"]`);
+        if (duplicate) {
+            // Update transcription text if it was pending
+            const textEl = duplicate.querySelector('.msg-text');
+            if (textEl && (textEl.textContent === 'Pendiente de transcripción' || textEl.textContent === 'Mensaje de voz') && data.text) {
+                textEl.textContent = data.text;
+            }
+            return;
+        }
+    }
+
+    // Fallback: Check if we already have this message with "Pendiente de transcripción" to update it
     const messages = chatList.querySelectorAll('.chat-message');
     let existingMsgDiv = null;
     const name = data.sender ? data.sender.split('_')[0] : (isMine ? 'Tú' : 'Desconocido');
@@ -763,10 +776,16 @@ function displayMessage(data) {
         if (textElement) {
             textElement.textContent = data.text || 'Mensaje de voz';
         }
+        if (data.id) {
+            existingMsgDiv.setAttribute('data-msg-id', data.id);
+        }
         return;
     }
 
     const messageDiv = document.createElement('div');
+    if (data.id) {
+        messageDiv.setAttribute('data-msg-id', data.id);
+    }
     messageDiv.className = `chat-message flex items-start gap-2 p-2 rounded-xl mb-1 ${isMine ? 'bg-sky-900/30 border border-sky-800/30' : 'bg-slate-800/40'}`;
     const timestamp = data.timestamp || '';
     const durationText = data.duration ? `<span class="text-[9px] text-slate-500 ml-1 font-mono">${data.duration}s</span>` : '';
