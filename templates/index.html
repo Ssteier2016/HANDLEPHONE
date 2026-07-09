@@ -128,18 +128,20 @@
                 </div>
             </div>
             
-            <div class="flex flex-wrap items-center gap-4">
-                <div id="user-profile" class="text-sm bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800/80 text-slate-300 font-sans flex items-center gap-2"></div>
-                <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-                    <button id="mute" class="focus:outline-none active:scale-95" aria-label="Mutear"></button>
-                    <span class="text-xs text-slate-300 font-medium font-sans">Silenciar</span>
+            <div class="flex flex-wrap items-center gap-3">
+                <div id="user-profile" class="text-xs bg-slate-950/80 px-3.5 py-2.5 rounded-xl border border-slate-800/80 text-slate-350 font-sans flex items-center gap-2 h-[42px] font-medium font-mono"></div>
+                <div class="flex items-center gap-2 bg-slate-950/80 border border-slate-800/80 px-3.5 py-2 rounded-xl h-[42px] hover:border-slate-700/80 transition-colors">
+                    <button id="mute" class="focus:outline-none active:scale-95 text-sky-400 hover:text-sky-300 transition-transform h-5 w-5" aria-label="Mutear"></button>
+                    <span class="text-xs text-slate-300 font-bold font-sans">Silenciar</span>
                 </div>
-                <button id="logout-button" class="logout-btn rounded-xl" aria-label="Cerrar sesión">Salir</button>
+                <button id="logout-button" class="logout-btn rounded-xl flex items-center justify-center gap-2 h-[42px] text-xs px-4 border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold transition duration-150 active:scale-95" aria-label="Cerrar sesión">Salir</button>
             </div>
         </div>
 
         <div id="swipe-hint" class="text-center text-xs text-slate-400 py-1 bg-sky-500/5 rounded border border-sky-500/10 hidden"></div>
-        <button id="return-to-group-btn" class="w-full bg-amber-600/90 hover:bg-amber-500 text-white font-bold py-2 rounded-xl border border-amber-700 transition shadow-lg" style="display: none;">Volver al Grup        <!-- Main Walkie-Talkie Dedicated Dashboard Layout -->
+        <button id="return-to-group-btn" class="w-full bg-amber-600/90 hover:bg-amber-500 text-white font-bold py-2 rounded-xl border border-amber-700 transition shadow-lg" style="display: none;">Volver al Grupo</button>
+        
+        <!-- Main Walkie-Talkie Dedicated Dashboard Layout -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             
             <!-- Center Walkie-Talkie Controls Console (2/3 width on md/lg) -->

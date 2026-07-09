@@ -557,7 +557,7 @@ function displayUserProfile() {
     if (profileDiv) {
         const name = localStorage.getItem('userName') || 'Usuario';
         const role = localStorage.getItem('userFunction') || 'Rol desconocido';
-        profileDiv.textContent = `Usuario: ${name} | Rol: ${role}`;
+        profileDiv.innerHTML = `<span>Usuario: <b>${name}</b></span> <span class="text-slate-600">|</span> <span>Rol: <b class="text-sky-400">${role}</b></span>`;
     }
 }
 
@@ -869,13 +869,17 @@ async function playAudio(audioData, sender, groupId, btnElement = null) {
     }
 }
 
-async function toggleTalk() {
+async function toggleTalk(forceState = null) {
     const talkButton = document.getElementById('talk');
     const statusText = document.getElementById('talk-status');
     const ring1 = document.getElementById('talk-ring-1');
     const ring2 = document.getElementById('talk-ring-2');
     if (!talkButton) return;
-    if (!isRecording) {
+
+    const targetState = forceState !== null ? forceState : !isRecording;
+    if (targetState === isRecording) return; // Already in target state
+
+    if (targetState) {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
@@ -920,9 +924,12 @@ async function toggleTalk() {
         } catch (err) {
             showError("Error al acceder al micrófono.");
             console.error("Error al grabar:", err);
+            isRecording = false;
         }
     } else {
-        mediaRecorder.stop();
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
         isRecording = false;
         stopVuMeter(); // Stop VU meter and reset bars
         // Restore button to normal
@@ -1858,6 +1865,39 @@ document.addEventListener('DOMContentLoaded', () => {
         logoutBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg> Salir`;
         logoutBtn.className = logoutBtn.className + ' flex items-center gap-2';
     }
+
+    // Keyboard Spacebar Push-To-Talk Bindings
+    let spacePressed = false;
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            // Avoid triggering push-to-talk if user is currently typing inside input/select fields
+            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (activeTag === 'input' || activeTag === 'select' || activeTag === 'textarea') {
+                return;
+            }
+            e.preventDefault();
+            if (!spacePressed) {
+                spacePressed = true;
+                console.log("PTT: Barra espaciadora presionada -> Iniciando grabación");
+                toggleTalk(true);
+            }
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') {
+            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (activeTag === 'input' || activeTag === 'select' || activeTag === 'textarea') {
+                return;
+            }
+            e.preventDefault();
+            if (spacePressed) {
+                spacePressed = false;
+                console.log("PTT: Barra espaciadora soltada -> Deteniendo grabación");
+                toggleTalk(false);
+            }
+        }
+    });
 });
 
 const style = document.createElement('style');
