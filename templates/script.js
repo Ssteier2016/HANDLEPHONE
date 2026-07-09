@@ -1811,6 +1811,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (muteNonGroupButton) muteNonGroupButton.addEventListener('click', toggleMuteNonGroup);
     const joinGroupBtn = document.getElementById('join-group-btn');
     if (joinGroupBtn) joinGroupBtn.addEventListener('click', joinGroup);
+
+    // Native PWA Installation Handler
+    let deferredPrompt = null;
+    const installContainer = document.getElementById('pwa-install-container');
+    const installBtn = document.getElementById('pwa-install-btn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent Chrome 67 and earlier from automatically showing the prompt
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        deferredPrompt = e;
+        // Update UI notify the user they can install the PWA
+        if (installContainer) {
+            installContainer.classList.remove('hidden');
+        }
+    });
+
+    if (installBtn) {
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            // Show the install prompt
+            deferredPrompt.prompt();
+            // Wait for the user to respond to the prompt
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`PWA install choice outcome: ${outcome}`);
+            // We've used the prompt, and can't use it again
+            deferredPrompt = null;
+            // Hide the install button
+            if (installContainer) {
+                installContainer.classList.add('hidden');
+            }
+        });
+    }
+
+    window.addEventListener('appinstalled', () => {
+        console.log('HANDLEPHONE PWA fue instalada correctamente');
+        if (installContainer) {
+            installContainer.classList.add('hidden');
+        }
+    });
     const createGroupBtn = document.getElementById('create-group-btn');
     if (createGroupBtn) createGroupBtn.addEventListener('click', createGroup);
     const leaveGroupBtn = document.getElementById('leave-group-btn');
