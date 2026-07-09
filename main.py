@@ -911,11 +911,8 @@ async def clear_messages():
 async def clean_expired_sessions():
     while True:
         try:
-            with sqlite3.connect("chat_history.db") as conn:
-                c = conn.cursor()
-                expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-                c.execute("DELETE FROM sessions WHERE last_active < ?", (expiration_time,))
-                conn.commit()
+            # Sesiones ya no expiran automáticamente por inactividad. Solo se cierran si se presiona 'Salir'.
+            pass
         except Exception as e:
             logger.error(f"Error al limpiar sesiones: {e}")
         await asyncio.sleep(3600)

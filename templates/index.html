@@ -120,118 +120,28 @@
         </div>
 
         <div id="swipe-hint" class="text-center text-xs text-slate-400 py-1 bg-sky-500/5 rounded border border-sky-500/10 hidden"></div>
-        <button id="return-to-group-btn" class="w-full bg-amber-600/90 hover:bg-amber-500 text-white font-bold py-2 rounded-xl border border-amber-700 transition shadow-lg" style="display: none;">Volver al Grupo Activo</button>
-
-        <!-- Main Dashboard Grid Layout -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <button id="return-to-group-btn" class="w-full bg-amber-600/90 hover:bg-amber-500 text-white font-bold py-2 rounded-xl border border-amber-700 transition shadow-lg" style="display: none;">Volver al Grup        <!-- Main Walkie-Talkie Dedicated Dashboard Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            <!-- Left Side: Flights and Search (2/3 width on lg) -->
-            <div class="lg:col-span-2 space-y-6">
-                
-                <!-- Search & Filter container -->
-                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row gap-3 items-center">
-                    <div class="relative w-full sm:w-auto sm:flex-grow">
-                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">🔍</span>
-                        <input type="text" id="search-input" placeholder="Ej. AR1234, LV-XYZ, etc." class="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-all font-sans text-sm">
-                    </div>
-                    <div class="w-full sm:w-48">
-                        <select id="airline-filter" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-300 focus:outline-none focus:border-sky-500 text-sm">
-                            <option value="ALL">Todas las Compañías</option>
-                            <option value="AR">Aerolíneas Argentinas</option>
-                            <option value="LA">LATAM</option>
-                            <option value="FO">Flybondi</option>
-                            <option value="WJ">JetSmart</option>
-                            <option value="G3">Gol</option>
-                        </select>
-                    </div>
-                    <button id="search-button" class="w-full sm:w-32 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold py-2 rounded-xl transition border border-slate-700">Buscar</button>
-                </div>
-
-                <!-- Flight Info Module -->
-                <div id="flights-window" class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <h3 class="text-sm font-extrabold uppercase text-slate-300 font-mono">Tablero de Operaciones SABE</h3>
-                        <button id="updates-toggle" class="toggle-btn w-auto bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold px-3 py-1 rounded border border-slate-700 m-0">Activar Actualizaciones</button>
-                    </div>
-
-                    <!-- Departures and Arrivals Panels -->
-                    <div class="space-y-6">
-                        <!-- Salidas -->
-                        <div id="departures" class="space-y-2">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-amber-500">Partidas (Salidas)</h4>
-                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
-                                <table class="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
-                                            <th class="px-3 py-2.5">Matrícula</th>
-                                            <th class="px-3 py-2.5">N° Vuelo</th>
-                                            <th class="px-3 py-2.5">Prog</th>
-                                            <th class="px-3 py-2.5">Pos</th>
-                                            <th class="px-3 py-2.5">Destino</th>
-                                            <th class="px-3 py-2.5">Real</th>
-                                            <th class="px-3 py-2.5">Aeronave / Pax</th>
-                                            <th class="px-3 py-2.5">Restan 🔔</th>
-                                            <th class="px-3 py-2.5">Info</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="departures-table" class="divide-y divide-slate-800/50"></tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Llegadas -->
-                        <div id="arrivals" class="space-y-2">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-emerald-500">Arribos (Llegadas)</h4>
-                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
-                                <table class="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
-                                            <th class="px-3 py-2.5">Matrícula</th>
-                                            <th class="px-3 py-2.5">N° Vuelo</th>
-                                            <th class="px-3 py-2.5">Prog</th>
-                                            <th class="px-3 py-2.5">Pos</th>
-                                            <th class="px-3 py-2.5">Origen</th>
-                                            <th class="px-3 py-2.5">Real</th>
-                                            <th class="px-3 py-2.5">Aeronave / Pax</th>
-                                            <th class="px-3 py-2.5">Restan 🔔</th>
-                                            <th class="px-3 py-2.5">Info</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="arrivals-table" class="divide-y divide-slate-800/50"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Quick Action Switches -->
-                <div class="flex flex-wrap gap-3 bg-slate-950/40 p-4 border border-slate-800/60 rounded-2xl">
-                    <button id="toggle-departure-announcements" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Anuncios Despegue Off</button>
-                    <button id="toggle-announcements" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Anuncios Llegada Off</button>
-                    <button id="toggle-token-limit" class="flex-grow w-auto text-xs font-semibold py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 transition">Límite Tokens Activo</button>
-                </div>
-            </div>
-
-            <!-- Right Side: Communications and Groups (1/3 width on lg) -->
-            <div class="space-y-6">
-                
-                <!-- Walkie-Talkie Button and Mute Panel -->
-                <div class="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col items-center justify-center space-y-6 shadow-xl w-full">
-                    <span class="text-xs text-sky-400 font-mono tracking-widest uppercase">Canal Walkie-Talkie</span>
+            <!-- Center Walkie-Talkie Controls Console (2/3 width on md/lg) -->
+            <div class="md:col-span-2 space-y-6">
+                <!-- Walkie-Talkie Button and VU Meter Panel -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-8 rounded-2xl flex flex-col items-center justify-center space-y-6 shadow-xl w-full">
+                    <span class="text-xs text-sky-400 font-mono tracking-widest uppercase font-bold">Consola Walkie-Talkie En Vivo</span>
                     
                     <!-- Unified flex wrapper for mic and VU meter to prevent overlapping -->
                     <div class="flex flex-col items-center justify-center w-full space-y-4">
-                        <div class="relative w-28 h-28 flex items-center justify-center">
+                        <div class="relative w-32 h-32 flex items-center justify-center">
                             <!-- Pulse rings when recording -->
-                            <div id="talk-ring-1" class="absolute w-28 h-28 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
-                            <div id="talk-ring-2" class="absolute w-36 h-36 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
-                            <button id="talk" class="z-10 focus:outline-none" aria-label="Hablar"></button>
+                            <div id="talk-ring-1" class="absolute w-32 h-32 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
+                            <div id="talk-ring-2" class="absolute w-40 h-40 rounded-full border-2 border-sky-400/0 transition-all duration-300"></div>
+                            <button id="talk" class="z-10 focus:outline-none w-24 h-24" aria-label="Hablar"></button>
                         </div>
                         <p id="talk-status" class="text-xs text-slate-500 font-mono">Presioná para hablar</p>
                     </div>
 
                     <!-- VU Meter -->
-                    <div class="w-full px-1 pt-2 border-t border-slate-850">
+                    <div class="w-full px-1 pt-4 border-t border-slate-850">
                         <div class="flex items-end justify-between gap-0.5 h-10" id="vu-meter">
                             <div class="vu-bar flex-1 rounded-sm transition-all duration-75" style="height:4px;background:#1e293b"></div>
                             <div class="vu-bar flex-1 rounded-sm transition-all duration-75" style="height:4px;background:#1e293b"></div>
@@ -261,12 +171,15 @@
                 <!-- Chat & Conversation -->
                 <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-3">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Transcripciones en vivo</h3>
-                    <div id="chat-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                    <div id="chat-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
                 </div>
+            </div>
 
+            <!-- Right Sidebar: Groups and Operators (1/3 width on md/lg) -->
+            <div class="space-y-6">
                 <!-- Private Groups Console -->
                 <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Grupo Privado</h3>
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Canal Privado</h3>
                     <div id="group-join" class="space-y-3">
                         <input id="group-id" placeholder="Código de grupo o nombre" maxlength="20" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm font-mono">
                         <div class="grid grid-cols-2 gap-2">
@@ -276,20 +189,20 @@
                     </div>
                 </div>
 
-                <!-- Extra controls: Radar, Historial, Users -->
-                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-4 text-center">
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="radar" class="w-full bg-slate-900 hover:bg-slate-800 text-sky-400 border border-sky-500/20 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📡 Ver Radar</button>
-                        <button id="history" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📜 Historial</button>
-                    </div>
-                    <div class="border-t border-slate-800/80 pt-3 text-left">
+                <!-- Active Operators & Historical log toggle buttons -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-4">
+                    <button id="history" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-350 border border-slate-800 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm m-0">📜 Historial de Mensajes</button>
+                    
+                    <div class="border-t border-slate-800/85 pt-3 text-left">
                         <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Operadores Activos</h4>
-                        <div id="users-list-container" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        <div id="users-list-container" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                             <!-- Populated dynamically via JS -->
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>            </div>
         </div>
     </div>
 
@@ -415,21 +328,6 @@
         </div>
     </div>
 
-    <!-- Pantalla de radar -->
-    <div id="radar-screen" class="w-full max-w-5xl bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl p-4 shadow-2xl space-y-4 flex flex-col h-[85vh] relative" style="display: none;">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3 gap-4">
-            <div class="flex items-center gap-2">
-                <span class="text-lg">📡</span>
-                <h2 class="text-lg font-bold text-white">Radar SABE en Vivo</h2>
-            </div>
-            <div class="flex-grow max-w-sm">
-                <input id="search-bar" placeholder="Buscar matrícula o vuelo..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm font-sans">
-            </div>
-            <button class="close-btn p-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 text-red-400 transition w-auto m-0" aria-label="Cerrar radar">✖</button>
-        </div>
-        <div id="map" class="w-full flex-grow rounded-xl overflow-hidden border border-slate-800 shadow-inner" style="height: 400px;"></div>
-    </div>
-
     <!-- Pantalla de historial -->
     <div id="history-screen" class="w-full max-w-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 flex flex-col relative" style="display: none;">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -439,19 +337,6 @@
         <div id="history-list" class="space-y-3 max-h-[75vh] overflow-y-auto pr-1"></div>
     </div>
 
-    <!-- Modal para detalles de vuelo -->
-    <div id="flight-details-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300" style="display: none;">
-        <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 transform scale-95 transition-all">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h3 class="text-md font-bold text-white flex items-center gap-2"><span>✈</span> Detalles del Vuelo</h3>
-                <button id="close-modal-btn" class="text-slate-400 hover:text-red-400 text-lg">✖</button>
-            </div>
-            <div id="flight-details-content" class="space-y-2 text-sm text-slate-300"></div>
-            <button id="close-modal-footer-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2 rounded-xl transition border border-slate-700">Cerrar</button>
-        </div>
-    </div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/templates/script.js?v=8"></script>
+    <script src="/templates/script.js?v=9"></script>
 </body>
 </html>
