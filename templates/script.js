@@ -943,10 +943,14 @@ async function toggleTalk(forceState = null) {
     }
 }
 
-async function toggleGroupTalk() {
+async function toggleGroupTalk(forceState = null) {
     const groupTalkButton = document.getElementById('group-talk');
     if (!groupTalkButton || !currentGroup) return;
-    if (!isGroupRecording) {
+    
+    const targetState = forceState !== null ? forceState : !isGroupRecording;
+    if (targetState === isGroupRecording) return; // Already in target state
+    
+    if (targetState) {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
@@ -991,9 +995,12 @@ async function toggleGroupTalk() {
         } catch (err) {
             showError("Error al acceder al micrófono.");
             console.error("Error al grabar en grupo:", err);
+            isGroupRecording = false;
         }
     } else {
-        mediaRecorder.stop();
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
         isGroupRecording = false;
         groupTalkButton.classList.remove('recording');
     }
@@ -1741,9 +1748,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const returnToGroupBtn = document.getElementById('return-to-group-btn');
     if (returnToGroupBtn) returnToGroupBtn.addEventListener('click', returnToGroup);
     const talkButton = document.getElementById('talk');
-    if (talkButton) talkButton.addEventListener('click', toggleTalk);
+    if (talkButton) {
+        // Detect if device supports touch events (mobile/tablet)
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        if (isTouchDevice) {
+            console.log("Device is mobile/touch. Enabling press-and-hold touch actions.");
+            talkButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                toggleTalk(true);
+            });
+            talkButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                toggleTalk(false);
+            });
+            talkButton.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                toggleTalk(false);
+            });
+        } else {
+            console.log("Device is desktop. Enabling default click toggle action.");
+            talkButton.addEventListener('click', () => {
+                toggleTalk();
+            });
+        }
+    }
     const groupTalkButton = document.getElementById('group-talk');
-    if (groupTalkButton) groupTalkButton.addEventListener('click', toggleGroupTalk);
+    if (groupTalkButton) {
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isTouchDevice) {
+            groupTalkButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                toggleGroupTalk(true);
+            });
+            groupTalkButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                toggleGroupTalk(false);
+            });
+            groupTalkButton.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                toggleGroupTalk(false);
+            });
+        } else {
+            groupTalkButton.addEventListener('click', () => {
+                toggleGroupTalk();
+            });
+        }
+    }
     const muteButton = document.getElementById('mute');
     if (muteButton) muteButton.addEventListener('click', toggleMute);
     const groupMuteButton = document.getElementById('group-mute');
