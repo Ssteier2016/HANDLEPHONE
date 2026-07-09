@@ -813,11 +813,14 @@ async def process_audio_queue():
             user_id = f"{sender}_{function}"
             save_message(user_id, audio_data, text, timestamp)
 
+            group_id = message.get("group_id")
+            is_group = message.get("type") == "group_message" or group_id is not None
+            
             # Include sender_id so clients can properly detect if message is theirs
             sender_id = f"{sender}_{function}"
             sender_token = message.get("sender_token", token)
             broadcast_payload = {
-                "type": "message",
+                "type": "group_message" if is_group else "message",
                 "sender": sender,
                 "sender_id": sender_id,
                 "sender_token": sender_token,
@@ -826,15 +829,19 @@ async def process_audio_queue():
                 "timestamp": timestamp,
                 "audio": audio_data
             }
+            if is_group:
+                broadcast_payload["group_id"] = group_id
             
             disconnected_users = []
             for user_token, user in list(users.items()):
-                # FIXED: Send to everyone including the sender so they see their own message
                 if not user["logged_in"] or not user["websocket"]:
                     disconnected_users.append(user_token)
                     continue
+                # If it's a group message, send only to group members
+                if is_group and user.get("group_id") != group_id:
+                    continue
+                
                 muted_users = user.get("muted_users", set())
-                sender_id = f"{sender}_{function}"
                 # Only skip if this user muted the sender (not if they are the sender)
                 if sender_id in muted_users and user_token != token:
                     continue
@@ -1122,8 +1129,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 # Client requests fresh user list (called periodically for live updates)
                 await broadcast_users()
                 
-            elif msg_type == "audio" or msg_type == "message":
-                # Accept both 'audio' (legacy) and 'message' (new frontend) types
+            elif msg_type in ["audio", "message", "group_message"]:
+                # Accept 'audio' (legacy), 'message' (normal chat) and 'group_message' types
                 audio_data = message.get("data") or message.get("audio")
                 # Always normalize sender to the authenticated user's name/function from the server
                 message["sender"] = users[token].get("name", "Unknown")

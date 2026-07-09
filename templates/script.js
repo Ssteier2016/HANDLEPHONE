@@ -452,8 +452,10 @@ function connectWebSocket(token) {
                 console.log('Historial cargado. Auto-play de audio activado.');
             } else if (data.type === 'message' || data.type === 'group_message') {
                 displayMessage(data);
-                // Only auto-play if it's not from history loading (checked by comparing message timestamps or simple loaded flag)
-                if (data.audio && window.isWsHistoryLoaded) {
+                // Only auto-play if it's not from history loading AND NOT our own recorded audio
+                const myToken = localStorage.getItem('sessionToken');
+                const isMine = data.sender_token && data.sender_token === myToken;
+                if (data.audio && window.isWsHistoryLoaded && !isMine) {
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
@@ -1063,20 +1065,13 @@ async function updateOpenSkyData() {
             completeLogout();
             return;
         }
-        const response = await fetch(`/api/flights?limit=${MAX_FLIGHTS_PER_REQUEST}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
+        const response = await fetch(`/api/flights`);
         console.log("Respuesta de /api/flights:", response.status, response.statusText);
         if (response.ok) {
             const data = await response.json();
             console.log("Datos de /api/flights:", JSON.stringify(data, null, 2));
             flightData = Array.isArray(data.flights) ? data.flights.filter(f => f && f.flight_number) : [];
             console.log("flightData filtrado:", flightData);
-            dailyTokenCount += flightData.length * TOKENS_PER_FLIGHT;
-            localStorage.setItem('dailyTokenCount', dailyTokenCount.toString());
             updateFlightInfo();
             updateMap();
             // Verificar anuncios de llegadas y despegues
