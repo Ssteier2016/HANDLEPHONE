@@ -1,24 +1,50 @@
 {
-  "name": "Crypto Tracker Pro",
-  "short_name": "Crypto Tracker",
-  "description": "Seguí tus transacciones y ganancias en criptomonedas y acciones.",
+  "name": "HANDLEPHONE",
+  "short_name": "HandlePhone",
+  "description": "Consola de rampa unificada y Walkie-Talkie en tiempo real.",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#0f172a",
-  "background_color": "#1e293b",
+  "orientation": "portrait-primary",
+  "theme_color": "#030712",
+  "background_color": "#030712",
   "icons": [
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7igJk8L3RleHQ+PC9zdmc+",
+      "src": "/templates/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7igJk8L3RleHQ+PC9zdmc+",
+      "src": "/templates/icon-192x192.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Hablar ahora",
+      "short_name": "Grabar",
+      "description": "Acceso rápido para grabar y transmitir audio",
+      "url": "/#ptt-shortcut",
+      "icons": [{ "src": "/templates/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "widgets": [
+    {
+      "name": "Widget PTT",
+      "short_name": "Micrófono",
+      "description": "Micrófono en tu pantalla de inicio",
+      "tag": "ptt-widget",
+      "template": "ptt-widget-template",
+      "ms_run_interval": 86400000,
+      "icons": [
+        {
+          "src": "/templates/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

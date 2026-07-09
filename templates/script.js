@@ -1898,6 +1898,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // PWA Widget communication listener
+    navigator.serviceWorker?.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'PTT_WIDGET_START') {
+            console.log('PTT triggered from PWA widget shortcut');
+            toggleTalk(true);
+            setTimeout(() => toggleTalk(false), 5000); // Record 5s default if triggered remotely
+        }
+    });
+
+    // Handle hash launcher shortcuts
+    if (window.location.hash === '#ptt-shortcut' || window.location.hash === '#ptt-widget-action') {
+        history.replaceState(null, null, ' '); // Clean URL
+        setTimeout(() => {
+            console.log('Launching shortcut mic action...');
+            toggleTalk(true);
+            setTimeout(() => toggleTalk(false), 6000); // 6 seconds recording limit
+        }, 1000);
+    }
 });
 
 const style = document.createElement('style');

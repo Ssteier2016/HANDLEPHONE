@@ -232,3 +232,29 @@ self.addEventListener('notificationclick', event => {
     event.notification.close();
     event.waitUntil(clients.openWindow('/'));
 });
+
+// PWA Widget lifecycle handlers
+self.addEventListener('widgetinstall', event => {
+    console.log('Widget instalado:', event.widget.tag);
+    event.waitUntil(
+        self.widgets.updateByTag('ptt-widget', {
+            template: 'ptt-widget-template',
+            data: { title: 'HandlePhone PTT', status: 'Listo para grabar' }
+        })
+    );
+});
+
+self.addEventListener('widgetclick', event => {
+    if (event.action === 'ptt-start') {
+        event.waitUntil(
+            self.clients.matchAll({ type: 'window' }).then(windowClients => {
+                if (windowClients.length > 0) {
+                    windowClients[0].focus();
+                    windowClients[0].postMessage({ type: 'PTT_WIDGET_START' });
+                } else {
+                    self.clients.openWindow('/#ptt-widget-action');
+                }
+            })
+        );
+    }
+});
