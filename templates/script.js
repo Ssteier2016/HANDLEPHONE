@@ -1585,10 +1585,10 @@ function registerServiceWorker() {
         navigator.serviceWorker.register('/sw.js').then(registration => {
             console.log('Service Worker registrado:', registration.scope);
             
-            // Check for updates periodically (every 30 seconds)
+            // Check for updates periodically (every 15 seconds)
             setInterval(() => {
                 registration.update();
-            }, 30000);
+            }, 15000);
 
             // Handle updates
             registration.onupdatefound = () => {
@@ -1597,9 +1597,19 @@ function registerServiceWorker() {
                     installingWorker.onstatechange = () => {
                         if (installingWorker.state === 'installed') {
                             if (navigator.serviceWorker.controller) {
-                                console.log('Nuevo contenido disponible. Actualizando automáticamente...');
-                                // Force skipWaiting on the new worker
-                                installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                                console.log('Nuevo contenido disponible en segundo plano.');
+                                // Show the update banner to the user
+                                const updateBanner = document.getElementById('app-update-banner');
+                                const updateBtn = document.getElementById('app-update-btn');
+                                if (updateBanner) {
+                                    updateBanner.classList.remove('hidden');
+                                    updateBanner.classList.add('flex');
+                                }
+                                if (updateBtn) {
+                                    updateBtn.onclick = () => {
+                                        installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                                    };
+                                }
                             }
                         }
                     };
