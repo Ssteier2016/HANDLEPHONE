@@ -277,14 +277,25 @@ function updateCountdowns() {
     });
 }
 
-function showError(message) {
+function showError(message, isSuccess = false) {
     const errorDiv = document.getElementById('error-message');
     if (errorDiv) {
         errorDiv.textContent = message;
         errorDiv.style.display = 'block';
-        setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
+        if (isSuccess) {
+            // Success: green styles
+            errorDiv.className = "text-emerald-400 text-sm text-center bg-emerald-950/40 border border-emerald-900/50 p-2.5 rounded-xl";
+        } else {
+            // Error: red styles
+            errorDiv.className = "text-red-400 text-sm text-center bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl";
+        }
+        setTimeout(() => { errorDiv.style.display = 'none'; }, 7000);
     }
-    console.error(message);
+    if (isSuccess) {
+        console.log(message);
+    } else {
+        console.error(message);
+    }
 }
 
 async function loginUser(event) {
@@ -294,11 +305,11 @@ async function loginUser(event) {
     const password = document.getElementById('password-login')?.value || '';
     console.log("Intentando login con:", { surname, employee_id });
     if (!surname || !employee_id || !password) {
-        showError('Por favor, completa todos los campos.');
+        showError('Por favor, completa todos los campos.', false);
         return;
     }
-    if (!/^\d{5}$/.test(employee_id)) {
-        showError('El legajo debe contener exactamente 5 números.');
+    if (!/^\d{5,6}$/.test(employee_id)) {
+        showError('El legajo debe contener entre 5 y 6 números.', false);
         return;
     }
     try {
@@ -322,12 +333,13 @@ async function loginUser(event) {
             document.getElementById('main').style.display = 'block';
             displayUserProfile();
             updateOpenSkyData();
+            showError('Inicio de sesión exitoso', true);
         } else {
             const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
-            showError(`Error al iniciar sesión: ${errorMessage}`);
+            showError(`Error al iniciar sesión: ${errorMessage}`, false);
         }
     } catch (error) {
-        showError('Error de conexión con el servidor.');
+        showError('Error de conexión con el servidor.', false);
         console.error('Error al iniciar sesión:', error);
     }
 }
@@ -340,11 +352,11 @@ async function registerUser(event) {
     const password = document.getElementById('password')?.value || '';
     console.log("Intentando registro con:", { surname, employee_id, sector });
     if (!surname || !employee_id || !sector || !password) {
-        showError('Por favor, completa todos los campos.');
+        showError('Por favor, completa todos los campos.', false);
         return;
     }
-    if (!/^\d{5}$/.test(employee_id)) {
-        showError('El legajo debe contener exactamente 5 números.');
+    if (!/^\d{5,6}$/.test(employee_id)) {
+        showError('El legajo debe contener entre 5 y 6 números.', false);
         return;
     }
     try {
@@ -357,7 +369,7 @@ async function registerUser(event) {
         console.log("Respuesta de /register:", response.status, data);
         if (response.ok) {
             // Auto login user after registration so it's a true one-time process
-            showError('Registro exitoso. Iniciando sesión automáticamente...');
+            showError('Registro exitoso. Iniciando sesión automáticamente...', true);
             // Attempt to login programmatically immediately
             const loginResponse = await fetch('/login', {
                 method: 'POST',
@@ -385,10 +397,10 @@ async function registerUser(event) {
             }
         } else {
             const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
-            showError(`Error al registrarse: ${errorMessage}`);
+            showError(`Error al registrarse: ${errorMessage}`, false);
         }
     } catch (error) {
-        showError('Error de conexión con el servidor.');
+        showError('Error de conexión con el servidor.', false);
         console.error('Error al registrarse:', error);
     }
 }
@@ -1658,9 +1670,14 @@ function completeLogout() {
     document.getElementById('main').style.display = 'none';
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('auth-section').style.display = 'block';
+    
+    // Always default to registration form when logging out or clearing session
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('register-form').style.display = 'block';
+    
     displayUserProfile();
     updateSwipeHint();
-    showError('Sesión cerrada exitosamente');
+    showError('Sesión cerrada exitosamente', true);
 }
 
 function base64ToBlob(base64, mime) {

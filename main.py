@@ -227,17 +227,23 @@ async def register_user(request: RegisterRequest):
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
         c.execute("SELECT surname FROM users WHERE employee_id = ?", (employee_id,))
-        if c.fetchone():
-            logger.error(f"Legajo ya registrado: {employee_id}")
-            raise HTTPException(status_code=400, detail="Legajo ya registrado")
-
+        user_exists = c.fetchone()
+        
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
-                  (surname, employee_id, sector, hashed_password))
-        conn.commit()
-    
-    logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
-    return {"message": "Registro exitoso"}
+        if user_exists:
+            # Sobrescribir contraseña y actualizar información (Recuperación)
+            c.execute("UPDATE users SET surname = ?, sector = ?, password = ? WHERE employee_id = ?",
+                      (surname, sector, hashed_password, employee_id))
+            conn.commit()
+            logger.info(f"Contraseña actualizada/recuperada para legajo: {employee_id}")
+            return {"message": "Contraseña actualizada exitosamente"}
+        else:
+            # Registrar nuevo usuario
+            c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
+                      (surname, employee_id, sector, hashed_password))
+            conn.commit()
+            logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
+            return {"message": "Registro exitoso"}
 
 # Validación de token
 @app.post("/validate-token")
