@@ -3,6 +3,10 @@ let userId = null;
 let currentGroup = null;
 let isRecording = false;
 let isGroupRecording = false;
+let activeDirectTarget = null; // Target user ID for direct operator-to-operator messaging
+let isRecordingDirect = false; // Flag for DM recording state
+let recordingStartTime = null; // Recording start timestamp to measure audio duration
+const playedMessageIds = new Set(JSON.parse(localStorage.getItem('playedMessageIds') || '[]'));
 let isMuted = false;
 let isGroupMuted = false;
 let isNonGroupMuted = false;
@@ -450,12 +454,19 @@ function connectWebSocket(token) {
                 // All history has been sent - from now on new messages auto-play
                 window.isWsHistoryLoaded = true;
                 console.log('Historial cargado. Auto-play de audio activado.');
-            } else if (data.type === 'message' || data.type === 'group_message') {
+            } else if (data.type === 'message' || data.type === 'group_message' || data.type === 'direct_message') {
                 displayMessage(data);
-                // Only auto-play if it's not from history loading AND NOT our own recorded audio
+                // Only auto-play if it's not from history loading AND NOT our own recorded audio AND NOT already played
                 const myToken = localStorage.getItem('sessionToken');
                 const isMine = data.sender_token && data.sender_token === myToken;
-                if (data.audio && window.isWsHistoryLoaded && !isMine) {
+                const msgId = data.id || null;
+                const alreadyPlayed = msgId !== null && playedMessageIds.has(msgId);
+                
+                if (data.audio && window.isWsHistoryLoaded && !isMine && !alreadyPlayed) {
+                    if (msgId !== null) {
+                        playedMessageIds.add(msgId);
+                        localStorage.setItem('playedMessageIds', JSON.stringify(Array.from(playedMessageIds)));
+                    }
                     playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
@@ -464,6 +475,24 @@ function connectWebSocket(token) {
                 currentGroup = data.group_id;
                 document.getElementById('main').style.display = 'none';
                 document.getElementById('group-screen').style.display = 'block';
+                
+                const shareBadge = document.getElementById('group-share-badge');
+                const shareCodeSpan = document.getElementById('group-share-code');
+                if (shareCodeSpan) shareCodeSpan.textContent = currentGroup;
+                if (shareBadge) {
+                    shareBadge.onclick = () => {
+                        navigator.clipboard.writeText(currentGroup).then(() => {
+                            const originalHTML = shareBadge.innerHTML;
+                            shareBadge.innerHTML = '<span>Copiado!</span> ✅';
+                            setTimeout(() => {
+                                shareBadge.innerHTML = originalHTML;
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Error al copiar código:', err);
+                        });
+                    };
+                }
+                
                 updateSwipeHint();
                 updateFlightInfo();
             } else if (data.type === 'group_left') {
@@ -533,16 +562,21 @@ function updateUserList(users) {
                 const isSelf = user.user_id === userId;
                 
                 const card = document.createElement('div');
-                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs";
+                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs gap-2";
                 card.innerHTML = `
-                    <div class="flex flex-col min-w-0">
+                    <div class="flex flex-col min-w-0 flex-grow">
                         <span class="text-slate-200 font-bold truncate">${user.display}</span>
                         <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
                     </div>
                     ${!isSelf ? `
-                        <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
-                            ${isMuted ? 'Silenciado' : 'Mutear'}
-                        </button>
+                        <div class="flex items-center gap-1 flex-shrink-0">
+                            <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
+                                🎤
+                            </button>
+                            <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
+                                ${isMuted ? 'Silenciado' : 'Mutear'}
+                            </button>
+                        </div>
                     ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
                 `;
                 
@@ -551,6 +585,14 @@ function updateUserList(users) {
                     muteBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         toggleIndividualMute(user.user_id, muteBtn);
+                    });
+                }
+
+                const dmBtn = card.querySelector('.dm-user-btn');
+                if (dmBtn) {
+                    dmBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        startDirectRecordingFlow(user.user_id, dmBtn);
                     });
                 }
                 listContainer.appendChild(card);
@@ -570,16 +612,21 @@ function updateUserList(users) {
                 const isSelf = user.user_id === userId;
                 
                 const card = document.createElement('div');
-                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs";
+                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs gap-2";
                 card.innerHTML = `
-                    <div class="flex flex-col min-w-0">
+                    <div class="flex flex-col min-w-0 flex-grow">
                         <span class="text-slate-200 font-bold truncate">${user.display}</span>
                         <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
                     </div>
                     ${!isSelf ? `
-                        <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
-                            ${isMuted ? 'Silenciado' : 'Mutear'}
-                        </button>
+                        <div class="flex items-center gap-1 flex-shrink-0">
+                            <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
+                                🎤
+                            </button>
+                            <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
+                                ${isMuted ? 'Silenciado' : 'Mutear'}
+                            </button>
+                        </div>
                     ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
                 `;
                 
@@ -590,9 +637,66 @@ function updateUserList(users) {
                         toggleIndividualMute(user.user_id, muteBtn);
                     });
                 }
+                
+                const dmBtn = card.querySelector('.dm-user-btn');
+                if (dmBtn) {
+                    dmBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        startDirectRecordingFlow(user.user_id, dmBtn);
+                    });
+                }
                 groupListContainer.appendChild(card);
             });
         }
+    }
+}
+
+function startDirectRecordingFlow(targetUserId, btnElement) {
+    const targetName = targetUserId.split('_')[0];
+    activeDirectTarget = targetUserId;
+    
+    // Update main talk status indicator and make it clear we are in DM mode
+    const statusText = document.getElementById('talk-status');
+    const talkButton = document.getElementById('talk');
+    
+    if (statusText) {
+        statusText.textContent = `🎤 DM para ${targetName} (Toca Talk)`;
+        statusText.className = 'text-xs text-amber-400 font-mono font-bold animate-pulse';
+    }
+    
+    if (talkButton) {
+        talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-amber-600 to-amber-800 hover:from-amber-500 hover:to-amber-700 active:scale-95 border-4 border-amber-400/40 shadow-lg shadow-amber-900/50 flex items-center justify-center transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </div>`;
+    }
+    
+    // Highlight the target row temporarily
+    const originalBg = btnElement.parentElement.parentElement.className;
+    btnElement.parentElement.parentElement.className = btnElement.parentElement.parentElement.className + " border-amber-500 ring-1 ring-amber-500/50";
+    
+    // Clear DM target automatically if they don't record within 15 seconds
+    setTimeout(() => {
+        if (activeDirectTarget === targetUserId && !isRecording) {
+            cancelDirectRecordingFlow();
+        }
+        btnElement.parentElement.parentElement.className = originalBg;
+    }, 15000);
+}
+
+function cancelDirectRecordingFlow() {
+    activeDirectTarget = null;
+    const statusText = document.getElementById('talk-status');
+    const talkButton = document.getElementById('talk');
+    
+    if (statusText) {
+        statusText.textContent = 'Presioná para hablar';
+        statusText.className = 'text-xs text-slate-500 font-mono';
+    }
+    
+    if (talkButton) {
+        talkButton.innerHTML = `<div class="w-24 h-24 rounded-full bg-gradient-to-b from-sky-600 to-sky-800 hover:from-sky-500 hover:to-sky-700 active:scale-95 border-4 border-sky-400/40 shadow-lg shadow-sky-900/50 flex items-center justify-center transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.41 2.72 6.23 6 6.72V21h2v-2.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </div>`;
     }
 }
 
@@ -653,6 +757,8 @@ function displayMessage(data) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message flex items-start gap-2 p-2 rounded-xl mb-1 ${isMine ? 'bg-sky-900/30 border border-sky-800/30' : 'bg-slate-800/40'}`;
     const timestamp = data.timestamp || '';
+    const durationText = data.duration ? `<span class="text-[9px] text-slate-500 ml-1 font-mono">${data.duration}s</span>` : '';
+    
     messageDiv.innerHTML = `
         <div class="flex-shrink-0 w-7 h-7 rounded-full ${isMine ? 'bg-sky-600' : 'bg-slate-700'} flex items-center justify-center text-xs font-bold text-white">
             ${name[0]?.toUpperCase() || '?'}
@@ -661,7 +767,7 @@ function displayMessage(data) {
             <div class="flex items-center gap-2">
                 <span class="sender-name text-xs font-bold ${isMine ? 'text-sky-400' : 'text-slate-300'}">${isMine ? 'Tú' : name}</span>
                 <span class="msg-time text-[10px] text-slate-500 font-mono">${timestamp}</span>
-                ${data.audio ? '<span class="text-[10px] text-slate-400 bg-slate-800 px-1 rounded">🎤 Audio</span>' : ''}
+                ${durationText}
             </div>
             <p class="msg-text text-sm text-slate-200 leading-snug mt-0.5">${data.text || 'Mensaje de voz'}</p>
         </div>
@@ -743,6 +849,7 @@ async function toggleTalk() {
             audioChunks = [];
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
             mediaRecorder.onstop = async () => {
+                const durationSecs = Math.round((Date.now() - recordingStartTime) / 1000) || 1;
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const reader = new FileReader();
                 reader.readAsDataURL(audioBlob);
@@ -753,17 +860,20 @@ async function toggleTalk() {
                     const userFunction = localStorage.getItem('userFunction') || 'Operador';
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
-                            type: 'message',
+                            type: activeDirectTarget ? 'direct_message' : 'message',
+                            target_user_id: activeDirectTarget || undefined,
                             audio: base64Audio,
                             sender: userId,
                             function: userFunction,
                             timestamp: ts,
+                            duration: durationSecs,
                             text: 'Pendiente de transcripción'
                         }));
                     }
                 };
                 stream.getTracks().forEach(track => track.stop());
             };
+            recordingStartTime = Date.now();
             mediaRecorder.start();
             isRecording = true;
             startVuMeter(stream); // Start VU meter with same mic stream
@@ -789,6 +899,7 @@ async function toggleTalk() {
         if (statusText) { statusText.textContent = 'Presioná para hablar'; statusText.className = 'text-xs text-slate-500 font-mono'; }
         if (ring1) ring1.className = 'absolute w-28 h-28 rounded-full border-2 border-sky-400/0 transition-all duration-300';
         if (ring2) ring2.className = 'absolute w-36 h-36 rounded-full border-2 border-sky-400/0 transition-all duration-300';
+        activeDirectTarget = null; // Clear DM target after recording
     }
 }
 
@@ -802,6 +913,7 @@ async function toggleGroupTalk() {
             audioChunks = [];
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
             mediaRecorder.onstop = async () => {
+                const durationSecs = Math.round((Date.now() - recordingStartTime) / 1000) || 1;
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const reader = new FileReader();
                 reader.readAsDataURL(audioBlob);
@@ -813,6 +925,7 @@ async function toggleGroupTalk() {
                             group_id: currentGroup,
                             audio: base64Audio,
                             sender: userId,
+                            duration: durationSecs,
                             text: 'Mensaje de voz'
                         }));
                     } else {
@@ -823,6 +936,7 @@ async function toggleGroupTalk() {
                                 group_id: currentGroup,
                                 audio: base64Audio,
                                 sender: userId,
+                                duration: durationSecs,
                                 text: 'Mensaje de voz'
                             }
                         });
@@ -830,6 +944,7 @@ async function toggleGroupTalk() {
                 };
                 stream.getTracks().forEach(track => track.stop());
             };
+            recordingStartTime = Date.now();
             mediaRecorder.start();
             isGroupRecording = true;
             groupTalkButton.classList.add('recording');
@@ -991,6 +1106,7 @@ async function showHistory() {
             const name = parts[0] || 'Desconocido';
             const sector = parts[1] || 'Sin sector';
             
+            const durationText = msg.duration ? `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-semibold border border-slate-700 text-slate-400 font-mono">${msg.duration}s</span>` : '';
             item.className = 'p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between gap-4 hover:bg-slate-800/40 transition duration-150 cursor-pointer';
             item.innerHTML = `
                 <div class="flex-grow">
@@ -998,6 +1114,7 @@ async function showHistory() {
                         <span class="text-xs font-bold text-sky-400 font-sans">${name}</span>
                         <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-semibold border border-slate-700 text-slate-300 font-sans">${sector}</span>
                         <span class="text-[10px] text-slate-500 font-mono">${msg.timestamp || ''}</span>
+                        ${durationText}
                     </div>
                     <p class="text-sm text-slate-200 font-sans font-medium">${msg.text || 'Mensaje de voz'}</p>
                 </div>

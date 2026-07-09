@@ -180,6 +180,13 @@ def init_db():
             c = conn.cursor()
             c.execute('''CREATE TABLE IF NOT EXISTS messages 
                          (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+            
+            # Dynamically add duration column if it doesn't exist
+            try:
+                c.execute("ALTER TABLE messages ADD COLUMN duration INTEGER")
+            except sqlite3.OperationalError:
+                pass # Already exists
+                
             c.execute('''CREATE TABLE IF NOT EXISTS sessions 
                          (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
                           muted_users TEXT, last_active TIMESTAMP)''')
@@ -738,20 +745,21 @@ def delete_session(token: str):
         c.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
 
-def save_message(user_id: str, audio_data: str, text: str, timestamp: str):
+def save_message(user_id: str, audio_data: str, text: str, timestamp: str, duration: Optional[int] = None) -> int:
     date = datetime.utcnow().strftime("%Y-%m-%d")
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date) VALUES (?, ?, ?, ?, ?)",
-                  (user_id, audio_data, text, timestamp, date))
+        c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date, duration) VALUES (?, ?, ?, ?, ?, ?)",
+                  (user_id, audio_data, text, timestamp, date, duration))
         conn.commit()
+        return c.lastrowid
 
 def get_history() -> List[Dict]:
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT user_id, audio, text, timestamp, date FROM messages ORDER BY date, timestamp")
+        c.execute("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages ORDER BY date, timestamp")
         rows = c.fetchall()
-    return [{"user_id": row[0], "audio": row[1], "text": row[2], "timestamp": row[3], "date": row[4]} for row in rows]
+    return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
 
 # Transcribir audio a texto (Google Speech Recognition con fallback sf)
 async def transcribe_audio(audio_data: str) -> str:
@@ -811,26 +819,34 @@ async def process_audio_queue():
                 text = await transcribe_audio(audio_data)
 
             user_id = f"{sender}_{function}"
-            save_message(user_id, audio_data, text, timestamp)
+            duration = message.get("duration")
+            msg_db_id = save_message(user_id, audio_data, text, timestamp, duration)
 
             group_id = message.get("group_id")
+            target_user_id = message.get("target_user_id")
+            
             is_group = message.get("type") == "group_message" or group_id is not None
+            is_direct = message.get("type") == "direct_message" or target_user_id is not None
             
             # Include sender_id so clients can properly detect if message is theirs
             sender_id = f"{sender}_{function}"
             sender_token = message.get("sender_token", token)
             broadcast_payload = {
-                "type": "group_message" if is_group else "message",
+                "type": "group_message" if is_group else ("direct_message" if is_direct else "message"),
+                "id": msg_db_id,
                 "sender": sender,
                 "sender_id": sender_id,
                 "sender_token": sender_token,
                 "function": function,
                 "text": text,
                 "timestamp": timestamp,
+                "duration": duration,
                 "audio": audio_data
             }
             if is_group:
                 broadcast_payload["group_id"] = group_id
+            if is_direct:
+                broadcast_payload["target_user_id"] = target_user_id
             
             disconnected_users = []
             for user_token, user in list(users.items()):
@@ -840,6 +856,13 @@ async def process_audio_queue():
                 # If it's a group message, send only to group members
                 if is_group and user.get("group_id") != group_id:
                     continue
+                # If it's a direct message, send only to the sender and the target operator
+                if is_direct:
+                    dest_user_id = f"{user['name']}_{user['function']}"
+                    is_dest = (dest_user_id == target_user_id)
+                    is_src = (user_token == token)
+                    if not is_dest and not is_src:
+                        continue
                 
                 muted_users = user.get("muted_users", set())
                 # Only skip if this user muted the sender (not if they are the sender)
@@ -1081,6 +1104,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             sender_id = f"{snd}_{fn}"
             await websocket.send_json({
                 "type": "message",
+                "id": msg["id"],
                 "sender": snd,
                 "sender_id": sender_id,
                 "function": fn,

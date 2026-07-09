@@ -1,7 +1,7 @@
-const CACHE_NAME = 'handyhandle-cache-v7';
+const CACHE_NAME = 'handyhandle-cache-v8';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
-const API_CACHE = 'api-cache-v7';
+const API_CACHE = 'api-cache-v8';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 const urlsToCache = [
@@ -87,6 +87,31 @@ self.addEventListener('fetch', event => {
         );
         return;
     }
+    // Network-First strategy for core application files and assets
+    const isAppCoreFile = requestUrl.pathname === '/' || 
+                          requestUrl.pathname.includes('/templates/script.js') || 
+                          requestUrl.pathname.includes('/templates/style.css') || 
+                          requestUrl.pathname.includes('/templates/index.html') ||
+                          requestUrl.pathname.includes('/api/');
+
+    if (isAppCoreFile) {
+        event.respondWith(
+            fetch(event.request).then(networkResponse => {
+                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(event.request, responseClone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                console.log('Sirviendo recurso principal desde cache offline:', event.request.url);
+                return caches.match(event.request);
+            })
+        );
+        return;
+    }
+
     event.respondWith(
         caches.match(event.request).then(response => {
             if (response) {

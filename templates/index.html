@@ -111,6 +111,10 @@
             
             <div class="flex flex-wrap items-center gap-4">
                 <div id="user-profile" class="text-sm bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800/80 text-slate-300 font-sans flex items-center gap-2"></div>
+                <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+                    <button id="mute" class="focus:outline-none active:scale-95" aria-label="Mutear"></button>
+                    <span class="text-xs text-slate-300 font-medium font-sans">Silenciar</span>
+                </div>
                 <button id="logout-button" class="logout-btn rounded-xl" aria-label="Cerrar sesión">Salir</button>
             </div>
         </div>
@@ -252,11 +256,6 @@
                             <span class="text-[9px] text-slate-600 font-mono">0dB</span>
                         </div>
                     </div>
-
-                    <div class="flex items-center gap-3">
-                        <button id="mute" class="focus:outline-none active:scale-95" aria-label="Mutear"></button>
-                        <span class="text-xs text-slate-400 font-medium">Silenciar recepción</span>
-                    </div>
                 </div>
 
                 <!-- Chat & Conversation -->
@@ -269,11 +268,7 @@
                 <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Grupo Privado</h3>
                     <div id="group-join" class="space-y-3">
-                        <input id="group-id" placeholder="Nombre del grupo" maxlength="20" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm">
-                        <div class="flex items-center gap-2">
-                            <input type="checkbox" id="group-private" class="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0">
-                            <label for="group-private" class="text-xs text-slate-400 cursor-pointer">Hacer grupo privado</label>
-                        </div>
+                        <input id="group-id" placeholder="Código de grupo o nombre" maxlength="20" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm font-mono">
                         <div class="grid grid-cols-2 gap-2">
                             <button id="join-group-btn" class="bg-sky-600 hover:bg-sky-500 text-white font-semibold py-2 rounded-xl text-xs transition">Unirme</button>
                             <button id="create-group-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 rounded-xl text-xs transition border border-slate-700">Crear Grupo</button>
@@ -310,7 +305,12 @@
                     </svg>
                 </button>
                 <div>
-                    <h2 id="group-title-label" class="text-xl font-extrabold text-white">Grupo de Rampa</h2>
+                    <div class="flex items-center gap-2">
+                        <h2 id="group-title-label" class="text-xl font-extrabold text-white">Grupo de Rampa</h2>
+                        <span id="group-share-badge" class="bg-sky-950/40 text-sky-400 border border-sky-850 px-2 py-0.5 rounded text-xs font-mono font-bold cursor-pointer hover:bg-sky-900/40 transition flex items-center gap-1" title="Click para copiar código">
+                            <span>Código: </span><span id="group-share-code">...</span> 📋
+                        </span>
+                    </div>
                     <p class="text-xs text-amber-500 font-semibold tracking-wider font-mono">CANAL PRIVADO DE COMUNICACIONES</p>
                 </div>
             </div>
@@ -436,7 +436,7 @@
             <h2 class="text-lg font-bold text-white flex items-center gap-2"><span>📜</span> Historial de Transmisiones</h2>
             <button id="history-back-btn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 text-xs font-semibold transition w-auto m-0" aria-label="Volver">Volver</button>
         </div>
-        <div id="history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1"></div>
+        <div id="history-list" class="space-y-3 max-h-[75vh] overflow-y-auto pr-1"></div>
     </div>
 
     <!-- Modal para detalles de vuelo -->
@@ -452,6 +452,6 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/templates/script.js"></script>
+    <script src="/templates/script.js?v=8"></script>
 </body>
 </html>
