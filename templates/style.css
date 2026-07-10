@@ -80,7 +80,7 @@
     }
 }
 
-#mute, #group-mute {
+#group-mute {
     background-color: #10b981; /* bg-emerald-500 */
     border: 2px solid #1e293b;
     border-radius: 9999px;
@@ -94,11 +94,11 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
-#mute:hover, #group-mute:hover {
+#group-mute:hover {
     transform: scale(1.05);
 }
 
-#mute.muted, #group-mute.muted {
+#group-mute.muted {
     background-color: #ef4444; /* bg-red-500 */
     box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
 }
