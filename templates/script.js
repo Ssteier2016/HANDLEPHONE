@@ -563,104 +563,101 @@ function displayUserProfile() {
 
 function updateUserList(users) {
     const listContainer = document.getElementById('users-list-container');
+    const offlineListContainer = document.getElementById('offline-users-list-container');
     const groupListContainer = document.getElementById('group-users-list-container');
+    const offlineGroupListContainer = document.getElementById('offline-group-users-list-container');
     
     // Clear and build main operators list
-    if (listContainer) {
-        listContainer.innerHTML = '';
-        if (users.length === 0) {
-            listContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1">No hay operadores activos</div>';
-        } else {
-            users.forEach(user => {
-                const isMuted = clientMutedUsers.has(user.user_id);
-                const isSelf = user.user_id === userId;
-                
-                const card = document.createElement('div');
-                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs gap-2";
-                card.innerHTML = `
-                    <div class="flex flex-col min-w-0 flex-grow">
-                        <span class="text-slate-200 font-bold truncate">${user.display}</span>
-                        <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
-                    </div>
-                    ${!isSelf ? `
-                        <div class="flex items-center gap-1 flex-shrink-0">
-                            <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
-                                🎤
-                            </button>
-                            <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
-                                ${isMuted ? 'Silenciado' : 'Mutear'}
-                            </button>
-                        </div>
-                    ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
-                `;
-                
-                const muteBtn = card.querySelector('.mute-user-btn');
-                if (muteBtn) {
-                    muteBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        toggleIndividualMute(user.user_id, muteBtn);
-                    });
-                }
+    if (listContainer) listContainer.innerHTML = '';
+    if (offlineListContainer) offlineListContainer.innerHTML = '';
+    
+    const activeUsers = users.filter(u => u.active !== false);
+    const offlineUsers = users.filter(u => u.active === false);
 
-                const dmBtn = card.querySelector('.dm-user-btn');
-                if (dmBtn) {
-                    dmBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        startDirectRecordingFlow(user.user_id, dmBtn);
-                    });
-                }
-                listContainer.appendChild(card);
+    const renderUserCard = (user, container) => {
+        const isMuted = clientMutedUsers.has(user.user_id);
+        const isSelf = user.user_id === userId;
+        const isActive = user.active !== false;
+        
+        const card = document.createElement('div');
+        card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs gap-2";
+        card.innerHTML = `
+            <div class="flex items-center gap-2 min-w-0 flex-grow">
+                ${isActive ? '<span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse"></span>' : ''}
+                <div class="flex flex-col min-w-0">
+                    <span class="text-slate-200 font-bold truncate">${user.display}</span>
+                    <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
+                </div>
+            </div>
+            ${!isSelf ? `
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
+                        🎤
+                    </button>
+                    <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
+                        ${isMuted ? 'Silenciado' : 'Mutear'}
+                    </button>
+                </div>
+            ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md flex-shrink-0">Tú</span>'}
+        `;
+        
+        const muteBtn = card.querySelector('.mute-user-btn');
+        if (muteBtn) {
+            muteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleIndividualMute(user.user_id, muteBtn);
             });
+        }
+
+        const dmBtn = card.querySelector('.dm-user-btn');
+        if (dmBtn) {
+            dmBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startDirectRecordingFlow(user.user_id, dmBtn);
+            });
+        }
+        container.appendChild(card);
+    };
+
+    if (listContainer) {
+        if (activeUsers.length === 0) {
+            listContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1">No hay operadores en la web</div>';
+        } else {
+            activeUsers.forEach(u => renderUserCard(u, listContainer));
+        }
+    }
+
+    if (offlineListContainer) {
+        if (offlineUsers.length === 0) {
+            offlineListContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1">No hay operadores desconectados</div>';
+        } else {
+            offlineUsers.forEach(u => renderUserCard(u, offlineListContainer));
         }
     }
 
     // Clear and build group members list
-    if (groupListContainer) {
-        groupListContainer.innerHTML = '';
+    if (groupListContainer) groupListContainer.innerHTML = '';
+    if (offlineGroupListContainer) offlineGroupListContainer.innerHTML = '';
+    
+    if (groupListContainer || offlineGroupListContainer) {
         const groupMembers = users.filter(u => u.group_id === currentGroup);
-        if (groupMembers.length === 0) {
-            groupListContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1">No hay miembros en el canal</div>';
-        } else {
-            groupMembers.forEach(user => {
-                const isMuted = clientMutedUsers.has(user.user_id);
-                const isSelf = user.user_id === userId;
-                
-                const card = document.createElement('div');
-                card.className = "flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs gap-2";
-                card.innerHTML = `
-                    <div class="flex flex-col min-w-0 flex-grow">
-                        <span class="text-slate-200 font-bold truncate">${user.display}</span>
-                        <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
-                    </div>
-                    ${!isSelf ? `
-                        <div class="flex items-center gap-1 flex-shrink-0">
-                            <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
-                                🎤
-                            </button>
-                            <button class="mute-user-btn px-2.5 py-1 rounded-lg font-bold border transition text-[10px] m-0 w-auto ${isMuted ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}" data-user-id="${user.user_id}">
-                                ${isMuted ? 'Silenciado' : 'Mutear'}
-                            </button>
-                        </div>
-                    ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md">Tú</span>'}
-                `;
-                
-                const muteBtn = card.querySelector('.mute-user-btn');
-                if (muteBtn) {
-                    muteBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        toggleIndividualMute(user.user_id, muteBtn);
-                    });
-                }
-                
-                const dmBtn = card.querySelector('.dm-user-btn');
-                if (dmBtn) {
-                    dmBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        startDirectRecordingFlow(user.user_id, dmBtn);
-                    });
-                }
-                groupListContainer.appendChild(card);
-            });
+        const activeGroupMembers = groupMembers.filter(u => u.active !== false);
+        const offlineGroupMembers = groupMembers.filter(u => u.active === false);
+
+        if (groupListContainer) {
+            if (activeGroupMembers.length === 0) {
+                groupListContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1">No hay miembros en la web</div>';
+            } else {
+                activeGroupMembers.forEach(u => renderUserCard(u, groupListContainer));
+            }
+        }
+
+        if (offlineGroupListContainer) {
+            if (offlineGroupMembers.length === 0) {
+                offlineGroupListContainer.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1 font-sans">No hay miembros fuera de la web</div>';
+            } else {
+                offlineGroupMembers.forEach(u => renderUserCard(u, offlineGroupListContainer));
+            }
         }
     }
 }
@@ -2103,6 +2100,25 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => toggleTalk(false), 6000); // 6 seconds recording limit
         }, 1000);
     }
+
+    // Monitor App Visibility to update Online LED state (active vs background/locked)
+    const reportAppStatus = (isActive) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log(`Sending status update: active = ${isActive}`);
+            ws.send(JSON.stringify({
+                type: 'status_update',
+                active: isActive
+            }));
+        }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+        const isActive = document.visibilityState === 'visible';
+        reportAppStatus(isActive);
+    });
+
+    window.addEventListener('focus', () => reportAppStatus(true));
+    window.addEventListener('blur', () => reportAppStatus(false));
 });
 
 const style = document.createElement('style');

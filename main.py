@@ -1148,6 +1148,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     users[token]["muted_users"]
                 )
                 
+            elif msg_type == "status_update":
+                if token in users:
+                    users[token]["active"] = message.get("active", True)
+                    await broadcast_users()
+
             elif msg_type == "toggle_updates":
                 app_state["updates_enabled"] = message.get("enabled", True)
                 await websocket.send_json({"type": "updates_status", "enabled": app_state["updates_enabled"]})
@@ -1281,6 +1286,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     del groups[group_id]
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
+            users[token]["active"] = False
             await broadcast_users()
             save_session(
                 token,
@@ -1295,6 +1301,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         if token in users:
             users[token]["websocket"] = None
             users[token]["logged_in"] = False
+            users[token]["active"] = False
             await broadcast_users()
         await websocket.close()
 
