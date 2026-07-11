@@ -1939,9 +1939,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     checkNotificationPermission();
+    checkMicrophonePermission();
     registerServiceWorker();
     initMap();
     setInterval(updateCountdowns, 1000);
+
+    // Check and request microphone permission banner logic
+    function checkMicrophonePermission() {
+        const permissionBanner = document.getElementById('mic-permission-banner');
+        const yesBtn = document.getElementById('mic-perm-yes');
+        const noBtn = document.getElementById('mic-perm-no');
+        
+        if (!permissionBanner) return;
+
+        // If standard mediaDevices query is supported
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'microphone' }).then((permissionStatus) => {
+                console.log('Estado actual del permiso de micrófono:', permissionStatus.state);
+                if (permissionStatus.state !== 'granted') {
+                    permissionBanner.classList.remove('hidden');
+                    permissionBanner.classList.add('flex');
+                }
+                permissionStatus.onchange = () => {
+                    if (permissionStatus.state === 'granted') {
+                        permissionBanner.classList.add('hidden');
+                        permissionBanner.classList.remove('flex');
+                    }
+                };
+            }).catch(() => {
+                // Fallback: check if we've saved that they rejected it
+                if (localStorage.getItem('mic_permission_declined') !== 'true') {
+                    permissionBanner.classList.remove('hidden');
+                    permissionBanner.classList.add('flex');
+                }
+            });
+        } else {
+            // Fallback for older browsers / iOS webviews
+            if (localStorage.getItem('mic_permission_declined') !== 'true') {
+                permissionBanner.classList.remove('hidden');
+                permissionBanner.classList.add('flex');
+            }
+        }
+
+        if (yesBtn) {
+            yesBtn.onclick = () => {
+                // Request microphone access from standard browser prompt
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then((stream) => {
+                        console.log('Permiso concedido exitosamente.');
+                        // Stop track immediately to release the red recording dot
+                        stream.getTracks().forEach(track => track.stop());
+                        permissionBanner.classList.add('hidden');
+                        permissionBanner.classList.remove('flex');
+                        localStorage.removeItem('mic_permission_declined');
+                    })
+                    .catch((err) => {
+                        console.error('Permiso rechazado en prompt:', err);
+                        showError('Permiso denegado. Debes habilitar el micrófono desde la barra de direcciones.');
+                    });
+            };
+        }
+
+        if (noBtn) {
+            noBtn.onclick = () => {
+                permissionBanner.classList.add('hidden');
+                permissionBanner.classList.remove('flex');
+                localStorage.setItem('mic_permission_declined', 'true');
+            };
+        }
+    }
     
     // AUTO-LOGIN: restore session from localStorage if token exists
     const savedToken = localStorage.getItem('sessionToken');
