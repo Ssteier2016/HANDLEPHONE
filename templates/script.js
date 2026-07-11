@@ -853,7 +853,24 @@ async function playAudio(audioData, sender, groupId, btnElement = null) {
         currentAudio = audio;
         
         if (btnElement) btnElement.textContent = '⏸';
-        audio.play();
+        
+        // Handle Mobile Autoplay user interaction restrictions
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                console.log("Audio reproducido automáticamente.");
+            }).catch(err => {
+                console.warn("Autoplay bloqueado. Despertando AudioContext en primer toque del usuario.", err);
+                // Setup a one-time document touch listener to play the audio once user interacts
+                const unlockPlayback = () => {
+                    audio.play();
+                    document.removeEventListener('click', unlockPlayback);
+                    document.removeEventListener('touchstart', unlockPlayback);
+                };
+                document.addEventListener('click', unlockPlayback);
+                document.addEventListener('touchstart', unlockPlayback);
+            });
+        }
         
         audio.onended = () => { 
             URL.revokeObjectURL(audioUrl);
