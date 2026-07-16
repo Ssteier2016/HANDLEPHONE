@@ -516,7 +516,7 @@ function connectWebSocket(token) {
                 updateSwipeHint();
             } else if (data.type === 'error') {
                 showError(data.message);
-                if (data.message.includes('Usuario no registrado') || data.message.includes('Token no registrado') || data.message.includes('Sesión inválida')) {
+                if (data.message.includes('Sesión inválida')) {
                     completeLogout();
                 }
             } else if (data.type === 'logout_success') {
@@ -531,9 +531,9 @@ function connectWebSocket(token) {
         }
     };
     ws.onclose = () => {
-        console.log("WebSocket cerrado");
+        console.log("WebSocket cerrado. Reconectando en 1 segundo...");
         stopPing();
-        setTimeout(() => connectWebSocket(token), 5000);
+        setTimeout(() => connectWebSocket(token), 1000);
     };
     ws.onerror = (error) => {
         console.error("Error en WebSocket:", error);
