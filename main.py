@@ -916,8 +916,8 @@ async def broadcast_users():
             legajo, name, _ = decoded_token.split('_', 2) if '_' in decoded_token else (token, "Anónimo", "Desconocida")
             user_id = f"{users[token]['name']}_{users[token]['function']}"
             
-            # Active means websocket is alive AND active parameter is true
-            is_active = (users[token].get("websocket") is not None) and (users[token].get("active") != False)
+            # Active means the user has a live websocket connection
+            is_active = users[token].get("websocket") is not None
             user_list.append({
                 "display": f"{users[token]['name']} ({legajo})",
                 "user_id": user_id,
@@ -1060,7 +1060,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "websocket": websocket,
                 "muted_users": session["muted_users"],
                 "subscription": None,
-                "group_id": session["group_id"]
+                "group_id": session["group_id"],
+                "active": True
             }
             logger.info(f"Sesión restaurada para: {session['name']}")
         else:
@@ -1072,7 +1073,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 "websocket": websocket,
                 "muted_users": set(),
                 "subscription": None,
-                "group_id": None
+                "group_id": None,
+                "active": True
             }
             save_session(token, user_id, surname, sector)
             logger.info(f"Sesión nueva para: {surname}")

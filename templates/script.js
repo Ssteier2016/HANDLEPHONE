@@ -1671,24 +1671,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     }
 
-    // Monitor App Visibility to update Online LED state (active vs background/locked)
-    const reportAppStatus = (isActive) => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            console.log(`Sending status update: active = ${isActive}`);
-            ws.send(JSON.stringify({
-                type: 'status_update',
-                active: isActive
-            }));
-        }
-    };
-
-    document.addEventListener('visibilitychange', () => {
-        const isActive = document.visibilityState === 'visible';
-        reportAppStatus(isActive);
-    });
-
-    window.addEventListener('focus', () => reportAppStatus(true));
-    window.addEventListener('blur', () => reportAppStatus(false));
+    // Online status is now purely based on WebSocket connection state.
+    // No need to send status_update on visibility/blur — if WS is open, user is online.
 });
 
 const style = document.createElement('style');
