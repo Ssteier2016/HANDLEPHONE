@@ -856,8 +856,11 @@ async def process_audio_queue():
             
             disconnected_users = []
             for user_token, user in list(users.items()):
-                if not user["logged_in"] or not user["websocket"]:
-                    disconnected_users.append(user_token)
+                # Only broadcast to users who have an active socket.
+                # If they are logged_in but websocket is None, we don't drop them, we just skip transmitting.
+                if not user["logged_in"]:
+                    continue
+                if not user["websocket"]:
                     continue
                 # If it's a group message, send only to group members
                 if is_group and user.get("group_id") != group_id:
@@ -883,7 +886,7 @@ async def process_audio_queue():
             for user_token in disconnected_users:
                 if user_token in users:
                     users[user_token]["websocket"] = None
-                    users[user_token]["logged_in"] = False
+                    users[user_token]["active"] = False
             if disconnected_users:
                 await broadcast_users()
 
@@ -927,14 +930,18 @@ async def clean_expired_sessions():
 async def broadcast_users():
     user_list = []
     for token in users:
-        if users[token]["logged_in"] and users[token]["websocket"]:
+        if users[token]["logged_in"]:
             decoded_token = base64.b64decode(token).decode('utf-8', errors='ignore')
             legajo, name, _ = decoded_token.split('_', 2) if '_' in decoded_token else (token, "Anónimo", "Desconocida")
             user_id = f"{users[token]['name']}_{users[token]['function']}"
+            
+            # Active means websocket is alive AND active parameter is true
+            is_active = (users[token].get("websocket") is not None) and (users[token].get("active") != False)
             user_list.append({
                 "display": f"{users[token]['name']} ({legajo})",
                 "user_id": user_id,
-                "group_id": users[token]["group_id"]
+                "group_id": users[token]["group_id"],
+                "active": is_active
             })
             
     for token, user in list(users.items()):
@@ -984,8 +991,9 @@ async def update_flights_loop():
                 # Emitir a los clientes
                 disconnected_users = []
                 for token, user in list(users.items()):
-                    if not user["logged_in"] or not user["websocket"]:
-                        disconnected_users.append(token)
+                    if not user["logged_in"]:
+                        continue
+                    if not user["websocket"]:
                         continue
                     try:
                         await user["websocket"].send_json({
@@ -998,7 +1006,7 @@ async def update_flights_loop():
                 for token in disconnected_users:
                     if token in users:
                         users[token]["websocket"] = None
-                        users[token]["logged_in"] = False
+                        users[token]["active"] = False
                 if disconnected_users:
                     await broadcast_users()
                 
@@ -1277,15 +1285,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         })
 
     except WebSocketDisconnect:
-        logger.info(f"Cliente desconectado: {token[:15]}...")
+        logger.info(f"Cliente desconectado (en segundo plano): {token[:15]}...")
         if token in users:
-            group_id = users[token]["group_id"]
-            if group_id and group_id in groups and token in groups[group_id]:
-                groups[group_id].remove(token)
-                if not groups[group_id]:
-                    del groups[group_id]
             users[token]["websocket"] = None
-            users[token]["logged_in"] = False
             users[token]["active"] = False
             await broadcast_users()
             save_session(
@@ -1300,7 +1302,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         logger.error(f"Excepción en conexión WebSocket {token[:15]}...: {str(e)}")
         if token in users:
             users[token]["websocket"] = None
-            users[token]["logged_in"] = False
             users[token]["active"] = False
             await broadcast_users()
         await websocket.close()
@@ -1319,6 +1320,34 @@ async def startup_event():
     try:
         logger.info("Iniciando aplicación HANDLEPHONE...")
         init_db()
+
+        # Pre-cargar sesiones registradas en DB al diccionario de usuarios activo en memoria
+        try:
+            with sqlite3.connect("chat_history.db") as conn:
+                c = conn.cursor()
+                c.execute("SELECT token, user_id, name, function, group_id, muted_users FROM sessions")
+                for row in c.fetchall():
+                    token, user_id, name, function, group_id, muted_users_str = row
+                    try:
+                        muted_users = set(json.loads(muted_users_str))
+                    except Exception:
+                        muted_users = set()
+                    
+                    # Cargar como desconectados temporales (active=False, websocket=None) pero logged_in=True
+                    users[token] = {
+                        "user_id": user_id,
+                        "name": name,
+                        "function": function,
+                        "logged_in": True,
+                        "websocket": None,
+                        "muted_users": muted_users,
+                        "subscription": None,
+                        "group_id": group_id,
+                        "active": False
+                    }
+            logger.info(f"Sesiones persistentes precargadas en memoria: {len(users)}")
+        except Exception as db_err:
+            logger.error(f"Error cargando sesiones persistentes al inicio: {db_err}")
         
         # Cargar datos de vuelos inicialmente antes de arrancar las tareas en segundo plano
         logger.info("Pre-cargando vuelos de TAMS y radares...")
