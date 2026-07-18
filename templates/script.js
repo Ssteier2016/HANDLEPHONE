@@ -1324,7 +1324,6 @@ function logout() {
 
 function completeLogout() {
     localStorage.removeItem('sessionToken');
-    localStorage.removeItem('userName');
     localStorage.removeItem('userFunction');
     localStorage.removeItem('userLegajo');
     localStorage.removeItem('groupId');
@@ -1336,17 +1335,19 @@ function completeLogout() {
         ws = null;
     }
     stopPing();
-    document.getElementById('main').style.display = 'none';
-    document.getElementById('group-screen').style.display = 'none';
-    document.getElementById('auth-section').style.display = 'block';
     
-    // Always default to registration form when logging out or clearing session
-    document.getElementById('login-form').style.display = 'none';
-    document.getElementById('register-form').style.display = 'block';
+    // Automatically re-establish connection using preserved userName instead of displaying removed login screens
+    const currentName = localStorage.getItem('userName') || 'Invitado';
+    const fakeLegajo = "10000";
+    const fakeSector = "Operador";
+    userId = `${fakeLegajo}_${currentName}_${fakeSector}`;
+    const rawTokenData = `${fakeLegajo}_${currentName}_${fakeSector}`;
+    const generatedToken = btoa(rawTokenData);
+    localStorage.setItem('sessionToken', generatedToken);
+    connectWebSocket(generatedToken);
     
     displayUserProfile();
     updateSwipeHint();
-    showError('Sesión cerrada exitosamente', true);
 }
 
 function base64ToBlob(base64, mime) {
