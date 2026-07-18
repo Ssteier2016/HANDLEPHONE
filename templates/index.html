@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#030712">
-    <title>HANDLEPHONE - Rampa SABE</title>
+    <title>HANDLEPHONE - Walkie-Talkie</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,10 +24,9 @@
         }
     </script>
     
-    <!-- Google Fonts & Leaflet -->
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/templates/style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <link rel="icon" href="/templates/icon-192x192.png" type="image/png">
     <link rel="apple-touch-icon" href="/templates/icon-180x180.png">
@@ -58,9 +57,9 @@
     <div id="auth-section" class="w-full max-w-md bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6" style="display: block;">
         <div class="text-center">
             <h1 class="text-3xl font-extrabold text-white tracking-wider font-sans flex items-center justify-center gap-1.5">
-                HANDLEPHONE <span class="text-[10px] bg-slate-800 text-sky-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono font-bold align-middle">v.1.6</span>
+                HANDLEPHONE <span class="text-[10px] bg-slate-800 text-sky-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono font-bold align-middle">v.1.7</span>
             </h1>
-            <p class="text-xs text-sky-400 font-mono mt-1 uppercase tracking-widest">Consola de Rampa Unificada</p>
+            <p class="text-xs text-sky-400 font-mono mt-1 uppercase tracking-widest">Consola de Comunicaciones</p>
         </div>
         
         <div id="error-message" class="text-red-400 text-sm text-center bg-red-950/40 border border-red-900/50 p-2.5 rounded-xl hidden"></div>
@@ -147,9 +146,9 @@
             <div class="flex items-center gap-3">
                 <div>
                     <h1 class="text-xl font-extrabold tracking-wide text-white flex items-center gap-2">
-                        HandyHandle <span class="text-[9px] bg-slate-950 text-sky-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono font-bold align-middle">v.1.6</span>
+                        HandyHandle <span class="text-[9px] bg-slate-950 text-sky-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono font-bold align-middle">v.1.7</span>
                     </h1>
-                    <p class="text-xs text-sky-400 font-semibold tracking-wider font-mono">PANEL DE COMUNICACIÓN Y RAMPA</p>
+                    <p class="text-xs text-sky-400 font-semibold tracking-wider font-mono">RED DE COMUNICACIÓN EN VIVO</p>
                 </div>
             </div>
             
@@ -225,12 +224,30 @@
             <div class="space-y-6">
                 <!-- Private Groups Console -->
                 <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Canal Privado</h3>
-                    <div id="group-join" class="space-y-3">
-                        <input id="group-id" placeholder="Código de grupo o nombre" maxlength="20" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm font-mono">
-                        <div class="grid grid-cols-2 gap-2">
-                            <button id="join-group-btn" class="bg-sky-600 hover:bg-sky-500 text-white font-semibold py-2 rounded-xl text-xs transition">Unirme</button>
-                            <button id="create-group-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 rounded-xl text-xs transition border border-slate-700">Crear Grupo</button>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Canal de Grupo</h3>
+                        <span class="text-[10px] text-sky-400 bg-sky-950 border border-sky-900/50 px-1.5 py-0.5 rounded font-mono font-bold">NUEVO</span>
+                    </div>
+                    <div id="group-join" class="space-y-4">
+                        <div>
+                            <label for="group-id" class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 pl-0.5">Nombre o Código del Canal</label>
+                            <input id="group-id" placeholder="Ej: Rampa-Tarde" maxlength="20" class="w-full bg-slate-900 border border-slate-850 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-650 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-sm font-mono transition-all">
+                        </div>
+                        
+                        <div class="flex items-center justify-between bg-slate-900/40 border border-slate-850 p-2.5 rounded-xl">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-bold text-slate-300">Canal Privado</span>
+                                <span class="text-[9px] text-slate-500">Solo visible por invitación</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="group-private" class="sr-only peer" checked>
+                                <div class="w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600 peer-checked:after:bg-white"></div>
+                            </label>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2.5 pt-1">
+                            <button id="join-group-btn" class="bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold py-2.5 rounded-xl text-xs transition duration-150 shadow-md shadow-sky-600/10">Entrar al Canal</button>
+                            <button id="create-group-btn" class="bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 active:scale-95 text-white font-bold py-2.5 rounded-xl text-xs transition duration-150 shadow-lg border border-emerald-500/10">Crear Canal</button>
                         </div>
                     </div>
                 </div>
@@ -266,7 +283,7 @@
     </div>
 
     <!-- Pantalla de grupo privado -->
-    <div id="group-screen" class="w-full max-w-7xl bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative flex-col" style="display: none;">
+    <div id="group-screen" class="w-full max-w-xl bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative flex-col" style="display: none;">
         
         <!-- Group Header -->
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
@@ -278,7 +295,7 @@
                 </button>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h2 id="group-title-label" class="text-xl font-extrabold text-white">Grupo de Rampa</h2>
+                        <h2 id="group-title-label" class="text-xl font-extrabold text-white">Canal Privado</h2>
                         <span id="group-share-badge" class="bg-sky-950/40 text-sky-400 border border-sky-850 px-2 py-0.5 rounded text-xs font-mono font-bold cursor-pointer hover:bg-sky-900/40 transition flex items-center gap-1" title="Click para copiar código">
                             <span>Código: </span><span id="group-share-code">...</span> 📋
                         </span>
@@ -289,62 +306,7 @@
             <button id="leave-group-btn" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-xs font-bold border border-red-500/20 transition m-0 w-auto">Salir del Grupo</button>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- Left Side: Group Flights -->
-            <div class="lg:col-span-2 space-y-6">
-                <div id="group-flights-window" class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-4">
-                    <h3 class="text-sm font-extrabold uppercase text-slate-300 font-mono border-b border-slate-800 pb-2">Panel Operativo del Grupo</h3>
-                    
-                    <div class="space-y-6">
-                        <!-- Salidas -->
-                        <div id="group-departures" class="space-y-2">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-amber-500">Salidas (Partidas)</h4>
-                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
-                                <table class="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
-                                            <th class="px-3 py-2.5">Matrícula</th>
-                                            <th class="px-3 py-2.5">N° Vuelo</th>
-                                            <th class="px-3 py-2.5">STA</th>
-                                            <th class="px-3 py-2.5">Pos</th>
-                                            <th class="px-3 py-2.5">Destino</th>
-                                            <th class="px-3 py-2.5">Real</th>
-                                            <th class="px-3 py-2.5">Aeronave / Pax</th>
-                                            <th class="px-3 py-2.5">Restan 🔔</th>
-                                            <th class="px-3 py-2.5">Info</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="group-departures-table" class="divide-y divide-slate-800/50"></tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Llegadas -->
-                        <div id="group-arrivals" class="space-y-2">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1 border-l-2 border-emerald-500">Llegadas (Arribos)</h4>
-                            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/40">
-                                <table class="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr class="bg-slate-900/60 text-slate-400 font-semibold text-xs tracking-wider uppercase border-b border-slate-800">
-                                            <th class="px-3 py-2.5">Matrícula</th>
-                                            <th class="px-3 py-2.5">N° Vuelo</th>
-                                            <th class="px-3 py-2.5">STA</th>
-                                            <th class="px-3 py-2.5">Pos</th>
-                                            <th class="px-3 py-2.5">Origen</th>
-                                            <th class="px-3 py-2.5">Real</th>
-                                            <th class="px-3 py-2.5">Aeronave / Pax</th>
-                                            <th class="px-3 py-2.5">Restan 🔔</th>
-                                            <th class="px-3 py-2.5">Info</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="group-arrivals-table" class="divide-y divide-slate-800/50"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="flex flex-col gap-6">
 
             <!-- Right Side: Group Chat -->
             <div class="space-y-6">
@@ -372,11 +334,7 @@
 
                 <!-- Group Navigation and Status -->
                 <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="group-radar" class="bg-slate-900 hover:bg-slate-850 text-sky-400 border border-sky-500/20 py-2 rounded-xl font-semibold text-xs transition m-0">📡 Radar</button>
-                        <button id="group-history" class="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 py-2 rounded-xl font-semibold text-xs transition m-0">📜 Historial</button>
-                    </div>
-                    <div class="border-t border-slate-800/80 pt-3 text-left space-y-3">
+                    <div class="text-left space-y-3">
                         <div>
                             <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>

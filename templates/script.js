@@ -12,54 +12,20 @@ let isGroupMuted = false;
 let isNonGroupMuted = false;
 let mediaRecorder = null;
 let audioChunks = [];
-let flightData = [];
-let map = null;
-let markers = [];
+// Variables y configuraciones del Walkie-Talkie
 let isSwiping = false;
 let startX = 0;
 let currentX = 0;
 let currentAudio = null;
 let clientMutedUsers = new Set();
 let updatesEnabled = true;
-let departureAnnouncementsEnabled = false;
-let announcementsEnabled = false;
-let restrictTokens = JSON.parse(localStorage.getItem('restrictTokens') || 'false');
-let dailyTokenCount = parseInt(localStorage.getItem('dailyTokenCount') || '0', 10);
-const MAX_TOKENS_DAILY = 2000;
-const TOKENS_PER_FLIGHT = 1;
-const MAX_FLIGHTS_PER_REQUEST = 20;
 
 // VU Meter state
-let bellAlerts = new Set();
-let firedBellAlerts = new Set();
 let vuAudioContext = null;
 let vuAnalyser = null;
 let vuDataArray = null;
 let vuAnimFrame = null;
 let vuStream = null;
-
-const AIRPORT_MAPPING = {
-    'SABE': 'Aeroparque',
-    'SAEZ': 'Ezeiza',
-    // Agrega más mapeos según sea necesario
-};
-
-// PAX lookup by ICAO aircraft type code
-const PAX_LOOKUP = {
-    'B738': 189, 'B737': 149, 'B739': 215, 'B38M': 178, 'B39M': 220,
-    'A319': 128, 'A320': 150, 'A321': 185, 'A20N': 165, 'A21N': 210,
-    'E190': 106, 'E195': 124, 'E170': 80, 'E175': 88,
-    'AT72': 70, 'AT43': 50, 'CRJ7': 70, 'CRJ9': 90,
-    'B744': 416, 'B748': 467, 'B77W': 396, 'A333': 296, 'A332': 253,
-    'A359': 315, 'A388': 555, 'B789': 296, 'B788': 242,
-    'N/A': 'N/A'
-};
-
-function isTargetAirline(flightNumber) {
-    if (!flightNumber) return false;
-    const prefixes = ['AR', 'ARG', 'LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP', 'WJ', 'FO', 'FB', 'G3', 'GLO'];
-    return prefixes.some(p => flightNumber.toUpperCase().startsWith(p));
-}
 
 // ─── VU METER ─────────────────────────────────────────────────────────────────
 function startVuMeter(stream) {
@@ -1107,30 +1073,6 @@ function leaveGroup() {
     }
 }
 
-function showRadar() {
-    document.getElementById('main').style.display = 'none';
-    document.getElementById('radar-screen').style.display = 'block';
-    if (!map) {
-        initMap();
-    }
-    updateMap();
-}
-
-function showGroupRadar() {
-    document.getElementById('group-screen').style.display = 'none';
-    document.getElementById('radar-screen').style.display = 'block';
-    if (!map) {
-        initMap();
-    }
-    updateMap();
-}
-
-function backToMainFromRadar() {
-    document.getElementById('radar-screen').style.display = 'none';
-    document.getElementById('main').style.display = 'block';
-    updateSwipeHint();
-}
-
 function backToMainFromGroup() {
     document.getElementById('group-screen').style.display = 'none';
     document.getElementById('main').style.display = 'block';
@@ -1210,341 +1152,7 @@ function showGroupHistory() {
     showHistory();
 }
 
-function showFlightDetails(flight) {
-    const modal = document.getElementById('flight-details-modal');
-    const content = document.getElementById('flight-details-content');
-    if (!modal || !content) return;
-    content.innerHTML = `
-        <p><b>Número de Vuelo:</b> ${flight.flight_number || 'N/A'}</p>
-        <p><b>Matrícula:</b> ${flight.registration || 'N/A'}</p>
-        <p><b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}</p>
-        <p><b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}</p>
-        <p><b>Hora Programada:</b> ${flight.sta ? new Date(flight.sta).toLocaleString() : 'N/A'}</p>
-        <p><b>Hora Estimada:</b> ${flight.eta ? new Date(flight.eta).toLocaleString() : 'N/A'}</p>
-        <p><b>Estado:</b> ${flight.status || 'N/A'}</p>
-    `;
-    modal.style.display = 'block';
-}
-
-function closeFlightDetails() {
-    const modal = document.getElementById('flight-details-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function updateOpenSkyData() {
-    if (!updatesEnabled) {
-        console.log("Actualizaciones pausadas");
-        setTimeout(updateOpenSkyData, 15000);
-        return;
-    }
-    if (restrictTokens && dailyTokenCount >= MAX_TOKENS_DAILY) {
-        console.warn("Límite de tokens alcanzado:", dailyTokenCount);
-        showError("Límite diario de " + MAX_TOKENS_DAILY + " tokens alcanzado.");
-        return;
-    }
-    try {
-        const token = localStorage.getItem('sessionToken');
-        if (!token) {
-            showError("Sesión no válida. Por favor, inicia sesión nuevamente.");
-            completeLogout();
-            return;
-        }
-        const response = await fetch(`/api/flights`);
-        console.log("Respuesta de /api/flights:", response.status, response.statusText);
-        if (response.ok) {
-            const data = await response.json();
-            console.log("Datos de /api/flights:", JSON.stringify(data, null, 2));
-            flightData = Array.isArray(data.flights) ? data.flights.filter(f => f && f.flight_number) : [];
-            console.log("flightData filtrado:", flightData);
-            updateFlightInfo();
-            updateMap();
-            // Verificar anuncios de llegadas y despegues
-            if (announcementsEnabled || departureAnnouncementsEnabled) {
-                flightData.forEach(flight => {
-                    if (flight.status === 'Landed' && flight.destination === 'SABE' && announcementsEnabled) {
-                        announceFlight(flight, 'llegada');
-                    } else if (flight.status === 'Departed' && flight.origin === 'SABE' && departureAnnouncementsEnabled) {
-                        announceFlight(flight, 'despegue');
-                    }
-                });
-            }
-        } else if (response.status === 401) {
-            showError("Sesión expirada. Por favor, inicia sesión nuevamente.");
-            completeLogout();
-        } else {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-    } catch (err) {
-        showError("Error al cargar datos de vuelos: " + err.message);
-        console.error("Error al cargar vuelos:", err);
-        const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
-        tables.forEach(id => {
-            const table = document.getElementById(id);
-            if (table) {
-                const tbody = table.querySelector('tbody') || table;
-                tbody.innerHTML = "<tr><td colspan='9' class='text-center py-4 text-slate-500'>Error al cargar datos</td></tr>";
-            }
-        });
-    }
-    setTimeout(updateOpenSkyData, 15000);
-}
-
-function announceFlight(flight, type) {
-    const message = type === 'llegada' 
-        ? `El vuelo ${flight.flight_number} con origen en ${AIRPORT_MAPPING[flight.origin] || flight.origin} ha aterrizado en Aeroparque.`
-        : `El vuelo ${flight.flight_number} con destino a ${AIRPORT_MAPPING[flight.destination] || flight.destination} ha despegado de Aeroparque.`;
-    if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(message);
-        utterance.lang = 'es-ES';
-        speechSynthesis.speak(utterance);
-    }
-    showNotification('Anuncio de Vuelo', { body: message });
-}
-
-function initMap() {
-    console.log("Inicializando mapa...");
-    const mapContainer = document.getElementById('map');
-    if (!mapContainer) {
-        console.error("Contenedor #map no encontrado");
-        showError("No se puede cargar el mapa: contenedor no encontrado.");
-        return;
-    }
-    if (typeof L === 'undefined') {
-        console.error("Leaflet no está definido");
-        showError("Error al cargar el mapa: Leaflet no disponible.");
-        return;
-    }
-    try {
-        map = L.map('map').setView([-34.5597, -58.4116], 10);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            subdomains: 'abcd',
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        }).addTo(map);
-        const aeroparqueIcon = L.icon({
-            iconUrl: '/templates/airport.png',
-            iconSize: [30, 30]
-        });
-        L.marker([-34.5597, -58.4116], { icon: aeroparqueIcon })
-            .addTo(map)
-            .bindPopup("Aeroparque");
-        map.invalidateSize();
-        console.log("Mapa inicializado");
-    } catch (err) {
-        console.error("Error al inicializar Leaflet:", err);
-        showError("Error al inicializar el mapa.");
-    }
-}
-
-function updateMap() {
-    if (!map) {
-        console.warn("Mapa no inicializado. Intentando inicializar...");
-        initMap();
-        if (!map) return;
-    }
-    console.log("Actualizando mapa con flightData:", flightData);
-    markers.forEach(marker => map.removeLayer(marker));
-    markers = [];
-    const validFlights = flightData.filter(f => f && f.lat && f.lon && f.flight_number && isTargetAirline(f.flight_number));
-    console.log("Vuelos válidos para el mapa:", validFlights);
-    validFlights.forEach(flight => {
-        try {
-            const airplaneIcon = L.icon({
-                iconUrl: '/templates/airplane.png',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15],
-                popupAnchor: [0, -15]
-            });
-            const marker = L.marker([flight.lat, flight.lon], {
-                icon: airplaneIcon,
-                rotationAngle: flight.heading || 0
-            }).bindPopup(`
-                <b>Vuelo:</b> ${flight.flight_number}<br>
-                <b>Matrícula:</b> ${flight.registration || 'N/A'}<br>
-                <b>Estado:</b> ${flight.status || 'N/A'}<br>
-                <b>Origen:</b> ${AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A'}<br>
-                <b>Destino:</b> ${AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A'}<br>
-                <b>ETA:</b> ${flight.eta ? new Date(flight.eta).toLocaleTimeString() : 'N/A'}
-            `);
-            marker.flight = flight;
-            markers.push(marker);
-            marker.addTo(map);
-        } catch (err) {
-            console.error("Error al agregar marcador para vuelo:", flight, err);
-        }
-    });
-    filterFlights(localStorage.getItem('lastSearchQuery') || '');
-    map.invalidateSize();
-    console.log("Mapa actualizado con", markers.length, "marcadores");
-}
-
-function updateFlightInfo() {
-    console.log("Actualizando tablas con flightData:", flightData);
-    // Accept both ICAO (SABE) and IATA (AEP) codes for Aeroparque
-    const isAeroparque = (code) => code === 'SABE' || code === 'AEP';
-    const tables = {
-        'departures-table': { filter: f => isAeroparque(f.origin), isArrival: false },
-        'arrivals-table': { filter: f => isAeroparque(f.destination), isArrival: true },
-        'group-departures-table': { filter: f => isAeroparque(f.origin), isArrival: false },
-        'group-arrivals-table': { filter: f => isAeroparque(f.destination), isArrival: true }
-    };
-    Object.entries(tables).forEach(([id, { filter, isArrival }]) => {
-        const table = document.getElementById(id);
-        if (!table) {
-            console.error(`Tabla #${id} no encontrada`);
-            return;
-        }
-        const tbody = table.querySelector('tbody') || table;
-        tbody.innerHTML = '';
-        const flights = flightData.filter(f => f && f.flight_number && isTargetAirline(f.flight_number) && filter(f));
-        console.log(`Vuelos para ${id}:`, flights);
-        flights.forEach(flight => {
-            const row = document.createElement('tr');
-            row.className = 'tams-row border-b border-slate-800 hover:bg-slate-900/40 transition duration-150';
-            const sta = flight.sta ? (flight.sta.includes('/') ? flight.sta.split(' ')[1] : flight.sta) : 'N/A';
-            const eta = (flight.eta && flight.eta !== 'N/A') ? (flight.eta.includes('/') ? flight.eta.split(' ')[1] : flight.eta) : 'N/A';
-            const originDest = isArrival ? (AIRPORT_MAPPING[flight.origin] || flight.origin || 'N/A') : (AIRPORT_MAPPING[flight.destination] || flight.destination || 'N/A');
-            
-            const targetTime = getFlightTargetTime(flight);
-            const targetMs = targetTime ? targetTime.getTime() : '';
-            const flightNum = flight.flight_number || 'Unknown';
-            const bellEnabled = bellAlerts.has(flightNum);
-            const bellClass = bellEnabled ? 'text-amber-400' : 'text-slate-600';
-            const bellTitle = bellEnabled ? 'Desactivar alerta' : 'Activar alerta';
-            
-            // Aircraft type and PAX
-            const acType = flight.aircraft_type || 'N/A';
-            const pax = PAX_LOOKUP[acType] ? `~${PAX_LOOKUP[acType]}` : 'N/A';
-            
-            row.innerHTML = `
-                <td class="px-3 py-2.5 text-slate-200 font-mono text-xs">${flight.registration || 'N/A'}</td>
-                <td class="px-3 py-2.5 text-slate-100 font-bold text-xs">
-                    <div class="flex items-center gap-1">${getAirlineLogoHtml(flightNum)}<span>${flightNum}</span></div>
-                </td>
-                <td class="px-3 py-2.5 text-slate-300 text-xs font-mono">${sta}</td>
-                <td class="px-3 py-2.5 text-slate-100 text-xs"><span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold border border-slate-700">${flight.position || 'N/A'}</span></td>
-                <td class="px-3 py-2.5 text-slate-300 text-xs">${originDest}</td>
-                <td class="px-3 py-2.5 text-slate-300 text-xs font-mono">${eta}</td>
-                <td class="px-3 py-2.5 text-xs">
-                    <div class="flex items-center gap-1.5">
-                        <span class="font-mono text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-sky-300" title="Tipo aeronave">${acType}</span>
-                        <span class="font-mono text-[10px] text-slate-400" title="Pasajeros aprox.">${pax} pax</span>
-                    </div>
-                </td>
-                <td class="px-3 py-2.5 text-xs flight-countdown-cell" data-target-ms="${targetMs}" data-flight-number="${flightNum}">
-                    <div class="flex items-center gap-1.5">
-                        <span class="countdown-text font-mono text-slate-400">...</span>
-                        <button class="bell-btn text-base ${bellClass} hover:scale-110 transition-transform" title="${bellTitle}">🔔</button>
-                    </div>
-                </td>
-                <td class="px-3 py-2.5 text-xs"><button class="tams-details-btn px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[10px] font-medium transition duration-200">Info</button></td>
-            `;
-            const btn = row.querySelector('.tams-details-btn');
-            btn.addEventListener('click', () => showFlightDetails(flight));
-            // Per-flight bell toggle
-            const bellBtn = row.querySelector('.bell-btn');
-            bellBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (bellAlerts.has(flightNum)) {
-                    bellAlerts.delete(flightNum);
-                    firedBellAlerts.delete(flightNum); // Allow re-firing if re-enabled
-                    bellBtn.classList.remove('text-amber-400');
-                    bellBtn.classList.add('text-slate-600');
-                    bellBtn.title = 'Activar alerta';
-                } else {
-                    bellAlerts.add(flightNum);
-                    bellBtn.classList.add('text-amber-400');
-                    bellBtn.classList.remove('text-slate-600');
-                    bellBtn.title = 'Desactivar alerta';
-                }
-            });
-            tbody.appendChild(row);
-        });
-    });
-    filterFlights(localStorage.getItem('lastSearchQuery') || '');
-}
-
-function filterFlights(searchTerm = '') {
-    searchTerm = searchTerm.toUpperCase().trim();
-    const airlineFilter = document.getElementById('airline-filter')?.value || 'ALL';
-    console.log("Filtrando vuelos con término:", searchTerm, "y aerolínea:", airlineFilter);
-    
-    const tables = ['departures-table', 'arrivals-table', 'group-departures-table', 'group-arrivals-table'];
-    tables.forEach(id => {
-        const table = document.getElementById(id);
-        if (!table) return;
-        const rows = table.querySelectorAll('tr.tams-row');
-        rows.forEach(row => {
-            const registration = row.cells[0].textContent.toUpperCase();
-            const flightNumber = row.cells[1].textContent.toUpperCase();
-            
-            // Match search text term
-            const textMatches = searchTerm === '' || registration.includes(searchTerm) || flightNumber.includes(searchTerm);
-            
-            // Match selected airline filter
-            let airlineMatches = true;
-            if (airlineFilter === 'AR') {
-                airlineMatches = flightNumber.startsWith('AR') || flightNumber.startsWith('ARG');
-            } else if (airlineFilter === 'LA') {
-                const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
-                airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
-            } else if (airlineFilter === 'FO') {
-                airlineMatches = flightNumber.startsWith('FO') || flightNumber.startsWith('FB');
-            } else if (airlineFilter === 'WJ') {
-                airlineMatches = flightNumber.startsWith('WJ');
-            } else if (airlineFilter === 'G3') {
-                airlineMatches = flightNumber.startsWith('G3') || flightNumber.startsWith('GLO');
-            }
-            
-            row.style.display = (textMatches && airlineMatches) ? '' : 'none';
-        });
-    });
-    if (map) {
-        markers.forEach(marker => {
-            const flight = marker.flight || {};
-            const registration = flight.registration || '';
-            const flightNumber = (flight.flight_number || '').toUpperCase();
-            
-            const textMatches = searchTerm === '' || registration.toUpperCase().includes(searchTerm) || flightNumber.includes(searchTerm);
-            
-            let airlineMatches = true;
-            if (airlineFilter === 'AR') {
-                airlineMatches = flightNumber.startsWith('AR') || flightNumber.startsWith('ARG');
-            } else if (airlineFilter === 'LA') {
-                const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
-                airlineMatches = latamPrefixes.some(pref => flightNumber.startsWith(pref));
-            } else if (airlineFilter === 'FO') {
-                airlineMatches = flightNumber.startsWith('FO') || flightNumber.startsWith('FB');
-            } else if (airlineFilter === 'WJ') {
-                airlineMatches = flightNumber.startsWith('WJ');
-            } else if (airlineFilter === 'G3') {
-                airlineMatches = flightNumber.startsWith('G3') || flightNumber.startsWith('GLO');
-            }
-            
-            if (textMatches && airlineMatches) {
-                if (!map.hasLayer(marker)) marker.addTo(map);
-            } else {
-                if (map.hasLayer(marker)) map.removeLayer(marker);
-            }
-        });
-        map.invalidateSize();
-    }
-}
-
-function toggleUpdates() {
-    const updatesToggleBtn = document.getElementById('updates-toggle');
-    if (!updatesToggleBtn) {
-        console.error("Botón #updates-toggle no encontrado");
-        return;
-    }
-    updatesEnabled = !updatesEnabled;
-    updatesToggleBtn.classList.toggle('active', updatesEnabled);
-    updatesToggleBtn.textContent = updatesEnabled ? 'Pausar Actualizaciones' : 'Reanudar Actualizaciones';
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'toggle_updates', enabled: updatesEnabled }));
-    }
-    console.log("Actualizaciones de vuelos:", updatesEnabled ? "activadas" : "pausadas");
-}
+// Actualizaciones y llamadas a APIs de aeropuertos eliminadas para limpiar el Walkie-Talkie
 
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
@@ -1875,18 +1483,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (createGroupBtn) createGroupBtn.addEventListener('click', createGroup);
     const leaveGroupBtn = document.getElementById('leave-group-btn');
     if (leaveGroupBtn) leaveGroupBtn.addEventListener('click', leaveGroup);
-    const radarBtn = document.getElementById('radar');
-    if (radarBtn) radarBtn.addEventListener('click', showRadar);
-    const groupRadarBtn = document.getElementById('group-radar');
-    if (groupRadarBtn) groupRadarBtn.addEventListener('click', showGroupRadar);
     const historyBtn = document.getElementById('history');
     if (historyBtn) historyBtn.addEventListener('click', showHistory);
-    const groupHistoryBtn = document.getElementById('group-history');
-    if (groupHistoryBtn) groupHistoryBtn.addEventListener('click', showGroupHistory);
     const backToMainBtn = document.getElementById('back-to-main');
     if (backToMainBtn) backToMainBtn.addEventListener('click', backToMainFromGroup);
-    const radarCloseBtn = document.querySelector('#radar-screen .close-btn');
-    if (radarCloseBtn) radarCloseBtn.addEventListener('click', backToMainFromRadar);
     
     // Bindings de modal close e historial back agregados para solucionar fallas de navegación originales
     document.getElementById('close-modal-btn')?.addEventListener('click', closeFlightDetails);
@@ -2020,7 +1620,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('auth-section').style.display = 'none';
             document.getElementById('main').style.display = 'block';
             displayUserProfile();
-            updateOpenSkyData();
         } catch (e) {
             console.warn('Auto-login failed, clearing session:', e);
             localStorage.clear();
