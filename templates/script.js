@@ -395,6 +395,19 @@ function startAudioKeepAlive() {
             source.start();
             keepAliveAudio = audioCtx;
             console.log('Audio Keep-Alive iniciado');
+
+            // Force play silent audio immediately inside user-gesture wrapper to unlock autoplay
+            if (audioCtx.state === 'suspended') {
+                const unlock = () => {
+                    audioCtx.resume().then(() => {
+                        console.log("AudioContext desbloqueado por interacción del usuario.");
+                        document.removeEventListener('click', unlock);
+                        document.removeEventListener('touchstart', unlock);
+                    });
+                };
+                document.addEventListener('click', unlock);
+                document.addEventListener('touchstart', unlock);
+            }
         }
     } catch (e) {
         console.warn('Audio Keep-Alive no soportado:', e);

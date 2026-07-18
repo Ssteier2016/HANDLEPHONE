@@ -1,7 +1,7 @@
-const CACHE_NAME = 'handyhandle-cache-v17';
+const CACHE_NAME = 'handyhandle-cache-v18';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
-const API_CACHE = 'api-cache-v17';
+const API_CACHE = 'api-cache-v18';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 const urlsToCache = [
