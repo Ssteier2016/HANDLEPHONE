@@ -1557,28 +1557,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // AUTO-LOGIN: restore session from localStorage if token exists
-    const savedToken = localStorage.getItem('sessionToken');
-    const savedName = localStorage.getItem('userName');
-    const savedFunction = localStorage.getItem('userFunction');
-    const savedLegajo = localStorage.getItem('userLegajo');
-    const isRegistered = localStorage.getItem('isRegistered');
+    // AUTO-LOGIN / DIRECT ACCESS SETUP
+    const nameInput = document.getElementById('display-name-input');
+    const saveNameBtn = document.getElementById('save-name-btn');
     
-    if (savedToken && savedName) {
-        try {
-            userId = `${savedLegajo}_${savedName}_${savedFunction}`;
-            connectWebSocket(savedToken);
-            document.getElementById('auth-section').style.display = 'none';
-            document.getElementById('main').style.display = 'block';
-            displayUserProfile();
-        } catch (e) {
-            console.warn('Auto-login failed, clearing session:', e);
-            localStorage.clear();
-        }
-    } else if (isRegistered === 'true') {
-        // If they registered once, direct them to login rather than register form
-        document.getElementById('register-form').style.display = 'none';
-        document.getElementById('login-form').style.display = 'block';
+    // Fallback names if none is defined
+    let currentName = localStorage.getItem('userName') || 'Invitado';
+    if (nameInput) {
+        nameInput.value = currentName;
+    }
+    
+    const establishConnection = (name) => {
+        const fakeLegajo = "10000";
+        const fakeSector = "Operador";
+        
+        userId = `${fakeLegajo}_${name}_${fakeSector}`;
+        
+        // Encode a valid raw token
+        const rawTokenData = `${fakeLegajo}_${name}_${fakeSector}`;
+        const generatedToken = btoa(rawTokenData);
+        localStorage.setItem('sessionToken', generatedToken);
+        localStorage.setItem('userName', name);
+        localStorage.setItem('userFunction', fakeSector);
+        localStorage.setItem('userLegajo', fakeLegajo);
+        
+        connectWebSocket(generatedToken);
+    };
+
+    // Auto connect immediately on page load
+    establishConnection(currentName);
+
+    if (saveNameBtn && nameInput) {
+        saveNameBtn.addEventListener('click', () => {
+            const enteredName = nameInput.value.trim();
+            if (enteredName) {
+                console.log("Actualizando nombre de perfil a:", enteredName);
+                establishConnection(enteredName);
+                showError('Nombre guardado y reconectado.', true);
+            } else {
+                showError('Por favor ingrese un nombre válido.', false);
+            }
+        });
     }
     
     // SVG Icons for buttons
