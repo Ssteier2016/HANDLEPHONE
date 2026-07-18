@@ -466,7 +466,6 @@ function connectWebSocket(token) {
                 }
                 
                 updateSwipeHint();
-                updateFlightInfo();
             } else if (data.type === 'group_left') {
                 currentGroup = null;
                 document.getElementById('group-screen').style.display = 'none';
@@ -479,10 +478,6 @@ function connectWebSocket(token) {
                 }
             } else if (data.type === 'logout_success') {
                 completeLogout();
-            } else if (data.type === 'flight_update') {
-                flightData = data.flights.filter(f => f && f.flight_number);
-                updateFlightInfo();
-                updateMap();
             }
         } catch (err) {
             console.error("Error al procesar mensaje WebSocket:", err);
@@ -1478,57 +1473,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backToMainBtn) backToMainBtn.addEventListener('click', backToMainFromGroup);
     
     // Bindings de modal close e historial back agregados para solucionar fallas de navegación originales
-    document.getElementById('close-modal-btn')?.addEventListener('click', closeFlightDetails);
-    document.getElementById('close-modal-footer-btn')?.addEventListener('click', closeFlightDetails);
     document.getElementById('history-back-btn')?.addEventListener('click', backToMainFromHistory);
-    const updatesToggleBtn = document.getElementById('updates-toggle');
-    if (updatesToggleBtn) updatesToggleBtn.addEventListener('click', toggleUpdates);
-    const toggleAnnouncementsBtn = document.getElementById('toggle-announcements');
-    if (toggleAnnouncementsBtn) {
-        toggleAnnouncementsBtn.addEventListener('click', () => {
-            announcementsEnabled = !announcementsEnabled;
-            toggleAnnouncementsBtn.textContent = announcementsEnabled ? 'Desactivar anuncios de llegadas' : 'Activar anuncios de llegadas';
-            console.log("Anuncios de llegadas:", announcementsEnabled ? "activados" : "desactivados");
-        });
-    }
-    const toggleDepartureAnnouncementsBtn = document.getElementById('toggle-departure-announcements');
-    if (toggleDepartureAnnouncementsBtn) {
-        toggleDepartureAnnouncementsBtn.addEventListener('click', () => {
-            departureAnnouncementsEnabled = !departureAnnouncementsEnabled;
-            toggleDepartureAnnouncementsBtn.textContent = departureAnnouncementsEnabled ? 'Desactivar anuncios de despegues' : 'Activar anuncios de despegues';
-            console.log("Anuncios de despegues:", departureAnnouncementsEnabled ? "activados" : "desactivados");
-        });
-    }
-    const toggleTokenLimitBtn = document.getElementById('toggle-token-limit');
-    if (toggleTokenLimitBtn) {
-        toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
-        toggleTokenLimitBtn.addEventListener('click', () => {
-            restrictTokens = !restrictTokens;
-            localStorage.setItem('restrictTokens', JSON.stringify(restrictTokens));
-            toggleTokenLimitBtn.textContent = restrictTokens ? 'Desactivar límite de tokens' : 'Activar límite de tokens';
-            console.log("Límite de tokens:", restrictTokens ? "activado" : "desactivado");
-        });
-    }
-    const searchButton = document.getElementById('search-button');
-    if (searchButton) {
-        searchButton.addEventListener('click', () => {
-            const searchTerm = document.getElementById('search-input')?.value || '';
-            localStorage.setItem('lastSearchQuery', searchTerm);
-            filterFlights(searchTerm);
-        });
-    }
-    const airlineFilterSelect = document.getElementById('airline-filter');
-    if (airlineFilterSelect) {
-        airlineFilterSelect.addEventListener('change', () => {
-            const searchTerm = document.getElementById('search-input')?.value || '';
-            filterFlights(searchTerm);
-        });
-    }
+    // Filtros de búsqueda eliminados
     checkNotificationPermission();
     checkMicrophonePermission();
     registerServiceWorker();
-    initMap();
-    setInterval(updateCountdowns, 1000);
 
     // Check and request microphone permission banner logic
     function checkMicrophonePermission() {
