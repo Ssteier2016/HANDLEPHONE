@@ -269,22 +269,17 @@ function showError(message, isSuccess = false) {
 async function loginUser(event) {
     event.preventDefault();
     const surname = document.getElementById('surname-login')?.value.trim() || '';
-    const employee_id = document.getElementById('employee_id-login')?.value.trim() || '';
     const password = document.getElementById('password-login')?.value || '';
-    console.log("Intentando login con:", { surname, employee_id });
-    if (!surname || !employee_id || !password) {
+    console.log("Intentando login con:", { surname });
+    if (!surname || !password) {
         showError('Por favor, completa todos los campos.', false);
-        return;
-    }
-    if (!/^\d{5,6}$/.test(employee_id)) {
-        showError('El legajo debe contener entre 5 y 6 números.', false);
         return;
     }
     try {
         const response = await fetch('/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ surname, employee_id, password }),
+            body: JSON.stringify({ surname, password }),
         });
         const data = await response.json();
         console.log("Respuesta de /login:", response.status, data);
@@ -300,7 +295,6 @@ async function loginUser(event) {
             document.getElementById('auth-section').style.display = 'none';
             document.getElementById('main').style.display = 'block';
             displayUserProfile();
-            updateOpenSkyData();
             showError('Inicio de sesión exitoso', true);
         } else {
             const errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || 'Error desconocido');
@@ -315,23 +309,17 @@ async function loginUser(event) {
 async function registerUser(event) {
     event.preventDefault();
     const surname = document.getElementById('surname')?.value.trim() || '';
-    const employee_id = document.getElementById('employee_id')?.value.trim() || '';
-    const sector = document.getElementById('sector')?.value || '';
     const password = document.getElementById('password')?.value || '';
-    console.log("Intentando registro con:", { surname, employee_id, sector });
-    if (!surname || !employee_id || !sector || !password) {
+    console.log("Intentando registro con:", { surname });
+    if (!surname || !password) {
         showError('Por favor, completa todos los campos.', false);
-        return;
-    }
-    if (!/^\d{5,6}$/.test(employee_id)) {
-        showError('El legajo debe contener entre 5 y 6 números.', false);
         return;
     }
     try {
         const response = await fetch('/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ surname, employee_id, sector, password }),
+            body: JSON.stringify({ surname, password }),
         });
         const data = await response.json();
         console.log("Respuesta de /register:", response.status, data);
@@ -342,23 +330,27 @@ async function registerUser(event) {
             const loginResponse = await fetch('/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ surname, employee_id, password }),
+                body: JSON.stringify({ surname, password }),
             });
             const loginData = await loginResponse.json();
             if (loginResponse.ok) {
                 localStorage.setItem('sessionToken', loginData.token);
-                localStorage.setItem('userName', surname);
+                
+                // Decodificar el token para extraer datos simulados en backend
+                const decoded = atob(loginData.token);
+                const [emp_id, surn, sector] = decoded.split('_');
+                
+                localStorage.setItem('userName', surn);
                 localStorage.setItem('userFunction', sector);
-                localStorage.setItem('userLegajo', employee_id);
+                localStorage.setItem('userLegajo', emp_id);
                 // Also persist registration flag
                 localStorage.setItem('isRegistered', 'true');
                 
-                userId = `${employee_id}_${surname}_${sector}`;
+                userId = `${emp_id}_${surn}_${sector}`;
                 connectWebSocket(loginData.token);
                 document.getElementById('auth-section').style.display = 'none';
                 document.getElementById('main').style.display = 'block';
                 displayUserProfile();
-                updateOpenSkyData();
             } else {
                 document.getElementById('register-form').style.display = 'none';
                 document.getElementById('login-form').style.display = 'block';
@@ -522,8 +514,7 @@ function displayUserProfile() {
     const profileDiv = document.getElementById('user-profile');
     if (profileDiv) {
         const name = localStorage.getItem('userName') || 'Usuario';
-        const role = localStorage.getItem('userFunction') || 'Rol desconocido';
-        profileDiv.innerHTML = `<span>Usuario: <b>${name}</b></span> <span class="text-slate-600">|</span> <span>Rol: <b class="text-sky-400">${role}</b></span>`;
+        profileDiv.innerHTML = `<span>Usuario: <b>${name}</b></span>`;
     }
 }
 
@@ -552,7 +543,6 @@ function updateUserList(users) {
                 ${isActive ? '<span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse"></span>' : ''}
                 <div class="flex flex-col min-w-0">
                     <span class="text-slate-200 font-bold truncate">${user.display}</span>
-                    <span class="text-[10px] text-slate-500 font-mono">${user.user_id.split('_')[1] || ''}</span>
                 </div>
             </div>
             ${!isSelf ? `
@@ -1368,7 +1358,6 @@ function base64ToBlob(base64, mime) {
 
 document.addEventListener('DOMContentLoaded', () => {
     localStorage.removeItem('lastSearchQuery');
-    filterFlights('');
     document.getElementById('register-form')?.addEventListener('submit', registerUser);
     document.getElementById('login-form')?.addEventListener('submit', loginUser);
     document.getElementById('show-login')?.addEventListener('click', () => {

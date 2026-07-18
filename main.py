@@ -95,8 +95,6 @@ class TokenValidationRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     surname: str
-    employee_id: str
-    sector: str
     password: str
 
     @validator('surname')
@@ -104,19 +102,6 @@ class RegisterRequest(BaseModel):
         if not v.strip().replace(' ', '').isalpha():
             raise ValueError('El apellido debe contener solo letras')
         return v.strip().capitalize()
-
-    @validator('employee_id')
-    def validate_employee_id(cls, v):
-        val = v.strip()
-        if not val.isdigit() or len(val) not in [5, 6]:
-            raise ValueError('El legajo debe ser un número de 5 o 6 dígitos')
-        return val
-
-    @validator('sector')
-    def validate_sector(cls, v):
-        if v not in ALLOWED_SECTORS:
-            raise ValueError('Sector no válido')
-        return v.strip()
 
     @validator('password')
     def validate_password(cls, v):
@@ -126,7 +111,6 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     surname: str
-    employee_id: str
     password: str
 
     @validator('surname')
@@ -134,13 +118,6 @@ class LoginRequest(BaseModel):
         if not v.strip().replace(' ', '').isalpha():
             raise ValueError('El apellido debe contener solo letras')
         return v.strip().capitalize()
-
-    @validator('employee_id')
-    def validate_employee_id(cls, v):
-        val = v.strip()
-        if not val.isdigit() or len(val) not in [5, 6]:
-            raise ValueError('El legajo debe ser un número de 5 o 6 dígitos')
-        return val
 
 # Ruta raíz
 @app.get("/")
@@ -220,29 +197,33 @@ valid_tokens = load_all_valid_tokens()
 @app.post("/register")
 async def register_user(request: RegisterRequest):
     surname = request.surname
-    employee_id = request.employee_id
-    sector = request.sector
     password = request.password
+    
+    # Generar legajo simulado y sector por defecto de manera determinista basados en el apellido
+    import hashlib
+    hash_val = int(hashlib.md5(surname.encode('utf-8')).hexdigest(), 16)
+    employee_id = str(10000 + (hash_val % 90000))  # Legajo de 5 dígitos determinista
+    sector = "Operador"
 
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT surname FROM users WHERE employee_id = ?", (employee_id,))
+        c.execute("SELECT employee_id, password FROM users WHERE surname = ?", (surname,))
         user_exists = c.fetchone()
         
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         if user_exists:
-            # Sobrescribir contraseña y actualizar información (Recuperación)
-            c.execute("UPDATE users SET surname = ?, sector = ?, password = ? WHERE employee_id = ?",
-                      (surname, sector, hashed_password, employee_id))
+            # Sobrescribir contraseña y actualizar información
+            c.execute("UPDATE users SET sector = ?, password = ? WHERE surname = ?",
+                      (sector, hashed_password, surname))
             conn.commit()
-            logger.info(f"Contraseña actualizada/recuperada para legajo: {employee_id}")
+            logger.info(f"Contraseña actualizada/recuperada para: {surname}")
             return {"message": "Contraseña actualizada exitosamente"}
         else:
             # Registrar nuevo usuario
             c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
                       (surname, employee_id, sector, hashed_password))
             conn.commit()
-            logger.info(f"Usuario registrado: {surname} ({employee_id}, {sector})")
+            logger.info(f"Usuario registrado: {surname} (Legajo: {employee_id}, Sector: {sector})")
             return {"message": "Registro exitoso"}
 
 # Validación de token
@@ -273,31 +254,31 @@ async def validate_token(request: TokenValidationRequest):
 @app.post("/login")
 async def login_user(request: LoginRequest):
     surname = request.surname
-    employee_id = request.employee_id
     password = request.password
 
     with sqlite3.connect("chat_history.db") as conn:
         c = conn.cursor()
-        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE employee_id = ?",
-                  (employee_id,))
+        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE surname = ?",
+                  (surname,))
         user = c.fetchone()
 
     if not user:
-        logger.error(f"Credenciales inválidas para {surname}: {employee_id}")
+        logger.error(f"Credenciales inválidas para apellido: {surname}")
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
     stored_password = user[3]
     stored_bytes = stored_password.encode('utf-8') if isinstance(stored_password, str) else stored_password
     if not bcrypt.checkpw(password.encode('utf-8'), stored_bytes):
-        logger.error(f"Contraseña incorrecta para {surname}: {employee_id}")
+        logger.error(f"Contraseña incorrecta para: {surname}")
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
+    employee_id = user[1]
     sector = user[2]
     token_data = f"{employee_id}_{surname}_{sector}"
     token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
     valid_tokens.add(token)
     save_session(token, token_data, surname, sector)
-    logger.info(f"Login exitoso: {surname} ({employee_id}, {sector})")
+    logger.info(f"Login exitoso: {surname} (Legajo: {employee_id}, Sector: {sector})")
     return {"token": token, "message": "Inicio de sesión exitoso"}
 
 # Endpoint para generar anuncios TTS (Text to Speech)
