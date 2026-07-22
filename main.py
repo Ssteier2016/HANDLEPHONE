@@ -748,6 +748,14 @@ def get_history() -> List[Dict]:
         rows = c.fetchall()
     return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
 
+def get_history_since(msg_id: int) -> List[Dict]:
+    """Get messages with id > msg_id (for missed-message recovery)."""
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages WHERE id > ? ORDER BY id", (msg_id,))
+        rows = c.fetchall()
+    return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
+
 # Transcribir audio a texto (Google Speech Recognition con fallback sf)
 async def transcribe_audio(audio_data: str) -> str:
     try:
@@ -1291,6 +1299,11 @@ async def get_history_endpoint():
 @app.get("/api/history")
 async def get_api_history_endpoint():
     return get_history()
+
+@app.get("/api/history/since/{msg_id}")
+async def get_history_since_endpoint(msg_id: int):
+    return get_history_since(msg_id)
+
 
 # Evento de inicio del servidor FastAPI
 @app.on_event("startup")

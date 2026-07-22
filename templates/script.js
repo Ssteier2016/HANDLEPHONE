@@ -6,7 +6,8 @@ let isGroupRecording = false;
 let activeDirectTarget = null; // Target user ID for direct operator-to-operator messaging
 let isRecordingDirect = false; // Flag for DM recording state
 let recordingStartTime = null; // Recording start timestamp to measure audio duration
-const playedMessageIds = new Set(JSON.parse(localStorage.getItem('playedMessageIds') || '[]'));
+const audioPlayQueue = []; // Queue for sequential audio playback
+let isPlayingQueue = false; // Whether the queue is currently draining
 let isMuted = false;
 let isGroupMuted = false;
 let isNonGroupMuted = false;
@@ -418,11 +419,14 @@ function connectWebSocket(token) {
     requestWakeLock();
     startAudioKeepAlive();
     
-    window.isWsHistoryLoaded = false;
-    
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
     }
+
+    // Track which message IDs came during the initial history load
+    let historyMsgIds = new Set();
+    let historyLoaded = false;
+
     ws = new WebSocket(`wss://${window.location.host}/ws/${token}`);
     ws.onopen = () => {
         console.log("WebSocket conectado");
@@ -431,28 +435,34 @@ function connectWebSocket(token) {
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            console.log("Mensaje WebSocket:", data);
             if (data.type === 'connection_success') {
-                // connection_success arrives BEFORE history - reset flag
-                window.isWsHistoryLoaded = false;
+                historyMsgIds = new Set();
+                historyLoaded = false;
             } else if (data.type === 'history_end') {
-                // All history has been sent - from now on new messages auto-play
-                window.isWsHistoryLoaded = true;
-                console.log('Historial cargado. Auto-play de audio activado.');
+                historyLoaded = true;
+                console.log(`Historial cargado (${historyMsgIds.size} mensajes). Auto-play activado.`);
+                
+                // Auto-play missed messages since last session
+                fetchAndPlayMissedAudios();
+                
             } else if (data.type === 'message' || data.type === 'group_message' || data.type === 'direct_message') {
                 displayMessage(data);
-                // Only auto-play if it's not from history loading AND NOT our own recorded audio AND NOT already played
+
+                // Track last received message ID for missed-message recovery
+                if (data.id) {
+                    localStorage.setItem('lastReceivedMsgId', String(data.id));
+                }
+
+                // Determine if this is our own message
                 const myToken = localStorage.getItem('sessionToken');
                 const isMine = data.sender_token && data.sender_token === myToken;
-                const msgId = data.id || null;
-                const alreadyPlayed = msgId !== null && playedMessageIds.has(msgId);
-                
-                if (data.audio && window.isWsHistoryLoaded && !isMine && !alreadyPlayed) {
-                    if (msgId !== null) {
-                        playedMessageIds.add(msgId);
-                        localStorage.setItem('playedMessageIds', JSON.stringify(Array.from(playedMessageIds)));
-                    }
-                    playAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
+
+                if (!historyLoaded) {
+                    // Still loading history - remember this ID but don't auto-play
+                    if (data.id) historyMsgIds.add(data.id);
+                } else if (data.audio && !isMine) {
+                    // Live message after history loaded - auto-play!
+                    enqueueAudio(data.audio, data.sender, data.type === 'group_message' ? data.group_id : null);
                 }
             } else if (data.type === 'user_list') {
                 updateUserList(data.users);
@@ -516,6 +526,117 @@ function startPing() {
 
 function stopPing() {
     // No se necesita implementación explícita para detener pings
+}
+
+// ─── AUDIO PLAYBACK QUEUE ─────────────────────────────────────────────────────
+// Plays audio messages sequentially so they don't overlap
+function enqueueAudio(audioData, sender, groupId) {
+    audioPlayQueue.push({ audioData, sender, groupId });
+    if (!isPlayingQueue) {
+        drainAudioQueue();
+    }
+}
+
+async function drainAudioQueue() {
+    if (isPlayingQueue || audioPlayQueue.length === 0) return;
+    isPlayingQueue = true;
+
+    while (audioPlayQueue.length > 0) {
+        const { audioData, sender, groupId } = audioPlayQueue.shift();
+        try {
+            await playAudioAndWait(audioData, sender, groupId);
+        } catch (err) {
+            console.error("Error reproduciendo audio de la cola:", err);
+        }
+        // Small gap between consecutive audios
+        await new Promise(r => setTimeout(r, 300));
+    }
+    isPlayingQueue = false;
+}
+
+// Plays audio and returns a Promise that resolves when playback ends
+function playAudioAndWait(audioData, sender, groupId) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Skip if globally muted
+            if (isMuted) { resolve(); return; }
+            // Skip if this sender is individually muted
+            if (sender && clientMutedUsers.has(sender)) { resolve(); return; }
+
+            const audioBlob = base64ToBlob(audioData, 'audio/webm');
+            if (!audioBlob) { reject(new Error("No se pudo convertir audio")); return; }
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                resolve();
+            };
+            audio.onerror = (e) => {
+                URL.revokeObjectURL(audioUrl);
+                reject(e);
+            };
+
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    console.warn("Autoplay bloqueado:", err);
+                    // If autoplay is blocked, resolve anyway to not block the queue
+                    resolve();
+                });
+            }
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
+// ─── MISSED MESSAGES RECOVERY ─────────────────────────────────────────────────
+// Fetches and auto-plays audio messages that were missed while offline
+async function fetchAndPlayMissedAudios() {
+    try {
+        const lastId = localStorage.getItem('lastReceivedMsgId');
+        if (!lastId) return; // First time connecting, no missed messages
+
+        const token = localStorage.getItem('sessionToken') || '';
+        const response = await fetch(`/api/history/since/${lastId}?token=${encodeURIComponent(token)}`);
+        if (!response.ok) return;
+
+        const missed = await response.json();
+        if (!missed || missed.length === 0) return;
+
+        const myToken = localStorage.getItem('sessionToken');
+        console.log(`Reproduciendo ${missed.length} audios perdidos...`);
+
+        for (const msg of missed) {
+            // Track the ID
+            localStorage.setItem('lastReceivedMsgId', String(msg.id));
+
+            // Display in chat
+            const parts = msg.user_id ? msg.user_id.split('_') : ['Desconocido', 'Operador'];
+            displayMessage({
+                id: msg.id,
+                type: 'message',
+                sender: parts[0] || 'Desconocido',
+                sender_id: msg.user_id,
+                function: parts[1] || 'Operador',
+                text: msg.text,
+                timestamp: msg.timestamp,
+                duration: msg.duration,
+                audio: msg.audio
+            });
+
+            // Auto-play if it's not our own audio
+            if (msg.audio) {
+                const senderToken = btoa(`10000_${parts[0]}_${parts[1] || 'Operador'}`);
+                if (senderToken !== myToken) {
+                    enqueueAudio(msg.audio, parts[0], null);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error al recuperar audios perdidos:", err);
+    }
 }
 
 function displayUserProfile() {
