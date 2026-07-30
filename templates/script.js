@@ -1794,6 +1794,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Online status is now purely based on WebSocket connection state.
     // No need to send status_update on visibility/blur — if WS is open, user is online.
+
+    // Wake Lock is released by the browser automatically when the tab is hidden and is only
+    // re-requested inside connectWebSocket(), so returning to the app would otherwise leave the
+    // screen able to sleep again. Re-acquire it here and force an immediate reconnect instead of
+    // waiting for the passive 1s retry loop in ws.onclose.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+            const token = localStorage.getItem('sessionToken');
+            if (token && (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING)) {
+                console.log('App visible de nuevo: reconectando WebSocket...');
+                connectWebSocket(token);
+            }
+        }
+    });
 });
 
 const style = document.createElement('style');
