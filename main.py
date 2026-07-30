@@ -11,18 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-import aiohttp
-import requests
-from bs4 import BeautifulSoup
 import speech_recognition as sr
 import io
 import soundfile as sf
 from pydub import AudioSegment
 from dotenv import load_dotenv
-from cachetools import TTLCache
 from pydantic import BaseModel, validator
 import bcrypt
-from gtts import gTTS
 
 # Configurar logging
 logging.basicConfig(
@@ -40,11 +35,7 @@ app = FastAPI()
 # Estado de la aplicación
 app_state = {
     "global_mute_active": False,
-    "announced_flights": set(),
     "updates_enabled": True,  # Interruptor para actualizaciones
-    "daily_token_count": 0,  # Contador de tokens diarios
-    "last_request_time": datetime.now(),
-    "day_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 }
 
 # Configurar hash de contraseñas
@@ -82,12 +73,6 @@ ALLOWED_SECTORS = [
     "Maletero", "Cintero", "Tractorista", "Equipos", "Supervisor",
     "Jefatura", "Movilero", "Señalero", "Pañolero"
 ]
-
-# Prefijos de aerolíneas objetivo (Aerolíneas Argentinas, LATAM, Flybondi, JetSmart, Gol, etc.)
-TARGET_AIRLINES = ["AR", "ARG", "LA", "LAN", "JJ", "TAM", "LP", "LPE", "XL", "LNE", "4M", "DSM", "WJ", "FO", "FB", "G3", "GLO"]
-
-# Caché global para servir vuelos en tiempo real
-global_flights_cache = {"flights": []}
 
 # Modelos Pydantic para validación
 class TokenValidationRequest(BaseModel):
@@ -280,415 +265,6 @@ async def login_user(request: LoginRequest):
     save_session(token, token_data, surname, sector)
     logger.info(f"Login exitoso: {surname} (Legajo: {employee_id}, Sector: {sector})")
     return {"token": token, "message": "Inicio de sesión exitoso"}
-
-# Endpoint para generar anuncios TTS (Text to Speech)
-@app.get("/announcement/{flight_number}/{destination}")
-async def generate_announcement(flight_number: str, destination: str):
-    text = f"El vuelo {flight_number} con destino a {destination} está próximo a despegar."
-    tts = gTTS(text=text, lang='es')
-    
-    # Resolver ruta de forma portable para Windows/Linux
-    temp_dir = "temp_announcements"
-    os.makedirs(temp_dir, exist_ok=True)
-    audio_path = os.path.join(temp_dir, f"{flight_number}_announcement.mp3")
-    
-    # Guardar audio
-    tts.save(audio_path)
-    logger.info(f"Anuncio generado para {flight_number} a {destination}")
-    return FileResponse(audio_path, media_type="audio/mpeg", filename=f"{flight_number}_announcement.mp3")
-
-# Endpoint de consulta de vuelos
-@app.get("/api/flights")
-async def get_flights(query: Optional[str] = None):
-    flights = global_flights_cache.get("flights", [])
-    if query:
-        query = query.lower().strip()
-        flights = [
-            f for f in flights
-            if query in f["flight_number"].lower() or
-               query in f["destination"].lower() or
-               query in f["origin"].lower() or
-               query in f["status"].lower() or
-               (f["registration"] and query in f["registration"].lower())
-        ]
-    return {"flights": flights}
-
-# Consulta de detalles de un vuelo
-@app.get("/flight_details/{flight_number}")
-async def get_flight_details(flight_number: str):
-    flights = global_flights_cache.get("flights", [])
-    flight_data = next((f for f in flights if f["flight_number"].lower() == flight_number.lower()), None)
-    if not flight_data:
-        raise HTTPException(status_code=404, detail="Vuelo no encontrado")
-    return flight_data
-
-# --- SCRAPER TAMS & AIRPLANES.LIVE ---
-
-def scrape_tams_side(mov_type="A") -> List[Dict]:
-    url = "http://www.tams.com.ar/ORGANISMOS/Vuelos.aspx"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    
-    flights = []
-    try:
-        session = requests.Session()
-        # 1. Obtener claves ASP.NET
-        r = session.get(url, headers=headers, timeout=10)
-        logger.info(f"TAMS GET status: {r.status_code} | len={len(r.text)}")
-        soup = BeautifulSoup(r.text, 'html.parser')
-        
-        viewstate = soup.find('input', {'name': '__VIEWSTATE'}).get('value') if soup.find('input', {'name': '__VIEWSTATE'}) else ''
-        eventvalidation = soup.find('input', {'name': '__EVENTVALIDATION'}).get('value') if soup.find('input', {'name': '__EVENTVALIDATION'}) else ''
-        viewstategenerator = soup.find('input', {'name': '__VIEWSTATEGENERATOR'}).get('value') if soup.find('input', {'name': '__VIEWSTATEGENERATOR'}) else ''
-        logger.info(f"TAMS VIEWSTATE len={len(viewstate)} EVENTVALIDATION len={len(eventvalidation)}")
-        
-        # 2. Hacer consulta POST para el aeropuerto SABE (Aeroparque)
-        payload = {
-            "__VIEWSTATE": viewstate,
-            "__VIEWSTATEGENERATOR": viewstategenerator,
-            "__EVENTVALIDATION": eventvalidation,
-            "__EVENTTARGET": "",
-            "__EVENTARGUMENT": "",
-            "__LASTFOCUS": "",
-            "ddlMovTp": mov_type,
-            "ddlAeropuerto": "AEP",
-            "ddlSector": "-1",
-            "ddlAerolinea": "-1",
-            "ddlAterrizados": "TODOS",
-            "ddlVentanaH": "12",
-            "btnBuscar": "Buscar"
-        }
-        
-        r_post = session.post(url, data=payload, headers=headers, timeout=10)
-        r_post.encoding = r_post.apparent_encoding or 'utf-8'
-        logger.info(f"TAMS POST status: {r_post.status_code} | len={len(r_post.text)}")
-
-        soup_post = BeautifulSoup(r_post.text, 'html.parser')
-        
-        grid_id = "dgGrillaA" if mov_type == "A" else "dgGrillaD"
-        table = soup_post.find('table', {'id': grid_id})
-        
-        logger.info(f"TAMS {mov_type}: tabla '{grid_id}' {'encontrada' if table else 'NO encontrada'}")
-        if table:
-            rows = table.find_all('tr')
-            # Saltar fila de encabezado
-            for row in rows[1:]:
-                cells = [td.text.strip() for td in row.find_all('td')]
-                if len(cells) < 6:
-                    continue
-                
-                airline = cells[0].strip().upper()
-                if airline not in TARGET_AIRLINES:
-                    continue
-                
-                flight_number = cells[1].strip()
-                scheduled_time = cells[2].strip()
-                registration = cells[3].strip() if len(cells) > 3 else "N/A"
-                position = cells[4].strip() if len(cells) > 4 else "N/A"
-                
-                if mov_type == "A":
-                    origin = cells[11].strip() if len(cells) > 11 else (cells[9].strip() if len(cells) > 9 else "Desconocido")
-                    destination = "SABE"
-                    eta = cells[5].strip() if len(cells) > 5 else "N/A"
-                    status = cells[13].strip() if len(cells) > 13 else (cells[12].strip() if len(cells) > 12 else "Programado")
-                else:
-                    origin = "SABE"
-                    destination = cells[11].strip() if len(cells) > 11 else (cells[9].strip() if len(cells) > 9 else "Desconocido")
-                    eta = cells[5].strip() if len(cells) > 5 else "N/A"
-                    gate = cells[10].strip() if len(cells) > 10 else "N/A"
-                    if gate and gate != "" and gate != "N/A":
-                        position = gate
-                    status = cells[13].strip() if len(cells) > 13 else (cells[12].strip() if len(cells) > 12 else "Programado")
-                
-                flights.append({
-                    "flight_number": f"{airline}{flight_number}",
-                    "registration": registration if registration and registration != "" else "N/A",
-                    "sta": scheduled_time,
-                    "eta": eta if eta and eta != "" else "N/A",
-                    "origin": origin,
-                    "destination": destination,
-                    "status": status if status and status != "" else "Programado",
-                    "position": position if position and position != "" else "N/A",
-                    "airline": airline,
-                    "type": "arrival" if mov_type == "A" else "departure"
-                })
-    except Exception as e:
-        logger.error(f"Error scraping TAMS {mov_type}: {e}")
-        
-    return flights
-
-async def get_airplanes_live_data() -> List[Dict]:
-    url = "https://api.airplanes.live/v2/point/-34.5597/-58.4116/250"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("ac", [])
-                else:
-                    logger.error(f"Error al obtener datos de Airplanes.Live: {response.status}")
-                    return []
-    except Exception as e:
-        logger.error(f"Excepción al obtener datos de Airplanes.Live: {str(e)}")
-        return []
-
-# FR24 API token
-FR24_TOKEN = os.getenv("FLIGHTRADAR24_TOKEN_PRIMARY", "")
-
-async def get_fr24_flights(airport_iata: str = "AEP") -> List[Dict]:
-    """Fetch live flight data from FlightRadar24 API for a given airport."""
-    if not FR24_TOKEN:
-        logger.warning("No FR24 token available")
-        return []
-    token = FR24_TOKEN.split("|")[1] if "|" in FR24_TOKEN else FR24_TOKEN
-    url = f"https://fr24api.flightradar24.com/api/live/flight-positions/light"
-    headers = {
-        "Accept": "application/json",
-        "Accept-Version": "v1",
-        "Authorization": f"Bearer {token}"
-    }
-    params = {"airports": airport_iata, "limit": 100}
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params, timeout=15) as resp:
-                logger.info(f"FR24 API status for {airport_iata}: {resp.status}")
-                if resp.status == 200:
-                    data = await resp.json()
-                    flights = data.get("data", [])
-                    logger.info(f"FR24 {airport_iata}: {len(flights)} vuelos obtenidos")
-                    return flights
-                else:
-                    body = await resp.text()
-                    logger.error(f"FR24 API error {resp.status}: {body[:200]}")
-                    return []
-    except Exception as e:
-        logger.error(f"Error consultando FR24 API: {e}", exc_info=True)
-        return []
-
-async def get_combined_flights() -> List[Dict]:
-    loop = asyncio.get_event_loop()
-    # 1. Scrapear TAMS en paralelo
-    try:
-        tams_arr = await loop.run_in_executor(None, scrape_tams_side, "A")
-    except Exception as e:
-        logger.error(f"Error scraping arrivals: {e}", exc_info=True)
-        tams_arr = []
-        
-    try:
-        tams_dep = await loop.run_in_executor(None, scrape_tams_side, "D")
-    except Exception as e:
-        logger.error(f"Error scraping departures: {e}", exc_info=True)
-        tams_dep = []
-        
-    tams_data = tams_arr + tams_dep
-    logger.info(f"TAMS arrivals: {len(tams_arr)} | TAMS departures: {len(tams_dep)} | Total TAMS: {len(tams_data)}")
-    
-    # 2. Consultar radares geográficos de Airplanes.Live
-    airplanes_data = await get_airplanes_live_data()
-    logger.info(f"Airplanes.Live raw planes cerca del área: {len(airplanes_data)}")
-    
-    # 2b. Consultar FlightRadar24 API (token disponible) como fuente adicional
-    fr24_data = await get_fr24_flights("AEP")
-    logger.info(f"FR24 vuelos AEP: {len(fr24_data)}")
-    
-    # Merge FR24 data into airplanes_data format if FR24 returned data
-    if fr24_data:
-        # FR24 data format: {callsign, lat, lon, alt_baro, gspeed, reg, type, ...}
-        for fr in fr24_data:
-            callsign = (fr.get("callsign") or fr.get("flightId") or "").strip()
-            if not callsign:
-                continue
-            # Check if this plane is already in airplanes_data by registration
-            reg = fr.get("reg", "").strip()
-            already_exists = any(
-                (a.get("r", "").strip().upper() == reg.upper() and reg) or
-                (a.get("flight", "").strip().upper() == callsign.upper())
-                for a in airplanes_data
-            )
-            if not already_exists:
-                airplanes_data.append({
-                    "flight": callsign,
-                    "r": reg,
-                    "lat": fr.get("lat"),
-                    "lon": fr.get("lon"),
-                    "alt_geom": fr.get("alt_baro") or fr.get("alt"),
-                    "gs": fr.get("gspeed") or fr.get("spd"),
-                    "vert_rate": fr.get("vspeed"),
-                    "t": fr.get("type", "N/A"),
-                    "orig": fr.get("orig_iata") or fr.get("orig") or "N/A",
-                    "dest": fr.get("dest_iata") or fr.get("dest") or "N/A",
-                })
-    logger.info(f"Total airplanes tras merge FR24+Airplanes.Live: {len(airplanes_data)}")
-
-    
-    combined_data = []
-    icao_to_iata = {
-        "ARG": "AR",
-        "LAN": "LA",
-        "TAM": "JJ",
-        "LPE": "LP",
-        "LNE": "XL",
-        "DSM": "4M",
-        "FBZ": "FO",
-        "JAT": "WJ",
-        "GLO": "G3"
-    }
-    
-    # 3. Cruzar datos de radares activos
-    for plane in airplanes_data:
-        flight = plane.get("flight", "").strip()
-        registration = plane.get("r", "").strip()
-        
-        # Validar si el prefijo de vuelo corresponde a nuestras aerolíneas de interés
-        is_target = False
-        if flight:
-            if flight.startswith("ARG"):
-                is_target = True
-            elif any(flight.startswith(prefix) for prefix in ["LAN", "TAM", "LPE", "LNE", "DSM", "LAP", "FBZ", "JAT", "GLO"]):
-                is_target = True
-            elif any(flight.startswith(prefix) for prefix in TARGET_AIRLINES):
-                is_target = True
-                
-        if is_target:
-            iata_flight = flight
-            for icao, iata in icao_to_iata.items():
-                if flight.startswith(icao):
-                    iata_flight = flight.replace(icao, iata, 1)
-                    break
-            
-            raw_orig = plane.get("orig") or ""
-            raw_dest = plane.get("dest") or ""
-            # Default to SABE for planes without origin/destination (they're within AEP radius)
-            origin = raw_orig if raw_orig and raw_orig not in ("", "N/A") else "SABE"
-            destination = raw_dest if raw_dest and raw_dest not in ("", "N/A") else "SABE"
-            plane_info = {
-                "flight_number": iata_flight,
-                "registration": registration if registration else "N/A",
-                "lat": plane.get("lat"),
-                "lon": plane.get("lon"),
-                "altitude": plane.get("alt_geom"),
-                "ground_speed": plane.get("gs"),
-                "vertical_rate": plane.get("vert_rate"),
-                "origin": origin,
-                "destination": destination,
-                "status": "En vuelo",
-                "color": "green",
-                "position": "N/A",
-                "sta": None,
-                "eta": None,
-                "airline": iata_flight[:2],
-                "aircraft_type": plane.get("t", "N/A"),
-            }
-            
-            # Cruzar con TAMS para rellenar horarios y posiciones
-            for tams_flight in tams_data:
-                t_reg = tams_flight["registration"].replace("-", "").replace(" ", "").upper()
-                p_reg = registration.replace("-", "").replace(" ", "").upper()
-                
-                # Normalizar números de vuelo (ej: AR1361 vs AR 1361)
-                t_fl = tams_flight["flight_number"].replace(" ", "").upper()
-                p_fl = iata_flight.replace(" ", "").upper()
-                
-                # Intentar cruce también por el número numérico puro de vuelo (ej: 1361)
-                t_num = "".join(filter(str.isdigit, t_fl))
-                p_num = "".join(filter(str.isdigit, p_fl))
-                
-                if (t_reg != "N/A" and t_reg == p_reg) or t_fl == p_fl or (t_num != "" and t_num == p_num):
-                    status = tams_flight.get("status", "En vuelo")
-                    color = "green"
-                    if "demorado" in status.lower() or "dem" in status.lower():
-                        color = "orange"
-                    elif "cancelado" in status.lower() or "can" in status.lower():
-                        color = "red"
-                    elif "arribado" in status.lower() or "arr" in status.lower():
-                        color = "gray"
-                    elif "embarcando" in status.lower() or "emb" in status.lower() or "pre" in status.lower():
-                        color = "yellow"
-                    
-                    plane_info.update({
-                        "sta": tams_flight["sta"],
-                        "eta": tams_flight.get("eta") if tams_flight.get("eta") != "N/A" else tams_flight["sta"],
-                        "position": tams_flight["position"],
-                        "origin": tams_flight["origin"],
-                        "destination": tams_flight["destination"],
-                        "status": status,
-                        "color": color
-                    })
-                    break
-            combined_data.append(plane_info)
-            
-    # 4. Añadir vuelos de TAMS que aún no están en vuelo (programados en tierra)
-    for tams_flight in tams_data:
-        already_added = False
-        t_reg = tams_flight["registration"].replace("-", "").replace(" ", "").upper()
-        t_fl = tams_flight["flight_number"].replace(" ", "").upper()
-        
-        for plane in combined_data:
-            p_reg = plane["registration"].replace("-", "").replace(" ", "").upper()
-            p_fl = plane["flight_number"].replace(" ", "").upper()
-            if (t_reg != "N/A" and t_reg == p_reg) or t_fl == p_fl:
-                already_added = True
-                break
-                
-        if not already_added:
-            status = tams_flight.get("status", "Programado")
-            color = "blue"
-            if "embarcando" in status.lower() or "emb" in status.lower() or "pre" in status.lower():
-                color = "yellow"
-            elif "demorado" in status.lower() or "dem" in status.lower():
-                color = "orange"
-            elif "cancelado" in status.lower() or "can" in status.lower():
-                color = "red"
-            elif "arribado" in status.lower() or "arr" in status.lower():
-                color = "gray"
-                
-            combined_data.append({
-                "flight_number": tams_flight["flight_number"],
-                "registration": tams_flight["registration"],
-                "sta": tams_flight["sta"],
-                "eta": tams_flight["eta"],
-                "origin": tams_flight["origin"],
-                "destination": tams_flight["destination"],
-                "status": status,
-                "color": color,
-                "position": tams_flight["position"],
-                "airline": tams_flight["airline"],
-                "lat": None,
-                "lon": None,
-                "altitude": None,
-                "ground_speed": None,
-                "vertical_rate": None,
-                "aircraft_type": "N/A",
-            })
-            
-    logger.info(f"Combined flights total: {len(combined_data)}")
-    return combined_data
-
-# Helper para parsear la hora STD del TAMS (ej: "14:30")
-def parse_std_time(std_str: str) -> Optional[datetime]:
-    if not std_str:
-        return None
-    # STD puede ser "07/07 14:30" o sólo "14:30"
-    std_str = std_str.strip()
-    try:
-        if " " in std_str:
-            # "07/07 14:30"
-            date_part, time_part = std_str.split(" ")
-            day, month = map(int, date_part.split("/"))
-            hour, minute = map(int, time_part.split(":"))
-            now = datetime.now()
-            return now.replace(month=month, day=day, hour=hour, minute=minute, second=0, microsecond=0)
-        else:
-            # "14:30"
-            hour, minute = map(int, std_str.split(":"))
-            now = datetime.now()
-            return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    except Exception:
-        return None
 
 # --- COMUNICACIÓN Y MENSAJERÍA ---
 
@@ -962,73 +538,6 @@ async def broadcast_message(message: Dict):
     if disconnected_users:
         await broadcast_users()
 
-# Loop periódico de vuelos y anuncios
-async def update_flights_loop():
-    while True:
-        try:
-            if app_state["updates_enabled"]:
-                # Resetear tokens diarios si es un nuevo día
-                if datetime.now() >= app_state["day_reset"]:
-                    app_state["daily_token_count"] = 0
-                    app_state["day_reset"] = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-                
-                # Obtener vuelos y guardarlos en caché
-                flights = await get_combined_flights()
-                global_flights_cache["flights"] = flights
-                logger.info(f"Datos de vuelos actualizados en caché ({len(flights)} vuelos cargados).")
-                
-                # Emitir a los clientes
-                disconnected_users = []
-                for token, user in list(users.items()):
-                    if not user["logged_in"]:
-                        continue
-                    if not user["websocket"]:
-                        continue
-                    try:
-                        await user["websocket"].send_json({
-                            "type": "flight_update",
-                            "flights": flights
-                        })
-                    except Exception:
-                        disconnected_users.append(token)
-                        
-                for token in disconnected_users:
-                    if token in users:
-                        users[token]["websocket"] = None
-                        users[token]["active"] = False
-                if disconnected_users:
-                    await broadcast_users()
-                
-                # Disparar anuncios automáticos si corresponde
-                for flight in flights:
-                    flight_number = flight['flight_number']
-                    status = flight['status']
-                    destination = flight['destination']
-                    origin = flight['origin']
-                    
-                    # Anuncio de despegues (salidas de SABE)
-                    if origin == "SABE" and flight_number not in app_state['announced_flights'] and status in ["Preembarque", "Embarcando", "Cerrado", "Próximo a despegar"]:
-                        dep_time = parse_std_time(flight.get("sta"))
-                        if dep_time:
-                            diff_seconds = (dep_time - datetime.now()).total_seconds()
-                            # Anunciar si el vuelo está a menos de 30 minutos de despegar
-                            if 0 <= diff_seconds <= 1800:
-                                app_state['announced_flights'].add(flight_number)
-                                announcement_url = f"/announcement/{flight_number}/{destination}"
-                                await broadcast_message({
-                                    "type": "message",  # El cliente espera tipo 'message'
-                                    "sender": "Sistema",
-                                    "function": "Anuncio",
-                                    "text": f"El vuelo {flight_number} con destino a {destination} está próximo a despegar.",
-                                    "timestamp": datetime.utcnow().strftime("%H:%M"),
-                                    "audio": f"/announcement/{flight_number}/{destination}"
-                                })
-                                logger.info(f"TTS automático disparado: {flight_number}")
-        except Exception as e:
-            logger.error(f"Error en update_flights_loop: {e}")
-            
-        await asyncio.sleep(60)  # Actualizar cada 1 minuto para mayor tiempo real
-
 # Endpoint de WebSockets principal
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
@@ -1112,13 +621,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         
         # Señal para que el frontend sepa que terminó el historial y active el auto-play
         await websocket.send_json({"type": "history_end"})
-            
-        # Enviar lista de vuelos inicial
-        await websocket.send_json({
-            "type": "flight_update",
-            "flights": global_flights_cache.get("flights", [])
-        })
-        
+
         await broadcast_users()
 
         # Escuchar mensajes entrantes del WebSocket
@@ -1254,21 +757,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 )
                 await websocket.send_json({"type": "group_left"})
                 await broadcast_users()
-                
-            elif msg_type == "flight_details_request":
-                flight_number = message.get("flight_number")
-                if flight_number:
-                    try:
-                        fd = await get_flight_details(flight_number)
-                        await websocket.send_json({
-                            "type": "flight_details_response",
-                            "flight": fd
-                        })
-                    except Exception as e:
-                        await websocket.send_json({
-                            "type": "flight_details_error",
-                            "message": str(e)
-                        })
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado (en segundo plano): {token[:15]}...")
@@ -1339,20 +827,10 @@ async def startup_event():
             logger.info(f"Sesiones persistentes precargadas en memoria: {len(users)}")
         except Exception as db_err:
             logger.error(f"Error cargando sesiones persistentes al inicio: {db_err}")
-        
-        # Cargar datos de vuelos inicialmente antes de arrancar las tareas en segundo plano
-        logger.info("Pre-cargando vuelos de TAMS y radares...")
-        try:
-            flights = await get_combined_flights()
-            global_flights_cache["flights"] = flights
-            logger.info(f"Carga inicial de vuelos completada: {len(flights)} vuelos.")
-        except Exception as e:
-            logger.error(f"Error precargando vuelos: {e}")
-            
+
         # Programar loops asíncronos en segundo plano
         asyncio.create_task(clear_messages())
         asyncio.create_task(process_audio_queue())
-        asyncio.create_task(update_flights_loop())
         asyncio.create_task(clean_expired_sessions())
         logger.info("Tareas en segundo plano programadas exitosamente.")
     except Exception as e:

@@ -1,7 +1,6 @@
 const CACHE_NAME = 'handyhandle-cache-v22';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
-const API_CACHE = 'api-cache-v22';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
 
 const urlsToCache = [
@@ -10,11 +9,8 @@ const urlsToCache = [
     '/templates/style.css',
     '/templates/script.js',
     '/templates/manifest.json',
-    '/templates/aero.png',
-    '/templates/airport.png',
     '/templates/icon-192x192.png',
-    '/templates/app-logo.png',
-    '/templates/airplane.png'
+    '/templates/app-logo.png'
 ];
 
 self.addEventListener('install', event => {
@@ -38,8 +34,8 @@ self.addEventListener('activate', event => {
             caches.keys().then(cacheNames => {
                 return Promise.all(
                     cacheNames.map(cacheName => {
-                        // Delete ALL old caches - keep only the current versions
-                        if (cacheName !== CACHE_NAME && cacheName !== API_CACHE) {
+                        // Delete ALL old caches - keep only the current version
+                        if (cacheName !== CACHE_NAME) {
                             console.log('Eliminando cache antiguo:', cacheName);
                             return caches.delete(cacheName);
                         }
@@ -57,32 +53,11 @@ self.addEventListener('fetch', event => {
         return;
     }
     const requestUrl = new URL(event.request.url);
-    if (requestUrl.protocol === 'wss:' ||
-        requestUrl.pathname === '/opensky' ||
-        requestUrl.pathname === '/aa2000_flights' ||
-        requestUrl.pathname === '/history' ||
-        requestUrl.pathname === '/flightradar24') {
+    if (requestUrl.protocol === 'wss:' || requestUrl.pathname === '/history') {
         event.respondWith(
             fetch(event.request).catch(err => {
                 console.error('Error en fetch:', err);
                 return new Response('Offline', { status: 503 });
-            })
-        );
-        return;
-    }
-    if (requestUrl.href.includes('api.flightradar24.com')) {
-        event.respondWith(
-            caches.open(API_CACHE).then(cache => {
-                return fetch(event.request).then(response => {
-                    if (response.status === 200) {
-                        cache.put(event.request, response.clone());
-                        console.log('Cacheando Flightradar24:', requestUrl.href);
-                    }
-                    return response;
-                }).catch(() => {
-                    console.log('Sirviendo Flightradar24 desde caché:', requestUrl.href);
-                    return cache.match(event.request) || new Response('Offline', { status: 503 });
-                });
             })
         );
         return;

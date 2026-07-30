@@ -104,148 +104,6 @@ function animateVuMeter() {
 
 
 
-function getAirlineLogoHtml(flightNumber) {
-    if (!flightNumber) return '';
-    const fn = flightNumber.trim().toUpperCase();
-    
-    // Aerolineas Argentinas logo
-    if (fn.startsWith('AR') || fn.startsWith('ARG')) {
-        return `<img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="AR Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
-    }
-    
-    // LATAM divisions logo
-    const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
-    const matchesLatam = latamPrefixes.some(pref => fn.startsWith(pref));
-    if (matchesLatam) {
-        return `<img src="https://i.pinimg.com/1200x/6a/f0/e0/6af0e032470f2d35acb5e3f225fe1da7.jpg" alt="LA Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
-    }
-    
-    // Fallback: plane icon
-    return `<span class="inline-block mr-2 text-slate-500">✈</span>`;
-}
-
-const playedBellAlerts = new Set();
-
-function playBellSound() {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const now = audioCtx.currentTime;
-        const frequencies = [880, 1200, 1500, 1800];
-        frequencies.forEach((freq, index) => {
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, now);
-            const duration = 1.2 / (index + 1);
-            gainNode.gain.setValueAtTime(0.1, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + duration);
-        });
-    } catch (err) {
-        console.error("Error al reproducir timbre de campana:", err);
-    }
-}
-
-function getFlightTargetTime(flight) {
-    if (!flight) return null;
-    const timeStr = (flight.eta && flight.eta !== 'N/A') ? flight.eta : flight.sta;
-    if (!timeStr || timeStr === 'N/A') return null;
-    
-    const now = new Date();
-    // Caso 1: "DD/MM HH:MM" (ej., "07/07 04:40")
-    if (timeStr.includes('/')) {
-        const parts = timeStr.split(' ');
-        const dateParts = parts[0].split('/');
-        const timeParts = parts[1].split(':');
-        const day = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const hour = parseInt(timeParts[0], 10);
-        const minute = parseInt(timeParts[1], 10);
-        return new Date(now.getFullYear(), month, day, hour, minute, 0);
-    }
-    
-    // Caso 2: "HH:MM" (ej., "04:15")
-    if (timeStr.includes(':')) {
-        const timeParts = timeStr.split(':');
-        const hour = parseInt(timeParts[0], 10);
-        const minute = parseInt(timeParts[1], 10);
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
-    }
-    return null;
-}
-
-function updateCountdowns() {
-    const cells = document.querySelectorAll('.flight-countdown-cell');
-    const nowMs = Date.now();
-    
-    cells.forEach(cell => {
-        const targetMsStr = cell.getAttribute('data-target-ms');
-        const flightNumber = cell.getAttribute('data-flight-number') || 'Unknown';
-        const bellEnabled = bellAlerts.has(flightNumber);
-        
-        if (!targetMsStr) {
-            cell.querySelector('.countdown-text')?.setAttribute('data-val', '-');
-            return;
-        }
-        
-        const targetMs = parseInt(targetMsStr, 10);
-        const diffMs = targetMs - nowMs;
-        let timeText = '';
-        let timeClass = 'text-slate-400';
-        let bellClass = bellEnabled ? 'text-amber-400 cursor-pointer' : 'text-slate-600 cursor-pointer';
-        let bellTitle = bellEnabled ? 'Desactivar alerta' : 'Activar alerta para este vuelo';
-        
-        if (isNaN(targetMs) || targetMsStr === '') {
-            timeText = 'N/A';
-        } else if (diffMs > 0) {
-            const totalSeconds = Math.floor(diffMs / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            const hStr = hours > 0 ? `${hours}:` : '';
-            const mStr = String(minutes).padStart(2, '0');
-            const sStr = String(seconds).padStart(2, '0');
-            timeText = `${hStr}${mStr}:${sStr}`;
-            if (bellEnabled && diffMs < 300000) {
-                timeClass = 'text-amber-400 font-bold font-mono animate-pulse';
-            } else {
-                timeClass = 'text-slate-300 font-mono';
-            }
-        } else {
-            // Flight is at or past its scheduled time
-            timeText = '00:00';
-            timeClass = 'text-red-400 font-bold font-mono';
-            // Only fire bell if: bell is enabled AND not already fired AND app has been running for at least 5s (not startup)
-            if (bellEnabled && !firedBellAlerts.has(flightNumber)) {
-                firedBellAlerts.add(flightNumber);
-                // Only play sound if we're past the startup grace period (5 seconds)
-                if (Date.now() - startupTime > 5000) {
-                    playBellSound();
-                    showError(`¡Vuelo ${flightNumber} en hora cero!`);
-                }
-            } else if (!bellEnabled && !firedBellAlerts.has(flightNumber)) {
-                // Silently mark past flights as fired so they don't trigger on bell enable
-                firedBellAlerts.add(flightNumber);
-            }
-        }
-        
-        const existingText = cell.querySelector('.countdown-text');
-        const existingBell = cell.querySelector('.bell-btn');
-        
-        if (existingText) {
-            existingText.textContent = timeText;
-            existingText.className = `countdown-text ${timeClass}`;
-        }
-        if (existingBell) {
-            existingBell.className = `bell-btn text-base ${bellClass}`;
-            existingBell.title = bellTitle;
-        }
-    });
-}
-
 function showError(message, isSuccess = false) {
     const errorDiv = document.getElementById('error-message');
     if (errorDiv) {
@@ -1271,8 +1129,6 @@ function showGroupHistory() {
     showHistory();
 }
 
-// Actualizaciones y llamadas a APIs de aeropuertos eliminadas para limpiar el Walkie-Talkie
-
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
     if (!swipeHint) return;
@@ -1848,20 +1704,6 @@ style.textContent = `
     }
     .in-group {
         font-weight: bold;
-    }
-    .tams-row {
-        cursor: pointer;
-    }
-    .tams-details-btn {
-        padding: 5px 10px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        border-radius: 3px;
-        cursor: pointer;
-    }
-    .tams-details-btn:hover {
-        background-color: #0056b3;
     }
     .toggle-btn {
         padding: 10px;
