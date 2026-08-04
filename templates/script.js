@@ -28,6 +28,263 @@ let vuDataArray = null;
 let vuAnimFrame = null;
 let vuStream = null;
 
+// ─── VIDEO CALL (WebRTC 1 a 1) ────────────────────────────────────────────────
+const RTC_CONFIG = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
+
+let localCallStream = null;
+let peerConnection = null;
+let callPeerUserId = null; // user_id de la otra parte (llamando, sonando o en curso)
+let isCallCaller = false;
+let isCameraEnabled = true;
+let pendingIceCandidates = [];
+
+function startVideoCall(targetUserId) {
+    if (callPeerUserId) {
+        showError('Ya hay una videollamada en curso.');
+        return;
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showError('No hay conexión WebSocket. Intenta de nuevo.');
+        return;
+    }
+    callPeerUserId = targetUserId;
+    isCallCaller = true;
+    showVideoCallScreen(`Llamando a ${targetUserId.split('_')[0]}...`);
+    ws.send(JSON.stringify({ type: 'video_call_request', target_user_id: targetUserId }));
+}
+
+async function handleVideoSignal(data) {
+    switch (data.type) {
+        case 'video_call_request':
+            if (callPeerUserId) {
+                // Ya hay una llamada en curso/sonando: rechazar automáticamente la nueva
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: data.from_user_id }));
+                }
+                return;
+            }
+            showIncomingCallBanner(data.from_user_id);
+            break;
+
+        case 'video_call_reject':
+            if (callPeerUserId === data.from_user_id) {
+                showError(`${data.from_user_id.split('_')[0]} rechazó la videollamada.`);
+                endVideoCall(false);
+            }
+            break;
+
+        case 'video_call_error':
+            showError(data.message || 'No se pudo iniciar la videollamada.');
+            endVideoCall(false);
+            break;
+
+        case 'video_call_accept':
+            // Somos quien llama: el destinatario aceptó, ahora generamos la oferta SDP
+            if (isCallCaller && callPeerUserId === data.from_user_id) {
+                try {
+                    await setupLocalMedia();
+                    createPeerConnection();
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    ws.send(JSON.stringify({ type: 'video_offer', target_user_id: callPeerUserId, sdp: offer }));
+                    updateVideoCallStatus(`En llamada con ${callPeerUserId.split('_')[0]}`);
+                } catch (err) {
+                    console.error('Error iniciando la videollamada:', err);
+                    showError('No se pudo acceder a la cámara/micrófono.');
+                    endVideoCall(true);
+                }
+            }
+            break;
+
+        case 'video_offer':
+            // Somos el destinatario: llega la oferta SDP luego de haber aceptado
+            if (callPeerUserId === data.from_user_id && peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                await flushPendingIceCandidates();
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({ type: 'video_answer', target_user_id: callPeerUserId, sdp: answer }));
+                updateVideoCallStatus(`En llamada con ${callPeerUserId.split('_')[0]}`);
+            }
+            break;
+
+        case 'video_answer':
+            if (callPeerUserId === data.from_user_id && peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                await flushPendingIceCandidates();
+            }
+            break;
+
+        case 'video_ice_candidate':
+            if (callPeerUserId === data.from_user_id && data.candidate) {
+                if (peerConnection && peerConnection.remoteDescription) {
+                    try {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    } catch (err) {
+                        console.warn('Error agregando ICE candidate:', err);
+                    }
+                } else {
+                    pendingIceCandidates.push(data.candidate);
+                }
+            }
+            break;
+
+        case 'video_call_end':
+            if (callPeerUserId === data.from_user_id) {
+                showError(`${data.from_user_id.split('_')[0]} finalizó la videollamada.`, true);
+                endVideoCall(false);
+            }
+            break;
+    }
+}
+
+async function flushPendingIceCandidates() {
+    while (pendingIceCandidates.length > 0) {
+        const candidate = pendingIceCandidates.shift();
+        try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+            console.warn('Error agregando ICE candidate pendiente:', err);
+        }
+    }
+}
+
+async function setupLocalMedia() {
+    if (localCallStream) return localCallStream;
+    localCallStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const localVideoEl = document.getElementById('local-video');
+    if (localVideoEl) localVideoEl.srcObject = localCallStream;
+    isCameraEnabled = true;
+    return localCallStream;
+}
+
+function createPeerConnection() {
+    peerConnection = new RTCPeerConnection(RTC_CONFIG);
+
+    localCallStream.getTracks().forEach(track => peerConnection.addTrack(track, localCallStream));
+
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate && callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'video_ice_candidate',
+                target_user_id: callPeerUserId,
+                candidate: event.candidate
+            }));
+        }
+    };
+
+    peerConnection.ontrack = (event) => {
+        const remoteVideoEl = document.getElementById('remote-video');
+        if (remoteVideoEl && remoteVideoEl.srcObject !== event.streams[0]) {
+            remoteVideoEl.srcObject = event.streams[0];
+        }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+        if (peerConnection && ['failed', 'disconnected'].includes(peerConnection.connectionState)) {
+            console.warn('Conexión de videollamada perdida:', peerConnection.connectionState);
+        }
+    };
+}
+
+function showIncomingCallBanner(fromUserId) {
+    callPeerUserId = fromUserId;
+    isCallCaller = false;
+    const banner = document.getElementById('incoming-call-banner');
+    const nameEl = document.getElementById('incoming-call-name');
+    if (nameEl) nameEl.textContent = fromUserId.split('_')[0];
+    if (banner) banner.classList.remove('hidden');
+}
+
+function hideIncomingCallBanner() {
+    const banner = document.getElementById('incoming-call-banner');
+    if (banner) banner.classList.add('hidden');
+}
+
+async function acceptIncomingCall() {
+    hideIncomingCallBanner();
+    if (!callPeerUserId) return;
+    try {
+        await setupLocalMedia();
+        createPeerConnection();
+        showVideoCallScreen(`Conectando con ${callPeerUserId.split('_')[0]}...`);
+        ws.send(JSON.stringify({ type: 'video_call_accept', target_user_id: callPeerUserId }));
+    } catch (err) {
+        console.error('Error accediendo a la cámara:', err);
+        showError('No se pudo acceder a la cámara/micrófono.');
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: callPeerUserId }));
+        }
+        callPeerUserId = null;
+    }
+}
+
+function rejectIncomingCall() {
+    hideIncomingCallBanner();
+    if (callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: callPeerUserId }));
+    }
+    callPeerUserId = null;
+}
+
+function showVideoCallScreen(statusText) {
+    const screen = document.getElementById('video-call-screen');
+    if (screen) screen.classList.remove('hidden');
+    updateVideoCallStatus(statusText);
+}
+
+function updateVideoCallStatus(text) {
+    const statusEl = document.getElementById('video-call-status');
+    if (statusEl) statusEl.textContent = text;
+}
+
+// Un solo toque prende/apaga la cámara local (el video sigue en curso, solo se deja de enviar imagen)
+function toggleLocalCamera() {
+    if (!localCallStream) return;
+    isCameraEnabled = !isCameraEnabled;
+    localCallStream.getVideoTracks().forEach(track => { track.enabled = isCameraEnabled; });
+
+    const btn = document.getElementById('toggle-camera-btn');
+    const overlay = document.getElementById('local-camera-off-overlay');
+    if (btn) btn.textContent = isCameraEnabled ? '📷' : '🚫';
+    if (overlay) overlay.classList.toggle('hidden', isCameraEnabled);
+}
+
+function endVideoCall(notifyPeer = true) {
+    if (notifyPeer && callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'video_call_end', target_user_id: callPeerUserId }));
+    }
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    if (localCallStream) {
+        localCallStream.getTracks().forEach(track => track.stop());
+        localCallStream = null;
+    }
+
+    const remoteVideoEl = document.getElementById('remote-video');
+    const localVideoEl = document.getElementById('local-video');
+    if (remoteVideoEl) remoteVideoEl.srcObject = null;
+    if (localVideoEl) localVideoEl.srcObject = null;
+
+    const screen = document.getElementById('video-call-screen');
+    if (screen) screen.classList.add('hidden');
+    hideIncomingCallBanner();
+
+    pendingIceCandidates = [];
+    callPeerUserId = null;
+    isCallCaller = false;
+    isCameraEnabled = true;
+    const btn = document.getElementById('toggle-camera-btn');
+    if (btn) btn.textContent = '📷';
+}
+
 // ─── VU METER ─────────────────────────────────────────────────────────────────
 function startVuMeter(stream) {
     try {
@@ -103,148 +360,6 @@ function animateVuMeter() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-
-function getAirlineLogoHtml(flightNumber) {
-    if (!flightNumber) return '';
-    const fn = flightNumber.trim().toUpperCase();
-    
-    // Aerolineas Argentinas logo
-    if (fn.startsWith('AR') || fn.startsWith('ARG')) {
-        return `<img src="https://i.pinimg.com/1200x/7c/cb/a8/7ccba809b9309e29383287a7c94a6978.jpg" alt="AR Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
-    }
-    
-    // LATAM divisions logo
-    const latamPrefixes = ['LA', 'LAN', 'JJ', 'TAM', 'LP', 'LPE', 'XL', 'LNE', '4M', 'DSM', 'LAP'];
-    const matchesLatam = latamPrefixes.some(pref => fn.startsWith(pref));
-    if (matchesLatam) {
-        return `<img src="https://i.pinimg.com/1200x/6a/f0/e0/6af0e032470f2d35acb5e3f225fe1da7.jpg" alt="LA Logo" class="h-5 w-9 object-contain inline-block mr-2 bg-white rounded p-0.5" style="vertical-align: middle;">`;
-    }
-    
-    // Fallback: plane icon
-    return `<span class="inline-block mr-2 text-slate-500">✈</span>`;
-}
-
-const playedBellAlerts = new Set();
-
-function playBellSound() {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const now = audioCtx.currentTime;
-        const frequencies = [880, 1200, 1500, 1800];
-        frequencies.forEach((freq, index) => {
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, now);
-            const duration = 1.2 / (index + 1);
-            gainNode.gain.setValueAtTime(0.1, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + duration);
-        });
-    } catch (err) {
-        console.error("Error al reproducir timbre de campana:", err);
-    }
-}
-
-function getFlightTargetTime(flight) {
-    if (!flight) return null;
-    const timeStr = (flight.eta && flight.eta !== 'N/A') ? flight.eta : flight.sta;
-    if (!timeStr || timeStr === 'N/A') return null;
-    
-    const now = new Date();
-    // Caso 1: "DD/MM HH:MM" (ej., "07/07 04:40")
-    if (timeStr.includes('/')) {
-        const parts = timeStr.split(' ');
-        const dateParts = parts[0].split('/');
-        const timeParts = parts[1].split(':');
-        const day = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const hour = parseInt(timeParts[0], 10);
-        const minute = parseInt(timeParts[1], 10);
-        return new Date(now.getFullYear(), month, day, hour, minute, 0);
-    }
-    
-    // Caso 2: "HH:MM" (ej., "04:15")
-    if (timeStr.includes(':')) {
-        const timeParts = timeStr.split(':');
-        const hour = parseInt(timeParts[0], 10);
-        const minute = parseInt(timeParts[1], 10);
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
-    }
-    return null;
-}
-
-function updateCountdowns() {
-    const cells = document.querySelectorAll('.flight-countdown-cell');
-    const nowMs = Date.now();
-    
-    cells.forEach(cell => {
-        const targetMsStr = cell.getAttribute('data-target-ms');
-        const flightNumber = cell.getAttribute('data-flight-number') || 'Unknown';
-        const bellEnabled = bellAlerts.has(flightNumber);
-        
-        if (!targetMsStr) {
-            cell.querySelector('.countdown-text')?.setAttribute('data-val', '-');
-            return;
-        }
-        
-        const targetMs = parseInt(targetMsStr, 10);
-        const diffMs = targetMs - nowMs;
-        let timeText = '';
-        let timeClass = 'text-slate-400';
-        let bellClass = bellEnabled ? 'text-amber-400 cursor-pointer' : 'text-slate-600 cursor-pointer';
-        let bellTitle = bellEnabled ? 'Desactivar alerta' : 'Activar alerta para este vuelo';
-        
-        if (isNaN(targetMs) || targetMsStr === '') {
-            timeText = 'N/A';
-        } else if (diffMs > 0) {
-            const totalSeconds = Math.floor(diffMs / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            const hStr = hours > 0 ? `${hours}:` : '';
-            const mStr = String(minutes).padStart(2, '0');
-            const sStr = String(seconds).padStart(2, '0');
-            timeText = `${hStr}${mStr}:${sStr}`;
-            if (bellEnabled && diffMs < 300000) {
-                timeClass = 'text-amber-400 font-bold font-mono animate-pulse';
-            } else {
-                timeClass = 'text-slate-300 font-mono';
-            }
-        } else {
-            // Flight is at or past its scheduled time
-            timeText = '00:00';
-            timeClass = 'text-red-400 font-bold font-mono';
-            // Only fire bell if: bell is enabled AND not already fired AND app has been running for at least 5s (not startup)
-            if (bellEnabled && !firedBellAlerts.has(flightNumber)) {
-                firedBellAlerts.add(flightNumber);
-                // Only play sound if we're past the startup grace period (5 seconds)
-                if (Date.now() - startupTime > 5000) {
-                    playBellSound();
-                    showError(`¡Vuelo ${flightNumber} en hora cero!`);
-                }
-            } else if (!bellEnabled && !firedBellAlerts.has(flightNumber)) {
-                // Silently mark past flights as fired so they don't trigger on bell enable
-                firedBellAlerts.add(flightNumber);
-            }
-        }
-        
-        const existingText = cell.querySelector('.countdown-text');
-        const existingBell = cell.querySelector('.bell-btn');
-        
-        if (existingText) {
-            existingText.textContent = timeText;
-            existingText.className = `countdown-text ${timeClass}`;
-        }
-        if (existingBell) {
-            existingBell.className = `bell-btn text-base ${bellClass}`;
-            existingBell.title = bellTitle;
-        }
-    });
-}
 
 function showError(message, isSuccess = false) {
     const errorDiv = document.getElementById('error-message');
@@ -427,7 +542,8 @@ function connectWebSocket(token) {
     let historyMsgIds = new Set();
     let historyLoaded = false;
 
-    ws = new WebSocket(`wss://${window.location.host}/ws/${token}`);
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${token}`);
     ws.onopen = () => {
         console.log("WebSocket conectado");
         startPing();
@@ -501,6 +617,8 @@ function connectWebSocket(token) {
                 }
             } else if (data.type === 'logout_success') {
                 completeLogout();
+            } else if (typeof data.type === 'string' && data.type.startsWith('video_')) {
+                handleVideoSignal(data);
             }
         } catch (err) {
             console.error("Error al procesar mensaje WebSocket:", err);
@@ -660,9 +778,14 @@ function updateUserList(users) {
     const activeUsers = users.filter(u => u.active !== false);
     const offlineUsers = users.filter(u => u.active === false);
 
+    // El servidor identifica a cada usuario como "nombre_función" (ver broadcast_users en main.py),
+    // mientras que la variable global `userId` incluye además el legajo simulado ("legajo_nombre_función").
+    // Se reconstruye el mismo formato acá para poder detectar correctamente la propia fila.
+    const myUserId = `${localStorage.getItem('userName') || ''}_${localStorage.getItem('userFunction') || ''}`;
+
     const renderUserCard = (user, container) => {
         const isMuted = clientMutedUsers.has(user.user_id);
-        const isSelf = user.user_id === userId;
+        const isSelf = user.user_id === myUserId;
         const isActive = user.active !== false;
         
         const card = document.createElement('div');
@@ -676,6 +799,11 @@ function updateUserList(users) {
             </div>
             ${!isSelf ? `
                 <div class="flex items-center gap-1 flex-shrink-0">
+                    ${isActive ? `
+                        <button class="video-call-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Videollamada" data-user-id="${user.user_id}">
+                            📹
+                        </button>
+                    ` : ''}
                     <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
                         🎤
                     </button>
@@ -685,7 +813,15 @@ function updateUserList(users) {
                 </div>
             ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md flex-shrink-0">Tú</span>'}
         `;
-        
+
+        const videoCallBtn = card.querySelector('.video-call-btn');
+        if (videoCallBtn) {
+            videoCallBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startVideoCall(user.user_id);
+            });
+        }
+
         const muteBtn = card.querySelector('.mute-user-btn');
         if (muteBtn) {
             muteBtn.addEventListener('click', (e) => {
@@ -1271,8 +1407,6 @@ function showGroupHistory() {
     showHistory();
 }
 
-// Actualizaciones y llamadas a APIs de aeropuertos eliminadas para limpiar el Walkie-Talkie
-
 function updateSwipeHint() {
     const swipeHint = document.getElementById('swipe-hint');
     if (!swipeHint) return;
@@ -1794,6 +1928,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Online status is now purely based on WebSocket connection state.
     // No need to send status_update on visibility/blur — if WS is open, user is online.
+
+    // Wake Lock is released by the browser automatically when the tab is hidden and is only
+    // re-requested inside connectWebSocket(), so returning to the app would otherwise leave the
+    // screen able to sleep again. Re-acquire it here and force an immediate reconnect instead of
+    // waiting for the passive 1s retry loop in ws.onclose.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+            const token = localStorage.getItem('sessionToken');
+            if (token && (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING)) {
+                console.log('App visible de nuevo: reconectando WebSocket...');
+                connectWebSocket(token);
+            }
+        }
+    });
+
+    // Videollamada: botones de la pantalla de llamada y del banner de llamada entrante
+    document.getElementById('toggle-camera-btn')?.addEventListener('click', toggleLocalCamera);
+    document.getElementById('end-call-btn')?.addEventListener('click', () => endVideoCall(true));
+    document.getElementById('accept-call-btn')?.addEventListener('click', acceptIncomingCall);
+    document.getElementById('reject-call-btn')?.addEventListener('click', rejectIncomingCall);
+
+    // Liberar la cámara/micrófono si la página se cierra en medio de una llamada
+    window.addEventListener('beforeunload', () => {
+        if (localCallStream) localCallStream.getTracks().forEach(track => track.stop());
+    });
 });
 
 const style = document.createElement('style');
@@ -1833,20 +1993,6 @@ style.textContent = `
     }
     .in-group {
         font-weight: bold;
-    }
-    .tams-row {
-        cursor: pointer;
-    }
-    .tams-details-btn {
-        padding: 5px 10px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        border-radius: 3px;
-        cursor: pointer;
-    }
-    .tams-details-btn:hover {
-        background-color: #0056b3;
     }
     .toggle-btn {
         padding: 10px;
