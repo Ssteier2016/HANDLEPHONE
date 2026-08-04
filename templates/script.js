@@ -368,22 +368,54 @@ async function startMonitorLocalMedia() {
     return monitorLocalStream;
 }
 
-// Un solo toque en cualquier parte de la pantalla prende/apaga cámara y mic juntos
+// Un solo toque en cualquier parte de la pantalla prende/apaga cámara y mic juntos.
+// Apaga de verdad el hardware (track.stop()) en vez de solo silenciar la señal, para
+// que el testigo de cámara/mic del dispositivo también se apague; al volver a tocar,
+// se vuelve a pedir la cámara/mic y se reinyecta en las conexiones ya abiertas sin
+// necesidad de recrearlas (los transceivers quedan siempre en sendrecv, así que
+// reemplazar el track no requiere renegociar).
 async function toggleMonitorMedia() {
-    if (!monitorLocalStream) {
+    if (monitorMediaOn) {
+        monitorMediaOn = false;
+        if (monitorLocalStream) {
+            const tracks = monitorLocalStream.getTracks();
+            monitorLocalStream = null;
+            for (const track of tracks) {
+                monitorPeerConnections.forEach(pc => replaceMonitorSenderTrack(pc, track.kind, null));
+                track.stop();
+            }
+        }
+        updateMonitorTile('self', null, true);
+    } else {
         try {
-            await startMonitorLocalMedia();
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            monitorLocalStream = newStream;
+            newStream.getTracks().forEach(track => {
+                monitorPeerConnections.forEach(pc => replaceMonitorSenderTrack(pc, track.kind, track));
+            });
+            updateMonitorTile('self', newStream, true);
+            monitorMediaOn = true;
         } catch (err) {
             console.error('Error accediendo a cámara/micrófono (Cámara Familiar):', err);
             showError('No se pudo acceder a la cámara/micrófono.');
             return;
         }
     }
-    monitorMediaOn = !monitorMediaOn;
-    monitorLocalStream.getTracks().forEach(track => { track.enabled = monitorMediaOn; });
+
     setMonitorCameraOnState('self', monitorMediaOn, true);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'monitor_camera_state', camera_on: monitorMediaOn }));
+    }
+}
+
+// Cambia el track que se envía a un participante sin renegociar la conexión (el
+// transceiver correspondiente se crea siempre en sendrecv, ver createMonitorPeerConnection).
+function replaceMonitorSenderTrack(pc, kind, track) {
+    const transceiver = pc.getTransceivers().find(t => t.receiver?.track?.kind === kind);
+    if (transceiver?.sender) {
+        transceiver.sender.replaceTrack(track).catch(err => {
+            console.warn('Error reemplazando track de Cámara Familiar:', err);
+        });
     }
 }
 
@@ -477,9 +509,14 @@ function createMonitorPeerConnection(remoteUserId) {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     monitorPeerConnections.set(remoteUserId, pc);
 
-    if (monitorLocalStream) {
-        monitorLocalStream.getTracks().forEach(track => pc.addTrack(track, monitorLocalStream));
-    }
+    // Los transceivers de audio y video se crean siempre en sendrecv, tenga o no
+    // cámara local activa en este momento. Así, cuando toggleMonitorMedia() apaga o
+    // vuelve a pedir el hardware, alcanza con reemplazar el track (replaceTrack) sin
+    // tener que renegociar la conexión ni recrearla.
+    const audioTrack = monitorLocalStream?.getAudioTracks()[0];
+    const videoTrack = monitorLocalStream?.getVideoTracks()[0];
+    pc.addTransceiver(audioTrack || 'audio', { direction: 'sendrecv' });
+    pc.addTransceiver(videoTrack || 'video', { direction: 'sendrecv' });
 
     pc.onicecandidate = (event) => {
         if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
@@ -525,7 +562,7 @@ function updateMonitorTile(userId, stream, isSelf) {
         tile = { video, cameraOn: false, isSelf };
         monitorTiles.set(userId, tile);
     }
-    if (stream) tile.video.srcObject = stream;
+    tile.video.srcObject = stream || null;
 }
 
 function setMonitorCameraOnState(userId, cameraOn, isSelf) {
