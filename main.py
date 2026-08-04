@@ -164,6 +164,10 @@ users: Dict[str, Dict[str, any]] = {}
 audio_queue: asyncio.Queue = asyncio.Queue()
 groups: Dict[str, List[str]] = {}
 
+# Modo Cámara Familiar: salas de monitoreo en vivo (tipo cámara de seguridad),
+# una por grupo. Mapea group_id -> { token: camera_on }.
+monitor_rooms: Dict[str, Dict[str, bool]] = {}
+
 # Persistence helper for valid tokens (SQLite fallback)
 def load_all_valid_tokens() -> Set[str]:
     tokens = set()
@@ -498,6 +502,24 @@ def find_token_by_user_id(target_user_id: str) -> Optional[str]:
             return tk
     return None
 
+# Saca a un usuario de cualquier sala de "Cámara Familiar" en la que esté y avisa al resto
+async def leave_monitor_room(token: str):
+    if token not in users:
+        return
+    user_id = f"{users[token]['name']}_{users[token]['function']}"
+    for group_id, participants in list(monitor_rooms.items()):
+        if token in participants:
+            del participants[token]
+            if not participants:
+                del monitor_rooms[group_id]
+            for other_token in list(participants.keys()):
+                other_ws = users.get(other_token, {}).get("websocket")
+                if other_ws:
+                    try:
+                        await other_ws.send_json({"type": "monitor_peer_left", "user_id": user_id})
+                    except Exception as e:
+                        logger.error(f"Error avisando salida de sala familiar a {other_token}: {e}")
+
 # Envío masivo de la lista de usuarios conectados
 async def broadcast_users():
     user_list = []
@@ -676,6 +698,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     await audio_queue.put((token, audio_data, message))
                     
             elif msg_type == "logout":
+                await leave_monitor_room(token)
                 users[token]["logged_in"] = False
                 delete_session(token)
                 if token in users:
@@ -747,6 +770,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     await broadcast_users()
                     
             elif msg_type == "leave_group":
+                await leave_monitor_room(token)
                 group_id = users[token]["group_id"]
                 if group_id and group_id in groups:
                     if token in groups[group_id]:
@@ -765,9 +789,70 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 await websocket.send_json({"type": "group_left"})
                 await broadcast_users()
 
+            elif msg_type == "monitor_join":
+                # Modo Cámara Familiar: unirse a la sala en vivo del propio grupo.
+                # Solo se puede entrar a la sala del grupo del que ya se es miembro.
+                group_id = message.get("group_id")
+                user_group_id = users[token]["group_id"]
+                if not group_id or group_id != user_group_id:
+                    await websocket.send_json({
+                        "type": "monitor_error",
+                        "message": "Tenés que estar en ese grupo para activar la Cámara Familiar."
+                    })
+                else:
+                    user_id = f"{users[token]['name']}_{users[token]['function']}"
+                    room = monitor_rooms.setdefault(group_id, {})
+
+                    # Roster de quienes ya estaban, para que el nuevo arme sus conexiones
+                    existing = [
+                        {"user_id": f"{users[tk]['name']}_{users[tk]['function']}", "camera_on": on}
+                        for tk, on in room.items() if tk != token and tk in users
+                    ]
+                    room[token] = message.get("camera_on", True)
+                    await websocket.send_json({"type": "monitor_roster", "group_id": group_id, "participants": existing})
+
+                    # Avisar a los que ya estaban que se sumó alguien nuevo
+                    for other_token in list(room.keys()):
+                        if other_token == token:
+                            continue
+                        other_ws = users.get(other_token, {}).get("websocket")
+                        if other_ws:
+                            try:
+                                await other_ws.send_json({
+                                    "type": "monitor_peer_joined",
+                                    "user_id": user_id,
+                                    "camera_on": room[token]
+                                })
+                            except Exception as e:
+                                logger.error(f"Error avisando ingreso a sala familiar a {other_token}: {e}")
+
+            elif msg_type == "monitor_leave":
+                await leave_monitor_room(token)
+
+            elif msg_type == "monitor_camera_state":
+                group_id = users[token]["group_id"]
+                camera_on = bool(message.get("camera_on"))
+                if group_id and group_id in monitor_rooms and token in monitor_rooms[group_id]:
+                    monitor_rooms[group_id][token] = camera_on
+                    user_id = f"{users[token]['name']}_{users[token]['function']}"
+                    for other_token in list(monitor_rooms[group_id].keys()):
+                        if other_token == token:
+                            continue
+                        other_ws = users.get(other_token, {}).get("websocket")
+                        if other_ws:
+                            try:
+                                await other_ws.send_json({
+                                    "type": "monitor_camera_state",
+                                    "user_id": user_id,
+                                    "camera_on": camera_on
+                                })
+                            except Exception as e:
+                                logger.error(f"Error avisando cámara a {other_token}: {e}")
+
             elif msg_type in [
                 "video_call_request", "video_call_accept", "video_call_reject",
-                "video_call_end", "video_offer", "video_answer", "video_ice_candidate"
+                "video_call_end", "video_offer", "video_answer", "video_ice_candidate",
+                "monitor_offer", "monitor_answer", "monitor_ice_candidate"
             ]:
                 # Señalización WebRTC 1 a 1: el servidor solo reenvía el mensaje
                 # tal cual al destinatario, sin guardar estado de la llamada.
@@ -789,6 +874,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado (en segundo plano): {token[:15]}...")
+        await leave_monitor_room(token)
         if token in users:
             users[token]["websocket"] = None
             users[token]["active"] = False
@@ -803,6 +889,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             )
     except Exception as e:
         logger.error(f"Excepción en conexión WebSocket {token[:15]}...: {str(e)}")
+        await leave_monitor_room(token)
         if token in users:
             users[token]["websocket"] = None
             users[token]["active"] = False
