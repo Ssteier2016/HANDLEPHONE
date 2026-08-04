@@ -270,6 +270,14 @@
                     </div>
                 </div>
 
+                <!-- Cámara Familiar: monitor en vivo tipo cámara de seguridad, para todo el grupo -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl space-y-2">
+                    <button id="open-monitor-btn" class="w-full bg-gradient-to-r from-rose-600 to-rose-800 hover:from-rose-500 hover:to-rose-700 active:scale-95 text-white font-bold py-3 rounded-xl text-sm transition duration-150 shadow-lg flex items-center justify-center gap-2 m-0">
+                        📹 Activar Cámara Familiar
+                    </button>
+                    <p class="text-[10px] text-slate-500 text-center">Cámara y micrófono abiertos con todo el grupo, sin necesidad de atender llamadas.</p>
+                </div>
+
                 <!-- Group Chat Window -->
                 <div class="bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl space-y-3">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">Historial del Grupo</h3>
@@ -347,6 +355,21 @@
         </div>
     </div>
 
-    <script src="/templates/script.js?v=11"></script>
+    <!-- Modo Cámara Familiar: cámara de seguridad en vivo para todo el grupo -->
+    <div id="monitor-screen" class="hidden fixed inset-0 z-50 bg-black">
+        <!-- Toda esta área es táctil: un solo toque prende/apaga cámara y micrófono -->
+        <div id="monitor-tap-area" class="absolute inset-0 flex items-center justify-center overflow-hidden">
+            <div id="monitor-tiles-container" class="absolute inset-0"></div>
+            <p id="monitor-off-hint" class="hidden relative z-10 text-slate-500 text-sm font-mono text-center px-6 pointer-events-none">Cámara apagada.<br>Tocá la pantalla para prenderla.</p>
+        </div>
+
+        <!-- Quién más está conectado (no interfiere con el toque) -->
+        <div id="monitor-roster" class="absolute top-4 left-4 right-16 z-20 flex flex-wrap gap-1.5 pointer-events-none"></div>
+
+        <!-- Único control aparte del toque global -->
+        <button id="monitor-exit-btn" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-slate-700 text-slate-300 flex items-center justify-center text-sm transition m-0" aria-label="Salir de la Cámara Familiar">✕</button>
+    </div>
+
+    <script src="/templates/script.js?v=12"></script>
 </body>
 </html>

@@ -285,6 +285,312 @@ function endVideoCall(notifyPeer = true) {
     if (btn) btn.textContent = '📷';
 }
 
+// ─── MODO CÁMARA FAMILIAR (cámara de seguridad en vivo, todo el grupo) ────────
+// A diferencia de la videollamada 1 a 1 de arriba (con timbre y aceptar/rechazar),
+// este modo es tipo cámara de seguridad: se une a una sala por grupo sin pedirle
+// permiso a nadie, la cámara/mic propios arrancan prendidos, y un solo toque en
+// cualquier parte de la pantalla los apaga/prende juntos. Usa su propio estado
+// (Map de conexiones, una por participante) totalmente separado del de la
+// videollamada 1 a 1, para no interferir entre sí.
+let monitorActive = false;
+let monitorGroupId = null;
+let monitorLocalStream = null;
+let monitorMediaOn = false;
+const monitorPeerConnections = new Map(); // user_id remoto -> RTCPeerConnection
+const monitorPendingIce = new Map();      // user_id remoto -> ICE candidates en espera
+const monitorTiles = new Map();           // 'self' o user_id remoto -> { video, cameraOn, isSelf }
+let monitorFocusHistory = [];             // user_ids remotos, más reciente primero
+let monitorFocusUserId = null;            // 'self', un user_id remoto, o null (todo apagado)
+
+async function openMonitorMode() {
+    if (!currentGroup) {
+        showError('Tenés que estar en un grupo para activar la Cámara Familiar.');
+        return;
+    }
+    if (monitorActive) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showError('No hay conexión WebSocket. Intenta de nuevo.');
+        return;
+    }
+
+    monitorGroupId = currentGroup;
+    monitorActive = true;
+    document.getElementById('monitor-screen')?.classList.remove('hidden');
+
+    try {
+        await startMonitorLocalMedia();
+        monitorMediaOn = true;
+        setMonitorCameraOnState('self', true, true);
+    } catch (err) {
+        console.error('Error accediendo a cámara/micrófono (Cámara Familiar):', err);
+        showError('No se pudo acceder a la cámara/micrófono. Revisá los permisos.');
+        closeMonitorMode();
+        return;
+    }
+
+    ws.send(JSON.stringify({ type: 'monitor_join', group_id: monitorGroupId, camera_on: true }));
+}
+
+function closeMonitorMode() {
+    if (monitorActive && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'monitor_leave' }));
+    }
+
+    monitorPeerConnections.forEach(pc => pc.close());
+    monitorPeerConnections.clear();
+    monitorPendingIce.clear();
+
+    if (monitorLocalStream) {
+        monitorLocalStream.getTracks().forEach(track => track.stop());
+        monitorLocalStream = null;
+    }
+
+    const tilesContainer = document.getElementById('monitor-tiles-container');
+    if (tilesContainer) tilesContainer.innerHTML = '';
+    monitorTiles.clear();
+    monitorFocusHistory = [];
+    monitorFocusUserId = null;
+
+    document.getElementById('monitor-off-hint')?.classList.add('hidden');
+    const roster = document.getElementById('monitor-roster');
+    if (roster) roster.innerHTML = '';
+    document.getElementById('monitor-screen')?.classList.add('hidden');
+
+    monitorActive = false;
+    monitorMediaOn = false;
+    monitorGroupId = null;
+}
+
+async function startMonitorLocalMedia() {
+    if (monitorLocalStream) return monitorLocalStream;
+    monitorLocalStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    updateMonitorTile('self', monitorLocalStream, true);
+    return monitorLocalStream;
+}
+
+// Un solo toque en cualquier parte de la pantalla prende/apaga cámara y mic juntos
+async function toggleMonitorMedia() {
+    if (!monitorLocalStream) {
+        try {
+            await startMonitorLocalMedia();
+        } catch (err) {
+            console.error('Error accediendo a cámara/micrófono (Cámara Familiar):', err);
+            showError('No se pudo acceder a la cámara/micrófono.');
+            return;
+        }
+    }
+    monitorMediaOn = !monitorMediaOn;
+    monitorLocalStream.getTracks().forEach(track => { track.enabled = monitorMediaOn; });
+    setMonitorCameraOnState('self', monitorMediaOn, true);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'monitor_camera_state', camera_on: monitorMediaOn }));
+    }
+}
+
+async function handleMonitorSignal(data) {
+    switch (data.type) {
+        case 'monitor_error':
+            showError(data.message || 'No se pudo activar la Cámara Familiar.');
+            closeMonitorMode();
+            break;
+
+        case 'monitor_roster':
+            for (const p of (data.participants || [])) {
+                registerMonitorParticipant(p.user_id, p.camera_on, false);
+                const pc = createMonitorPeerConnection(p.user_id);
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    ws.send(JSON.stringify({ type: 'monitor_offer', target_user_id: p.user_id, sdp: offer }));
+                } catch (err) {
+                    console.error(`Error iniciando conexión de Cámara Familiar con ${p.user_id}:`, err);
+                }
+            }
+            break;
+
+        case 'monitor_peer_joined':
+            registerMonitorParticipant(data.user_id, data.camera_on, false);
+            break;
+
+        case 'monitor_peer_left':
+            removeMonitorPeer(data.user_id);
+            break;
+
+        case 'monitor_camera_state':
+            setMonitorCameraOnState(data.user_id, data.camera_on, false);
+            break;
+
+        case 'monitor_offer': {
+            if (!monitorActive) break;
+            let pc = monitorPeerConnections.get(data.from_user_id);
+            if (!pc) pc = createMonitorPeerConnection(data.from_user_id);
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            await flushPendingMonitorIce(data.from_user_id);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({ type: 'monitor_answer', target_user_id: data.from_user_id, sdp: answer }));
+            break;
+        }
+
+        case 'monitor_answer': {
+            const pc = monitorPeerConnections.get(data.from_user_id);
+            if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                await flushPendingMonitorIce(data.from_user_id);
+            }
+            break;
+        }
+
+        case 'monitor_ice_candidate': {
+            if (!data.candidate) break;
+            const pc = monitorPeerConnections.get(data.from_user_id);
+            if (pc && pc.remoteDescription) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } catch (err) {
+                    console.warn('Error agregando ICE candidate (Cámara Familiar):', err);
+                }
+            } else {
+                if (!monitorPendingIce.has(data.from_user_id)) monitorPendingIce.set(data.from_user_id, []);
+                monitorPendingIce.get(data.from_user_id).push(data.candidate);
+            }
+            break;
+        }
+    }
+}
+
+async function flushPendingMonitorIce(userId) {
+    const pc = monitorPeerConnections.get(userId);
+    const pending = monitorPendingIce.get(userId);
+    if (!pc || !pending) return;
+    while (pending.length > 0) {
+        const candidate = pending.shift();
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+            console.warn('Error agregando ICE candidate pendiente (Cámara Familiar):', err);
+        }
+    }
+}
+
+function createMonitorPeerConnection(remoteUserId) {
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    monitorPeerConnections.set(remoteUserId, pc);
+
+    if (monitorLocalStream) {
+        monitorLocalStream.getTracks().forEach(track => pc.addTrack(track, monitorLocalStream));
+    }
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'monitor_ice_candidate',
+                target_user_id: remoteUserId,
+                candidate: event.candidate
+            }));
+        }
+    };
+
+    pc.ontrack = (event) => {
+        updateMonitorTile(remoteUserId, event.streams[0], false);
+    };
+
+    pc.onconnectionstatechange = () => {
+        if (['failed', 'disconnected'].includes(pc.connectionState)) {
+            console.warn(`Conexión de Cámara Familiar con ${remoteUserId}: ${pc.connectionState}`);
+        }
+    };
+
+    return pc;
+}
+
+function registerMonitorParticipant(userId, cameraOn, isSelf) {
+    if (!monitorTiles.has(userId)) {
+        updateMonitorTile(userId, null, isSelf);
+    }
+    setMonitorCameraOnState(userId, cameraOn, isSelf);
+}
+
+function updateMonitorTile(userId, stream, isSelf) {
+    let tile = monitorTiles.get(userId);
+    if (!tile) {
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = isSelf; // nunca reproducir mi propio audio de vuelta
+        video.className = 'absolute inset-0 w-full h-full object-cover';
+        video.style.display = 'none';
+        if (isSelf) video.style.transform = 'scaleX(-1)'; // espejo, para que se reconozca a sí misma
+        document.getElementById('monitor-tiles-container')?.appendChild(video);
+        tile = { video, cameraOn: false, isSelf };
+        monitorTiles.set(userId, tile);
+    }
+    if (stream) tile.video.srcObject = stream;
+}
+
+function setMonitorCameraOnState(userId, cameraOn, isSelf) {
+    if (!monitorTiles.has(userId)) {
+        updateMonitorTile(userId, null, isSelf);
+    }
+    const tile = monitorTiles.get(userId);
+    tile.cameraOn = cameraOn;
+
+    if (!isSelf) {
+        monitorFocusHistory = monitorFocusHistory.filter(id => id !== userId);
+        if (cameraOn) monitorFocusHistory.unshift(userId);
+    }
+
+    recomputeMonitorFocus();
+    renderMonitorRoster();
+}
+
+// Prioridad de qué se ve grande: la cámara remota más recientemente activada;
+// si ninguna está prendida, la propia (así se sabe que está "en vivo"); si no, negro.
+function recomputeMonitorFocus() {
+    const remoteFocus = monitorFocusHistory.find(id => monitorTiles.get(id)?.cameraOn);
+    const nextFocus = remoteFocus || (monitorMediaOn ? 'self' : null);
+
+    if (nextFocus === monitorFocusUserId) return;
+    monitorFocusUserId = nextFocus;
+
+    monitorTiles.forEach((tile, id) => {
+        tile.video.style.display = (id === nextFocus) ? 'block' : 'none';
+    });
+
+    document.getElementById('monitor-off-hint')?.classList.toggle('hidden', nextFocus !== null);
+}
+
+function removeMonitorPeer(userId) {
+    const pc = monitorPeerConnections.get(userId);
+    if (pc) {
+        pc.close();
+        monitorPeerConnections.delete(userId);
+    }
+    monitorPendingIce.delete(userId);
+
+    const tile = monitorTiles.get(userId);
+    if (tile) {
+        tile.video.remove();
+        monitorTiles.delete(userId);
+    }
+    monitorFocusHistory = monitorFocusHistory.filter(id => id !== userId);
+    recomputeMonitorFocus();
+    renderMonitorRoster();
+}
+
+function renderMonitorRoster() {
+    const roster = document.getElementById('monitor-roster');
+    if (!roster) return;
+    roster.innerHTML = '';
+    monitorTiles.forEach((tile, userId) => {
+        const label = tile.isSelf ? 'Vos' : userId.split('_')[0];
+        const pill = document.createElement('span');
+        pill.className = `text-[10px] font-mono font-bold px-2 py-1 rounded-full border ${tile.cameraOn ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800' : 'bg-slate-900/60 text-slate-500 border-slate-800'}`;
+        pill.textContent = `${tile.cameraOn ? '🟢' : '⚫'} ${label}`;
+        roster.appendChild(pill);
+    });
+}
+
 // ─── VU METER ─────────────────────────────────────────────────────────────────
 function startVuMeter(stream) {
     try {
@@ -607,6 +913,7 @@ function connectWebSocket(token) {
                 updateSwipeHint();
             } else if (data.type === 'group_left') {
                 currentGroup = null;
+                if (monitorActive) closeMonitorMode();
                 document.getElementById('group-screen').style.display = 'none';
                 document.getElementById('main').style.display = 'block';
                 updateSwipeHint();
@@ -619,6 +926,8 @@ function connectWebSocket(token) {
                 completeLogout();
             } else if (typeof data.type === 'string' && data.type.startsWith('video_')) {
                 handleVideoSignal(data);
+            } else if (typeof data.type === 'string' && data.type.startsWith('monitor_')) {
+                handleMonitorSignal(data);
             }
         } catch (err) {
             console.error("Error al procesar mensaje WebSocket:", err);
@@ -1585,6 +1894,7 @@ function completeLogout() {
     localStorage.removeItem('lastSearchQuery');
     userId = null;
     currentGroup = null;
+    if (monitorActive) closeMonitorMode();
     if (ws) {
         ws.close();
         ws = null;
@@ -1950,9 +2260,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('accept-call-btn')?.addEventListener('click', acceptIncomingCall);
     document.getElementById('reject-call-btn')?.addEventListener('click', rejectIncomingCall);
 
+    // Cámara Familiar: botón para activar, toque global para prender/apagar, botón para salir
+    document.getElementById('open-monitor-btn')?.addEventListener('click', openMonitorMode);
+    document.getElementById('monitor-tap-area')?.addEventListener('click', toggleMonitorMedia);
+    document.getElementById('monitor-exit-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeMonitorMode();
+    });
+
     // Liberar la cámara/micrófono si la página se cierra en medio de una llamada
     window.addEventListener('beforeunload', () => {
         if (localCallStream) localCallStream.getTracks().forEach(track => track.stop());
+        if (monitorLocalStream) monitorLocalStream.getTracks().forEach(track => track.stop());
     });
 });
 
