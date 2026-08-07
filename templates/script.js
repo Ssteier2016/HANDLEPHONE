@@ -302,6 +302,10 @@ const monitorTiles = new Map();           // 'self' o user_id remoto -> { video,
 let monitorFocusHistory = [];             // user_ids remotos, más reciente primero
 let monitorFocusUserId = null;            // 'self', un user_id remoto, o null (todo apagado)
 
+// Entrar a la sala SIEMPRE deja mirar y escuchar de inmediato, sin pedir permiso de
+// cámara/mic a nadie: eso es una acción aparte y opcional (ver toggleMonitorMedia).
+// Así, cualquiera con el código del grupo puede ver la cámara familiar si alguien la
+// activó, sin tener que prender la propia cámara para poder mirar.
 async function openMonitorMode() {
     if (!currentGroup) {
         showError('Tenés que estar en un grupo para activar la Cámara Familiar.');
@@ -316,19 +320,9 @@ async function openMonitorMode() {
     monitorGroupId = currentGroup;
     monitorActive = true;
     document.getElementById('monitor-screen')?.classList.remove('hidden');
+    registerMonitorParticipant('self', false, true);
 
-    try {
-        await startMonitorLocalMedia();
-        monitorMediaOn = true;
-        setMonitorCameraOnState('self', true, true);
-    } catch (err) {
-        console.error('Error accediendo a cámara/micrófono (Cámara Familiar):', err);
-        showError('No se pudo acceder a la cámara/micrófono. Revisá los permisos.');
-        closeMonitorMode();
-        return;
-    }
-
-    ws.send(JSON.stringify({ type: 'monitor_join', group_id: monitorGroupId, camera_on: true }));
+    ws.send(JSON.stringify({ type: 'monitor_join', group_id: monitorGroupId, camera_on: false }));
 }
 
 function closeMonitorMode() {
@@ -359,13 +353,6 @@ function closeMonitorMode() {
     monitorActive = false;
     monitorMediaOn = false;
     monitorGroupId = null;
-}
-
-async function startMonitorLocalMedia() {
-    if (monitorLocalStream) return monitorLocalStream;
-    monitorLocalStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    updateMonitorTile('self', monitorLocalStream, true);
-    return monitorLocalStream;
 }
 
 // Un solo toque en cualquier parte de la pantalla prende/apaga cámara y mic juntos.
@@ -515,8 +502,9 @@ function createMonitorPeerConnection(remoteUserId) {
     // tener que renegociar la conexión ni recrearla.
     const audioTrack = monitorLocalStream?.getAudioTracks()[0];
     const videoTrack = monitorLocalStream?.getVideoTracks()[0];
-    pc.addTransceiver(audioTrack || 'audio', { direction: 'sendrecv' });
-    pc.addTransceiver(videoTrack || 'video', { direction: 'sendrecv' });
+    const localStreams = monitorLocalStream ? [monitorLocalStream] : [];
+    pc.addTransceiver(audioTrack || 'audio', { direction: 'sendrecv', streams: localStreams });
+    pc.addTransceiver(videoTrack || 'video', { direction: 'sendrecv', streams: localStreams });
 
     pc.onicecandidate = (event) => {
         if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
@@ -528,8 +516,17 @@ function createMonitorPeerConnection(remoteUserId) {
         }
     };
 
+    // Cuando alguien se une sin cámara todavía, sus m-lines no vienen agrupadas por
+    // msid; se arma un MediaStream propio por participante y se le van agregando los
+    // tracks a medida que llegan (audio y video pueden llegar en eventos separados).
     pc.ontrack = (event) => {
-        updateMonitorTile(remoteUserId, event.streams[0], false);
+        if (!monitorTiles.has(remoteUserId)) {
+            updateMonitorTile(remoteUserId, null, false);
+        }
+        const tile = monitorTiles.get(remoteUserId);
+        if (!tile.stream) tile.stream = new MediaStream();
+        tile.stream.addTrack(event.track);
+        tile.video.srcObject = tile.stream;
     };
 
     pc.onconnectionstatechange = () => {
@@ -2288,6 +2285,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('App visible de nuevo: reconectando WebSocket...');
                 connectWebSocket(token);
             }
+        }
+    });
+
+    // Si el mismo dispositivo tiene esta app abierta en más de una pestaña (o pestaña +
+    // acceso directo instalado), ambas comparten el mismo localStorage. Sin esto, cada
+    // una podía quedar conectada con una identidad distinta (ej: una con "Invitado" y
+    // otra con el nombre recién cambiado), haciendo que la lista de usuarios parpadeara
+    // entre los dos nombres. El evento 'storage' solo se dispara en las OTRAS pestañas
+    // cuando una de ellas cambia el nombre/token, así que esta pestaña simplemente
+    // adopta esa misma identidad en vez de seguir compitiendo con la suya vieja.
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'sessionToken' && event.newValue) {
+            console.log('La sesión cambió en otra pestaña de esta misma app: reconectando con esa identidad...');
+            connectWebSocket(event.newValue);
         }
     });
 
