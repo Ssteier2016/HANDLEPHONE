@@ -152,8 +152,10 @@ def init_db():
             c.execute('''CREATE TABLE IF NOT EXISTS sessions 
                          (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
                           muted_users TEXT, last_active TIMESTAMP)''')
-            c.execute('''CREATE TABLE IF NOT EXISTS users 
+            c.execute('''CREATE TABLE IF NOT EXISTS users
                          (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
+            c.execute('''CREATE TABLE IF NOT EXISTS channels
+                         (name TEXT PRIMARY KEY, password_hash TEXT, created_at TEXT)''')
             conn.commit()
         logger.info("Base de datos chat_history.db inicializada correctamente")
     except Exception as e:
@@ -735,24 +737,62 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     )
                     
             elif msg_type == "create_group":
-                group_id = message.get("group_id")
-                if group_id:
-                    groups[group_id] = [token]
-                    users[token]["group_id"] = group_id
-                    save_session(
-                        token,
-                        users[token]["user_id"],
-                        users[token]["name"],
-                        users[token]["function"],
-                        group_id,
-                        users[token]["muted_users"]
-                    )
-                    await websocket.send_json({"type": "group_joined", "group_id": group_id})
-                    await broadcast_users()
-                    
+                group_id = (message.get("group_id") or "").strip()
+                password = message.get("password") or ""
+                if not group_id or not password:
+                    await websocket.send_json({
+                        "type": "group_error",
+                        "message": "Poné un nombre de canal y una contraseña."
+                    })
+                else:
+                    with sqlite3.connect("chat_history.db") as conn:
+                        c = conn.cursor()
+                        c.execute("SELECT name FROM channels WHERE name = ?", (group_id,))
+                        already_exists = c.fetchone()
+                        if not already_exists:
+                            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                            c.execute(
+                                "INSERT INTO channels (name, password_hash, created_at) VALUES (?, ?, ?)",
+                                (group_id, password_hash, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                            )
+                            conn.commit()
+                    if already_exists:
+                        await websocket.send_json({
+                            "type": "group_error",
+                            "message": "Ya existe un canal con ese nombre. Probá con otro o entrá con la contraseña."
+                        })
+                    else:
+                        groups[group_id] = [token]
+                        users[token]["group_id"] = group_id
+                        save_session(
+                            token,
+                            users[token]["user_id"],
+                            users[token]["name"],
+                            users[token]["function"],
+                            group_id,
+                            users[token]["muted_users"]
+                        )
+                        await websocket.send_json({"type": "group_joined", "group_id": group_id})
+                        await broadcast_users()
+
             elif msg_type == "join_group":
-                group_id = message.get("group_id")
-                if group_id:
+                group_id = (message.get("group_id") or "").strip()
+                password = message.get("password") or ""
+                with sqlite3.connect("chat_history.db") as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT password_hash FROM channels WHERE name = ?", (group_id,))
+                    row = c.fetchone()
+                if not row:
+                    await websocket.send_json({
+                        "type": "group_error",
+                        "message": "No existe un canal con ese nombre."
+                    })
+                elif not bcrypt.checkpw(password.encode('utf-8'), row[0].encode('utf-8')):
+                    await websocket.send_json({
+                        "type": "group_error",
+                        "message": "Contraseña incorrecta."
+                    })
+                else:
                     if group_id not in groups:
                         groups[group_id] = []
                     if token not in groups[group_id]:
@@ -768,7 +808,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     )
                     await websocket.send_json({"type": "group_joined", "group_id": group_id})
                     await broadcast_users()
-                    
+
+
             elif msg_type == "leave_group":
                 await leave_monitor_room(token)
                 group_id = users[token]["group_id"]
@@ -907,6 +948,23 @@ async def get_api_history_endpoint():
 @app.get("/api/history/since/{msg_id}")
 async def get_history_since_endpoint(msg_id: int):
     return get_history_since(msg_id)
+
+# Lista los canales/grupos existentes (nunca expone la contraseña)
+@app.get("/api/groups")
+async def list_groups():
+    with sqlite3.connect("chat_history.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT name FROM channels ORDER BY name COLLATE NOCASE")
+        names = [row[0] for row in c.fetchall()]
+
+    result = []
+    for name in names:
+        active_members = sum(
+            1 for u in users.values()
+            if u.get("group_id") == name and u.get("websocket")
+        )
+        result.append({"name": name, "active_members": active_members})
+    return {"groups": result}
 
 
 # Evento de inicio del servidor FastAPI

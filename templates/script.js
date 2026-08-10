@@ -1,3 +1,18 @@
+// El token de sesión se deriva directamente del nombre ("legajo_nombre_función"), así que
+// dos dispositivos que nunca eligieron un nombre propio y quedan los dos como "Invitado"
+// terminan generando el MISMO token — el servidor los trata como el mismo usuario, y el
+// segundo que se conecta "pisa" al primero (por eso podía verse solo un miembro activo
+// entre dos celus distintos). Se agrega un sufijo aleatorio fijo por dispositivo
+// (guardado una sola vez en localStorage) para que el nombre por defecto nunca colisione.
+function getDefaultDeviceName() {
+    let suffix = localStorage.getItem('deviceSuffix');
+    if (!suffix) {
+        suffix = Math.floor(1000 + Math.random() * 9000).toString();
+        localStorage.setItem('deviceSuffix', suffix);
+    }
+    return `Invitado-${suffix}`;
+}
+
 let ws = null;
 let userId = null;
 let currentGroup = null;
@@ -922,6 +937,8 @@ function connectWebSocket(token) {
                 }
             } else if (data.type === 'user_list') {
                 updateUserList(data.users);
+            } else if (data.type === 'group_error') {
+                showError(data.message);
             } else if (data.type === 'group_joined') {
                 currentGroup = data.group_id;
                 document.getElementById('main').style.display = 'none';
@@ -1625,16 +1642,16 @@ function toggleMuteNonGroup() {
 
 function joinGroup() {
     const groupId = document.getElementById('group-id')?.value.trim();
-    const isPrivate = document.getElementById('group-private')?.checked;
-    if (!groupId) {
-        showError("Por favor, ingresa un nombre de grupo.");
+    const password = document.getElementById('group-password')?.value || '';
+    if (!groupId || !password) {
+        showError("Ingresá el nombre del canal y su contraseña.");
         return;
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             type: 'join_group',
             group_id: groupId,
-            private: isPrivate,
+            password: password,
             sessionToken: localStorage.getItem('sessionToken')
         }));
     } else {
@@ -1644,20 +1661,59 @@ function joinGroup() {
 
 function createGroup() {
     const groupId = document.getElementById('group-id')?.value.trim();
-    const isPrivate = document.getElementById('group-private')?.checked;
-    if (!groupId) {
-        showError("Por favor, ingresa un nombre de grupo.");
+    const password = document.getElementById('group-password')?.value || '';
+    if (!groupId || !password) {
+        showError("Ingresá el nombre del canal y una contraseña.");
         return;
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             type: 'create_group',
             group_id: groupId,
-            private: isPrivate,
+            password: password,
             sessionToken: localStorage.getItem('sessionToken')
         }));
     } else {
         showError("No hay conexión WebSocket. Intenta de nuevo.");
+    }
+}
+
+async function toggleGroupsList() {
+    const listEl = document.getElementById('groups-list');
+    if (!listEl) return;
+    if (!listEl.classList.contains('hidden')) {
+        listEl.classList.add('hidden');
+        return;
+    }
+    listEl.classList.remove('hidden');
+    listEl.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1">Cargando...</div>';
+    try {
+        const response = await fetch('/api/groups');
+        const data = await response.json();
+        const groupList = data.groups || [];
+        if (groupList.length === 0) {
+            listEl.innerHTML = '<div class="text-xs text-slate-500 italic py-1 pl-1">Todavía no hay canales creados.</div>';
+            return;
+        }
+        listEl.innerHTML = '';
+        groupList.forEach(g => {
+            const item = document.createElement('button');
+            item.className = 'w-full flex items-center justify-between bg-slate-900/80 border border-slate-800/80 px-3 py-2 rounded-xl text-xs hover:bg-slate-800 transition m-0';
+            item.innerHTML = `
+                <span class="text-slate-200 font-bold truncate">${g.name}</span>
+                <span class="text-[10px] font-mono ${g.active_members > 0 ? 'text-emerald-400' : 'text-slate-500'} flex-shrink-0 pl-2">${g.active_members > 0 ? `🟢 ${g.active_members} activo(s)` : 'sin nadie activo'}</span>
+            `;
+            item.addEventListener('click', () => {
+                const groupIdInput = document.getElementById('group-id');
+                if (groupIdInput) groupIdInput.value = g.name;
+                document.getElementById('group-password')?.focus();
+                listEl.classList.add('hidden');
+            });
+            listEl.appendChild(item);
+        });
+    } catch (err) {
+        console.error('Error al cargar la lista de canales:', err);
+        listEl.innerHTML = '<div class="text-xs text-red-400 italic py-1 pl-1">Error al cargar los canales.</div>';
     }
 }
 
@@ -1936,7 +1992,7 @@ function completeLogout() {
     stopPing();
     
     // Automatically re-establish connection using preserved userName instead of displaying removed login screens
-    const currentName = localStorage.getItem('userName') || 'Invitado';
+    const currentName = localStorage.getItem('userName') || getDefaultDeviceName();
     const fakeLegajo = "10000";
     const fakeSector = "Operador";
     userId = `${fakeLegajo}_${currentName}_${fakeSector}`;
@@ -2078,6 +2134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const createGroupBtn = document.getElementById('create-group-btn');
     if (createGroupBtn) createGroupBtn.addEventListener('click', createGroup);
+    document.getElementById('show-groups-btn')?.addEventListener('click', toggleGroupsList);
     const leaveGroupBtn = document.getElementById('leave-group-btn');
     if (leaveGroupBtn) leaveGroupBtn.addEventListener('click', leaveGroup);
     const historyBtn = document.getElementById('history');
@@ -2162,7 +2219,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveNameBtn = document.getElementById('save-name-btn');
     
     // Fallback names if none is defined
-    let currentName = localStorage.getItem('userName') || 'Invitado';
+    let currentName = localStorage.getItem('userName') || getDefaultDeviceName();
     if (nameInput) {
         nameInput.value = currentName;
     }
