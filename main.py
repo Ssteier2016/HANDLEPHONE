@@ -51,6 +51,21 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# Evita que el navegador sirva script.js/style.css/sw.js cacheados y viejos después de
+# un deploy. Sin esto, un cambio en el código podía no reflejarse en el teléfono aunque
+# el servidor ya lo tuviera actualizado (incluído /sw.js, que es lo que dispara la
+# detección de nueva versión: si el propio Service Worker se sirve stale, nunca se
+# entera de que hay una versión nueva). "no-cache" no significa "no guardar nada": el
+# navegador puede seguir cacheando, pero SIEMPRE revalida con el servidor antes de usar
+# la copia guardada (vía ETag/Last-Modified), así que sigue siendo barato con un 304.
+@app.middleware("http")
+async def no_cache_app_assets(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/sw.js" or (path.startswith("/templates/") and path.rsplit(".", 1)[-1] in ("js", "css", "html")):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 # Montar archivos estáticos para la carpeta templates
 try:
     app.mount("/templates", StaticFiles(directory="templates"), name="templates")
