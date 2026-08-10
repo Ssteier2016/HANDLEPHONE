@@ -44,10 +44,32 @@ let vuAnimFrame = null;
 let vuStream = null;
 
 // ─── VIDEO CALL (WebRTC 1 a 1) ────────────────────────────────────────────────
+// STUN solo alcanza cuando al menos uno de los dos lados tiene una red relativamente
+// abierta; entre dos celulares reales (datos móviles, NAT de operador, wifi hogareño
+// restrictivo) suele fallar la conexión directa. TURN retransmite el audio/video cuando
+// no se puede conectar directo -- es el motivo más probable de que la Cámara Familiar
+// (y la videollamada 1 a 1) no conecten entre dos teléfonos reales aunque sí funcionaba
+// en las pruebas locales. Se usa el servidor TURN público y gratuito de Open Relay
+// Project (metered.ca) en varios puertos/transportes para máxima compatibilidad.
 const RTC_CONFIG = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
     ]
 };
 
@@ -962,6 +984,12 @@ function connectWebSocket(token) {
                 }
                 
                 updateSwipeHint();
+                // Refuerzo redundante: aparte del broadcast que ya dispara el servidor
+                // al unirse, se pide una lista fresca acá también, para no depender de
+                // una sola oportunidad si justo hubo una reconexión en el medio.
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'refresh_users' }));
+                }
             } else if (data.type === 'group_left') {
                 currentGroup = null;
                 if (monitorActive) closeMonitorMode();
