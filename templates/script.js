@@ -1704,10 +1704,23 @@ async function toggleGroupsList() {
                 <span class="text-[10px] font-mono ${g.active_members > 0 ? 'text-emerald-400' : 'text-slate-500'} flex-shrink-0 pl-2">${g.active_members > 0 ? `🟢 ${g.active_members} activo(s)` : 'sin nadie activo'}</span>
             `;
             item.addEventListener('click', () => {
-                const groupIdInput = document.getElementById('group-id');
-                if (groupIdInput) groupIdInput.value = g.name;
-                document.getElementById('group-password')?.focus();
                 listEl.classList.add('hidden');
+                const password = window.prompt(`Contraseña del canal "${g.name}":`);
+                if (password === null) return; // canceló el cartel
+                if (!password) {
+                    showError('Ingresá la contraseña del canal.');
+                    return;
+                }
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'join_group',
+                        group_id: g.name,
+                        password: password,
+                        sessionToken: localStorage.getItem('sessionToken')
+                    }));
+                } else {
+                    showError('No hay conexión WebSocket. Intenta de nuevo.');
+                }
             });
             listEl.appendChild(item);
         });

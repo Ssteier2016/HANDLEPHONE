@@ -512,6 +512,28 @@ async def clean_expired_sessions():
             logger.error(f"Error al limpiar sesiones: {e}")
         await asyncio.sleep(3600)
 
+# Registra al usuario como miembro del canal (ya validado por create_group/join_group)
+# y le confirma el ingreso. group_name es siempre el nombre EXACTO guardado en la tabla
+# channels (no necesariamente lo que la persona tipeó esta vez si venía de join_group),
+# para que todos los que entren al mismo canal -- aunque lo escriban con distinta
+# capitalización -- compartan el mismo group_id puertas adentro.
+async def add_user_to_group(token: str, websocket: WebSocket, group_name: str):
+    if group_name not in groups:
+        groups[group_name] = []
+    if token not in groups[group_name]:
+        groups[group_name].append(token)
+    users[token]["group_id"] = group_name
+    save_session(
+        token,
+        users[token]["user_id"],
+        users[token]["name"],
+        users[token]["function"],
+        group_name,
+        users[token]["muted_users"]
+    )
+    await websocket.send_json({"type": "group_joined", "group_id": group_name})
+    await broadcast_users()
+
 # Busca el token de un usuario a partir de su user_id ("nombre_funcion")
 def find_token_by_user_id(target_user_id: str) -> Optional[str]:
     for tk, u in users.items():
@@ -752,9 +774,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                     )
                     
             elif msg_type == "create_group":
-                group_id = (message.get("group_id") or "").strip()
+                # Crea un canal nuevo. Falla si ya existe uno con ese nombre (sin
+                # importar mayúsculas/espacios), para que "Crear Canal" nunca termine
+                # uniéndote silenciosamente a uno que ya existía.
+                input_name = (message.get("group_id") or "").strip()
                 password = message.get("password") or ""
-                if not group_id or not password:
+                if not input_name or not password:
                     await websocket.send_json({
                         "type": "group_error",
                         "message": "Poné un nombre de canal y una contraseña."
@@ -762,67 +787,50 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                 else:
                     with sqlite3.connect("chat_history.db") as conn:
                         c = conn.cursor()
-                        c.execute("SELECT name FROM channels WHERE name = ?", (group_id,))
+                        c.execute("SELECT name FROM channels WHERE name = ? COLLATE NOCASE", (input_name,))
                         already_exists = c.fetchone()
                         if not already_exists:
                             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             c.execute(
                                 "INSERT INTO channels (name, password_hash, created_at) VALUES (?, ?, ?)",
-                                (group_id, password_hash, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                                (input_name, password_hash, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
                             )
                             conn.commit()
                     if already_exists:
                         await websocket.send_json({
                             "type": "group_error",
-                            "message": "Ya existe un canal con ese nombre. Probá con otro o entrá con la contraseña."
+                            "message": "Ya existe un canal con ese nombre. Probá con otro o entrá con \"Entrar al Canal\"."
                         })
                     else:
-                        groups[group_id] = [token]
-                        users[token]["group_id"] = group_id
-                        save_session(
-                            token,
-                            users[token]["user_id"],
-                            users[token]["name"],
-                            users[token]["function"],
-                            group_id,
-                            users[token]["muted_users"]
-                        )
-                        await websocket.send_json({"type": "group_joined", "group_id": group_id})
-                        await broadcast_users()
+                        await add_user_to_group(token, websocket, input_name)
 
             elif msg_type == "join_group":
-                group_id = (message.get("group_id") or "").strip()
+                # Entra a un canal existente. Falla si no existe, o si la contraseña
+                # no coincide con la que se usó al crearlo.
+                input_name = (message.get("group_id") or "").strip()
                 password = message.get("password") or ""
-                with sqlite3.connect("chat_history.db") as conn:
-                    c = conn.cursor()
-                    c.execute("SELECT password_hash FROM channels WHERE name = ?", (group_id,))
-                    row = c.fetchone()
-                if not row:
+                if not input_name or not password:
                     await websocket.send_json({
                         "type": "group_error",
-                        "message": "No existe un canal con ese nombre."
-                    })
-                elif not bcrypt.checkpw(password.encode('utf-8'), row[0].encode('utf-8')):
-                    await websocket.send_json({
-                        "type": "group_error",
-                        "message": "Contraseña incorrecta."
+                        "message": "Poné un nombre de canal y una contraseña."
                     })
                 else:
-                    if group_id not in groups:
-                        groups[group_id] = []
-                    if token not in groups[group_id]:
-                        groups[group_id].append(token)
-                    users[token]["group_id"] = group_id
-                    save_session(
-                        token,
-                        users[token]["user_id"],
-                        users[token]["name"],
-                        users[token]["function"],
-                        group_id,
-                        users[token]["muted_users"]
-                    )
-                    await websocket.send_json({"type": "group_joined", "group_id": group_id})
-                    await broadcast_users()
+                    with sqlite3.connect("chat_history.db") as conn:
+                        c = conn.cursor()
+                        c.execute("SELECT name, password_hash FROM channels WHERE name = ? COLLATE NOCASE", (input_name,))
+                        row = c.fetchone()
+                    if not row:
+                        await websocket.send_json({
+                            "type": "group_error",
+                            "message": "No existe un canal con ese nombre."
+                        })
+                    elif not bcrypt.checkpw(password.encode('utf-8'), row[1].encode('utf-8')):
+                        await websocket.send_json({
+                            "type": "group_error",
+                            "message": "Contraseña incorrecta."
+                        })
+                    else:
+                        await add_user_to_group(token, websocket, row[0])
 
 
             elif msg_type == "leave_group":
