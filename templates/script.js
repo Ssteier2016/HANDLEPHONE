@@ -43,7 +43,7 @@ let vuDataArray = null;
 let vuAnimFrame = null;
 let vuStream = null;
 
-// ─── VIDEO CALL (WebRTC 1 a 1) ────────────────────────────────────────────────
+// ─── WebRTC (Cámara Familiar) ──────────────────────────────────────────────────
 // STUN solo alcanza cuando al menos uno de los dos lados tiene una red relativamente
 // abierta; entre dos celulares reales (datos móviles, NAT de operador, wifi hogareño
 // restrictivo) suele fallar la conexión directa. TURN retransmite el audio/video cuando
@@ -88,27 +88,46 @@ const monitorTiles = new Map();           // 'self' o user_id remoto -> { video,
 let monitorFocusHistory = [];             // user_ids remotos, más reciente primero
 let monitorFocusUserId = null;            // 'self', un user_id remoto, o null (todo apagado)
 
-// Entrar a la sala SIEMPRE deja mirar y escuchar de inmediato, sin pedir permiso de
-// cámara/mic a nadie: eso es una acción aparte y opcional (ver toggleMonitorMedia).
-// Así, cualquiera con el código del grupo puede ver la cámara familiar si alguien la
-// activó, sin tener que prender la propia cámara para poder mirar.
-async function openMonitorMode() {
+// Apenas se entra a un grupo, esto conecta a su sala de Cámara Familiar en segundo
+// plano, SIN pedir permiso de cámara/mic a nadie ni mostrar nada todavía. Así, si
+// alguien ya tiene la cámara prendida, se puede ver de inmediato sin tener que tocar
+// ningún botón -- la pantalla completa se muestra sola apenas hay una cámara remota
+// activa (ver recomputeMonitorFocus). Prender la propia cámara sigue siendo aparte y
+// opcional (ver toggleMonitorMedia).
+function autoJoinMonitorRoom() {
+    if (monitorActive) return;
+    if (!currentGroup) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    monitorGroupId = currentGroup;
+    monitorActive = true;
+    registerMonitorParticipant('self', false, true);
+
+    ws.send(JSON.stringify({ type: 'monitor_join', group_id: monitorGroupId, camera_on: false }));
+}
+
+// Abre la pantalla a mano (botón "Activar Cámara Familiar"): sirve para prender la
+// propia cámara o para revisar aunque nadie tenga la cámara prendida todavía. La
+// conexión en sí ya está armada por autoJoinMonitorRoom(), así que acá solo hace falta
+// mostrar la pantalla (con una red de seguridad por si todavía no se conectó sola).
+function openMonitorScreen() {
     if (!currentGroup) {
         showError('Tenés que estar en un grupo para activar la Cámara Familiar.');
         return;
     }
-    if (monitorActive) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        showError('No hay conexión WebSocket. Intenta de nuevo.');
-        return;
-    }
+    if (!monitorActive) autoJoinMonitorRoom();
+    showMonitorScreen();
+}
 
-    monitorGroupId = currentGroup;
-    monitorActive = true;
+function showMonitorScreen() {
     document.getElementById('monitor-screen')?.classList.remove('hidden');
-    registerMonitorParticipant('self', false, true);
+}
 
-    ws.send(JSON.stringify({ type: 'monitor_join', group_id: monitorGroupId, camera_on: false }));
+// Solo oculta la pantalla -- NO desconecta de la sala, para que si alguien vuelve a
+// prender su cámara más tarde, se siga mostrando sola automáticamente. La conexión de
+// verdad se corta con closeMonitorMode(), al salir del grupo o cerrar sesión.
+function hideMonitorScreen() {
+    document.getElementById('monitor-screen')?.classList.add('hidden');
 }
 
 function closeMonitorMode() {
@@ -202,6 +221,11 @@ async function handleMonitorSignal(data) {
         case 'monitor_roster':
             for (const p of (data.participants || [])) {
                 registerMonitorParticipant(p.user_id, p.camera_on, false);
+                // Si ya hay una conexión con este participante (ej. un monitor_roster
+                // duplicado por una reconexión), no volver a crear otra: eso duplicaba
+                // los transceivers de audio/video en la misma conexión y dejaba pistas
+                // viejas "muted" mezcladas con las nuevas.
+                if (monitorPeerConnections.has(p.user_id)) continue;
                 const pc = createMonitorPeerConnection(p.user_id);
                 try {
                     const offer = await pc.createOffer();
@@ -229,9 +253,32 @@ async function handleMonitorSignal(data) {
             if (!monitorActive) break;
             try {
                 let pc = monitorPeerConnections.get(data.from_user_id);
-                if (!pc) pc = createMonitorPeerConnection(data.from_user_id);
+                const isNewConnection = !pc;
+                if (!pc) pc = createMonitorPeerConnection(data.from_user_id, /* skipTransceivers */ true);
                 await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
                 await flushPendingMonitorIce(data.from_user_id);
+
+                if (isNewConnection) {
+                    // Recién ahora, después de aplicar la oferta entrante, existen los
+                    // transceivers que el navegador crea solo para cada m-line. Se
+                    // dejan en sendrecv y, si ya hay cámara propia prendida, se les
+                    // asigna el track real -- todo ANTES de generar la respuesta, así
+                    // queda dentro de la MISMA negociación inicial (no hace falta
+                    // renegociar después). Precrear los transceivers de antemano acá
+                    // (como sí se hace del lado que ofrece) los dejaba huérfanos sin
+                    // negociar: el navegador igual crea los suyos propios al procesar
+                    // la oferta, e ignora los que ya existían -- por eso quien
+                    // respondía la conexión nunca podía enviar su cámara de verdad.
+                    pc.getTransceivers().forEach(t => {
+                        t.direction = 'sendrecv';
+                        const kind = t.receiver.track?.kind;
+                        const localTrack = kind === 'audio' ? monitorLocalStream?.getAudioTracks()[0]
+                            : kind === 'video' ? monitorLocalStream?.getVideoTracks()[0]
+                            : null;
+                        if (localTrack) t.sender.replaceTrack(localTrack).catch(() => {});
+                    });
+                }
+
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 ws.send(JSON.stringify({ type: 'monitor_answer', target_user_id: data.from_user_id, sdp: answer }));
@@ -291,7 +338,7 @@ async function flushPendingMonitorIce(userId) {
     }
 }
 
-function createMonitorPeerConnection(remoteUserId) {
+function createMonitorPeerConnection(remoteUserId, skipTransceivers = false) {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     monitorPeerConnections.set(remoteUserId, pc);
 
@@ -299,11 +346,20 @@ function createMonitorPeerConnection(remoteUserId) {
     // cámara local activa en este momento. Así, cuando toggleMonitorMedia() apaga o
     // vuelve a pedir el hardware, alcanza con reemplazar el track (replaceTrack) sin
     // tener que renegociar la conexión ni recrearla.
-    const audioTrack = monitorLocalStream?.getAudioTracks()[0];
-    const videoTrack = monitorLocalStream?.getVideoTracks()[0];
-    const localStreams = monitorLocalStream ? [monitorLocalStream] : [];
-    pc.addTransceiver(audioTrack || 'audio', { direction: 'sendrecv', streams: localStreams });
-    pc.addTransceiver(videoTrack || 'video', { direction: 'sendrecv', streams: localStreams });
+    //
+    // Esto SOLO vale para el lado que INICIA la conexión (ver case 'monitor_roster'):
+    // sus propios transceivers se convierten directamente en las m-lines de la oferta.
+    // El lado que RESPONDE (case 'monitor_offer', skipTransceivers=true) no debe
+    // pre-crearlos: el navegador crea los suyos propios recién al procesar la oferta
+    // entrante, e ignora cualquiera que ya existiera de antemano -- quedan huérfanos,
+    // sin negociar nunca, y quien responde termina sin poder enviar su cámara.
+    if (!skipTransceivers) {
+        const audioTrack = monitorLocalStream?.getAudioTracks()[0];
+        const videoTrack = monitorLocalStream?.getVideoTracks()[0];
+        const localStreams = monitorLocalStream ? [monitorLocalStream] : [];
+        pc.addTransceiver(audioTrack || 'audio', { direction: 'sendrecv', streams: localStreams });
+        pc.addTransceiver(videoTrack || 'video', { direction: 'sendrecv', streams: localStreams });
+    }
 
     pc.onicecandidate = (event) => {
         if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
@@ -326,6 +382,7 @@ function createMonitorPeerConnection(remoteUserId) {
         if (!tile.stream) tile.stream = new MediaStream();
         tile.stream.addTrack(event.track);
         tile.video.srcObject = tile.stream;
+        playMonitorTileVideo(tile);
     };
 
     pc.onconnectionstatechange = () => {
@@ -359,6 +416,32 @@ function updateMonitorTile(userId, stream, isSelf) {
         monitorTiles.set(userId, tile);
     }
     tile.video.srcObject = stream || null;
+    if (stream) playMonitorTileVideo(tile);
+}
+
+// En navegadores móviles, un <video> con audio (no silenciado) no arranca solo aunque
+// tenga autoplay -- se bloquea sin un gesto del usuario reciente, y se queda en negro
+// aunque el track ya esté llegando (por eso funcionaba en la compu pero no en el
+// celular). Si el navegador lo bloquea, se reproduce mudo (eso sí está siempre
+// permitido) y se reactiva el audio en el próximo toque, con el mismo patrón que ya se
+// usa para desbloquear el AudioContext del walkie-talkie.
+function playMonitorTileVideo(tile) {
+    const playPromise = tile.video.play();
+    if (playPromise === undefined) return;
+    playPromise.catch(() => {
+        if (tile.isSelf || tile.video.muted) return;
+        tile.video.muted = true;
+        tile.video.play().catch(err => {
+            console.warn('No se pudo reproducir el video de Cámara Familiar:', err);
+        });
+        const unmute = () => {
+            tile.video.muted = false;
+            document.removeEventListener('click', unmute);
+            document.removeEventListener('touchstart', unmute);
+        };
+        document.addEventListener('click', unmute);
+        document.addEventListener('touchstart', unmute);
+    });
 }
 
 function setMonitorCameraOnState(userId, cameraOn, isSelf) {
@@ -391,6 +474,13 @@ function recomputeMonitorFocus() {
     });
 
     document.getElementById('monitor-off-hint')?.classList.toggle('hidden', nextFocus !== null);
+
+    // Como una cámara de seguridad de verdad: si el nuevo foco es la cámara de otra
+    // persona (no la propia), se muestra la pantalla sola, sin que nadie tenga que
+    // tocar "Activar Cámara Familiar" primero.
+    if (remoteFocus) {
+        showMonitorScreen();
+    }
 }
 
 function removeMonitorPeer(userId) {
@@ -752,6 +842,9 @@ function connectWebSocket(token) {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'refresh_users' }));
                 }
+                // Conectar a la Cámara Familiar del grupo automáticamente: si alguien ya
+                // tiene la cámara prendida, se muestra sola sin tocar ningún botón.
+                autoJoinMonitorRoom();
             } else if (data.type === 'group_left') {
                 currentGroup = null;
                 if (monitorActive) closeMonitorMode();
@@ -2147,12 +2240,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Cámara Familiar: botón para activar, toque global para prender/apagar, botón para salir
-    document.getElementById('open-monitor-btn')?.addEventListener('click', openMonitorMode);
+    // Cámara Familiar: botón para abrir a mano, toque global para prender/apagar la
+    // propia cámara, botón para ocultar la pantalla (sin desconectar de la sala).
+    document.getElementById('open-monitor-btn')?.addEventListener('click', openMonitorScreen);
     document.getElementById('monitor-tap-area')?.addEventListener('click', toggleMonitorMedia);
     document.getElementById('monitor-exit-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeMonitorMode();
+        hideMonitorScreen();
     });
 
     // Liberar la cámara/micrófono si la página se cierra en medio de la Cámara Familiar
