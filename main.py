@@ -913,13 +913,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             except Exception as e:
                                 logger.error(f"Error avisando cámara a {other_token}: {e}")
 
-            elif msg_type in [
-                "video_call_request", "video_call_accept", "video_call_reject",
-                "video_call_end", "video_offer", "video_answer", "video_ice_candidate",
-                "monitor_offer", "monitor_answer", "monitor_ice_candidate"
-            ]:
-                # Señalización WebRTC 1 a 1: el servidor solo reenvía el mensaje
-                # tal cual al destinatario, sin guardar estado de la llamada.
+            elif msg_type in ["monitor_offer", "monitor_answer", "monitor_ice_candidate"]:
+                # Señalización WebRTC de la Cámara Familiar: el servidor solo reenvía el
+                # mensaje tal cual al destinatario, sin guardar estado de la conexión.
                 target_user_id = message.get("target_user_id")
                 target_token = find_token_by_user_id(target_user_id) if target_user_id else None
                 target_ws = users[target_token]["websocket"] if target_token and target_token in users else None
@@ -930,11 +926,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         await target_ws.send_json({**message, "from_user_id": sender_user_id})
                     except Exception as e:
                         logger.error(f"Error reenviando señal de video a {target_user_id}: {e}")
-                elif msg_type == "video_call_request":
-                    await websocket.send_json({
-                        "type": "video_call_error",
-                        "message": "El operador no está disponible para videollamada."
-                    })
 
     except WebSocketDisconnect:
         logger.info(f"Cliente desconectado (en segundo plano): {token[:15]}...")

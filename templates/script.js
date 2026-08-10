@@ -73,262 +73,11 @@ const RTC_CONFIG = {
     ]
 };
 
-let localCallStream = null;
-let peerConnection = null;
-let callPeerUserId = null; // user_id de la otra parte (llamando, sonando o en curso)
-let isCallCaller = false;
-let isCameraEnabled = true;
-let pendingIceCandidates = [];
-
-function startVideoCall(targetUserId) {
-    if (callPeerUserId) {
-        showError('Ya hay una videollamada en curso.');
-        return;
-    }
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        showError('No hay conexión WebSocket. Intenta de nuevo.');
-        return;
-    }
-    callPeerUserId = targetUserId;
-    isCallCaller = true;
-    showVideoCallScreen(`Llamando a ${targetUserId.split('_')[0]}...`);
-    ws.send(JSON.stringify({ type: 'video_call_request', target_user_id: targetUserId }));
-}
-
-async function handleVideoSignal(data) {
-    switch (data.type) {
-        case 'video_call_request':
-            if (callPeerUserId) {
-                // Ya hay una llamada en curso/sonando: rechazar automáticamente la nueva
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: data.from_user_id }));
-                }
-                return;
-            }
-            showIncomingCallBanner(data.from_user_id);
-            break;
-
-        case 'video_call_reject':
-            if (callPeerUserId === data.from_user_id) {
-                showError(`${data.from_user_id.split('_')[0]} rechazó la videollamada.`);
-                endVideoCall(false);
-            }
-            break;
-
-        case 'video_call_error':
-            showError(data.message || 'No se pudo iniciar la videollamada.');
-            endVideoCall(false);
-            break;
-
-        case 'video_call_accept':
-            // Somos quien llama: el destinatario aceptó, ahora generamos la oferta SDP
-            if (isCallCaller && callPeerUserId === data.from_user_id) {
-                try {
-                    await setupLocalMedia();
-                    createPeerConnection();
-                    const offer = await peerConnection.createOffer();
-                    await peerConnection.setLocalDescription(offer);
-                    ws.send(JSON.stringify({ type: 'video_offer', target_user_id: callPeerUserId, sdp: offer }));
-                    updateVideoCallStatus(`En llamada con ${callPeerUserId.split('_')[0]}`);
-                } catch (err) {
-                    console.error('Error iniciando la videollamada:', err);
-                    showError('No se pudo acceder a la cámara/micrófono.');
-                    endVideoCall(true);
-                }
-            }
-            break;
-
-        case 'video_offer':
-            // Somos el destinatario: llega la oferta SDP luego de haber aceptado
-            if (callPeerUserId === data.from_user_id && peerConnection) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                await flushPendingIceCandidates();
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                ws.send(JSON.stringify({ type: 'video_answer', target_user_id: callPeerUserId, sdp: answer }));
-                updateVideoCallStatus(`En llamada con ${callPeerUserId.split('_')[0]}`);
-            }
-            break;
-
-        case 'video_answer':
-            if (callPeerUserId === data.from_user_id && peerConnection) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                await flushPendingIceCandidates();
-            }
-            break;
-
-        case 'video_ice_candidate':
-            if (callPeerUserId === data.from_user_id && data.candidate) {
-                if (peerConnection && peerConnection.remoteDescription) {
-                    try {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    } catch (err) {
-                        console.warn('Error agregando ICE candidate:', err);
-                    }
-                } else {
-                    pendingIceCandidates.push(data.candidate);
-                }
-            }
-            break;
-
-        case 'video_call_end':
-            if (callPeerUserId === data.from_user_id) {
-                showError(`${data.from_user_id.split('_')[0]} finalizó la videollamada.`, true);
-                endVideoCall(false);
-            }
-            break;
-    }
-}
-
-async function flushPendingIceCandidates() {
-    while (pendingIceCandidates.length > 0) {
-        const candidate = pendingIceCandidates.shift();
-        try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-            console.warn('Error agregando ICE candidate pendiente:', err);
-        }
-    }
-}
-
-async function setupLocalMedia() {
-    if (localCallStream) return localCallStream;
-    localCallStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    const localVideoEl = document.getElementById('local-video');
-    if (localVideoEl) localVideoEl.srcObject = localCallStream;
-    isCameraEnabled = true;
-    return localCallStream;
-}
-
-function createPeerConnection() {
-    peerConnection = new RTCPeerConnection(RTC_CONFIG);
-
-    localCallStream.getTracks().forEach(track => peerConnection.addTrack(track, localCallStream));
-
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate && callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                type: 'video_ice_candidate',
-                target_user_id: callPeerUserId,
-                candidate: event.candidate
-            }));
-        }
-    };
-
-    peerConnection.ontrack = (event) => {
-        const remoteVideoEl = document.getElementById('remote-video');
-        if (remoteVideoEl && remoteVideoEl.srcObject !== event.streams[0]) {
-            remoteVideoEl.srcObject = event.streams[0];
-        }
-    };
-
-    peerConnection.onconnectionstatechange = () => {
-        if (peerConnection && ['failed', 'disconnected'].includes(peerConnection.connectionState)) {
-            console.warn('Conexión de videollamada perdida:', peerConnection.connectionState);
-        }
-    };
-}
-
-function showIncomingCallBanner(fromUserId) {
-    callPeerUserId = fromUserId;
-    isCallCaller = false;
-    const banner = document.getElementById('incoming-call-banner');
-    const nameEl = document.getElementById('incoming-call-name');
-    if (nameEl) nameEl.textContent = fromUserId.split('_')[0];
-    if (banner) banner.classList.remove('hidden');
-}
-
-function hideIncomingCallBanner() {
-    const banner = document.getElementById('incoming-call-banner');
-    if (banner) banner.classList.add('hidden');
-}
-
-async function acceptIncomingCall() {
-    hideIncomingCallBanner();
-    if (!callPeerUserId) return;
-    try {
-        await setupLocalMedia();
-        createPeerConnection();
-        showVideoCallScreen(`Conectando con ${callPeerUserId.split('_')[0]}...`);
-        ws.send(JSON.stringify({ type: 'video_call_accept', target_user_id: callPeerUserId }));
-    } catch (err) {
-        console.error('Error accediendo a la cámara:', err);
-        showError('No se pudo acceder a la cámara/micrófono.');
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: callPeerUserId }));
-        }
-        callPeerUserId = null;
-    }
-}
-
-function rejectIncomingCall() {
-    hideIncomingCallBanner();
-    if (callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'video_call_reject', target_user_id: callPeerUserId }));
-    }
-    callPeerUserId = null;
-}
-
-function showVideoCallScreen(statusText) {
-    const screen = document.getElementById('video-call-screen');
-    if (screen) screen.classList.remove('hidden');
-    updateVideoCallStatus(statusText);
-}
-
-function updateVideoCallStatus(text) {
-    const statusEl = document.getElementById('video-call-status');
-    if (statusEl) statusEl.textContent = text;
-}
-
-// Un solo toque prende/apaga la cámara local (el video sigue en curso, solo se deja de enviar imagen)
-function toggleLocalCamera() {
-    if (!localCallStream) return;
-    isCameraEnabled = !isCameraEnabled;
-    localCallStream.getVideoTracks().forEach(track => { track.enabled = isCameraEnabled; });
-
-    const btn = document.getElementById('toggle-camera-btn');
-    const overlay = document.getElementById('local-camera-off-overlay');
-    if (btn) btn.textContent = isCameraEnabled ? '📷' : '🚫';
-    if (overlay) overlay.classList.toggle('hidden', isCameraEnabled);
-}
-
-function endVideoCall(notifyPeer = true) {
-    if (notifyPeer && callPeerUserId && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'video_call_end', target_user_id: callPeerUserId }));
-    }
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    if (localCallStream) {
-        localCallStream.getTracks().forEach(track => track.stop());
-        localCallStream = null;
-    }
-
-    const remoteVideoEl = document.getElementById('remote-video');
-    const localVideoEl = document.getElementById('local-video');
-    if (remoteVideoEl) remoteVideoEl.srcObject = null;
-    if (localVideoEl) localVideoEl.srcObject = null;
-
-    const screen = document.getElementById('video-call-screen');
-    if (screen) screen.classList.add('hidden');
-    hideIncomingCallBanner();
-
-    pendingIceCandidates = [];
-    callPeerUserId = null;
-    isCallCaller = false;
-    isCameraEnabled = true;
-    const btn = document.getElementById('toggle-camera-btn');
-    if (btn) btn.textContent = '📷';
-}
-
 // ─── MODO CÁMARA FAMILIAR (cámara de seguridad en vivo, todo el grupo) ────────
-// A diferencia de la videollamada 1 a 1 de arriba (con timbre y aceptar/rechazar),
-// este modo es tipo cámara de seguridad: se une a una sala por grupo sin pedirle
-// permiso a nadie, la cámara/mic propios arrancan prendidos, y un solo toque en
-// cualquier parte de la pantalla los apaga/prende juntos. Usa su propio estado
-// (Map de conexiones, una por participante) totalmente separado del de la
-// videollamada 1 a 1, para no interferir entre sí.
+// Tipo cámara de seguridad: se une a una sala por grupo sin pedirle permiso a nadie
+// (nunca hay timbre ni aceptar/rechazar -- esta app no es para llamadas, es para poder
+// ver/escuchar a quien activó su cámara). La cámara/mic propios se prenden con un solo
+// toque en cualquier parte de la pantalla.
 let monitorActive = false;
 let monitorGroupId = null;
 let monitorLocalStream = null;
@@ -478,21 +227,34 @@ async function handleMonitorSignal(data) {
 
         case 'monitor_offer': {
             if (!monitorActive) break;
-            let pc = monitorPeerConnections.get(data.from_user_id);
-            if (!pc) pc = createMonitorPeerConnection(data.from_user_id);
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            await flushPendingMonitorIce(data.from_user_id);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ type: 'monitor_answer', target_user_id: data.from_user_id, sdp: answer }));
+            try {
+                let pc = monitorPeerConnections.get(data.from_user_id);
+                if (!pc) pc = createMonitorPeerConnection(data.from_user_id);
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                await flushPendingMonitorIce(data.from_user_id);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send(JSON.stringify({ type: 'monitor_answer', target_user_id: data.from_user_id, sdp: answer }));
+            } catch (err) {
+                // Sin este try/catch, un error acá quedaba como una promesa rechazada
+                // sin capturar -- invisible para quien usa la app -- y la conexión con
+                // ese participante se quedaba colgada para siempre sin explicación.
+                console.error(`Error respondiendo conexión de Cámara Familiar con ${data.from_user_id}:`, err);
+                showError('No se pudo conectar la Cámara Familiar con uno de los participantes.');
+            }
             break;
         }
 
         case 'monitor_answer': {
-            const pc = monitorPeerConnections.get(data.from_user_id);
-            if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                await flushPendingMonitorIce(data.from_user_id);
+            try {
+                const pc = monitorPeerConnections.get(data.from_user_id);
+                if (pc) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    await flushPendingMonitorIce(data.from_user_id);
+                }
+            } catch (err) {
+                console.error(`Error procesando respuesta de Cámara Familiar de ${data.from_user_id}:`, err);
+                showError('No se pudo conectar la Cámara Familiar con uno de los participantes.');
             }
             break;
         }
@@ -1003,8 +765,6 @@ function connectWebSocket(token) {
                 }
             } else if (data.type === 'logout_success') {
                 completeLogout();
-            } else if (typeof data.type === 'string' && data.type.startsWith('video_')) {
-                handleVideoSignal(data);
             } else if (typeof data.type === 'string' && data.type.startsWith('monitor_')) {
                 handleMonitorSignal(data);
             }
@@ -1187,11 +947,6 @@ function updateUserList(users) {
             </div>
             ${!isSelf ? `
                 <div class="flex items-center gap-1 flex-shrink-0">
-                    ${isActive ? `
-                        <button class="video-call-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Videollamada" data-user-id="${user.user_id}">
-                            📹
-                        </button>
-                    ` : ''}
                     <button class="dm-user-btn p-1.5 rounded-lg border transition m-0 w-auto bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" title="Mensaje Directo de Voz" data-user-id="${user.user_id}">
                         🎤
                     </button>
@@ -1201,14 +956,6 @@ function updateUserList(users) {
                 </div>
             ` : '<span class="text-[10px] text-sky-400 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded-md flex-shrink-0">Tú</span>'}
         `;
-
-        const videoCallBtn = card.querySelector('.video-call-btn');
-        if (videoCallBtn) {
-            videoCallBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                startVideoCall(user.user_id);
-            });
-        }
 
         const muteBtn = card.querySelector('.mute-user-btn');
         if (muteBtn) {
@@ -2400,12 +2147,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Videollamada: botones de la pantalla de llamada y del banner de llamada entrante
-    document.getElementById('toggle-camera-btn')?.addEventListener('click', toggleLocalCamera);
-    document.getElementById('end-call-btn')?.addEventListener('click', () => endVideoCall(true));
-    document.getElementById('accept-call-btn')?.addEventListener('click', acceptIncomingCall);
-    document.getElementById('reject-call-btn')?.addEventListener('click', rejectIncomingCall);
-
     // Cámara Familiar: botón para activar, toque global para prender/apagar, botón para salir
     document.getElementById('open-monitor-btn')?.addEventListener('click', openMonitorMode);
     document.getElementById('monitor-tap-area')?.addEventListener('click', toggleMonitorMedia);
@@ -2414,9 +2155,8 @@ document.addEventListener('DOMContentLoaded', () => {
         closeMonitorMode();
     });
 
-    // Liberar la cámara/micrófono si la página se cierra en medio de una llamada
+    // Liberar la cámara/micrófono si la página se cierra en medio de la Cámara Familiar
     window.addEventListener('beforeunload', () => {
-        if (localCallStream) localCallStream.getTracks().forEach(track => track.stop());
         if (monitorLocalStream) monitorLocalStream.getTracks().forEach(track => track.stop());
     });
 });
