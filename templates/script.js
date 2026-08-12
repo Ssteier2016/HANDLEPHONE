@@ -14,6 +14,7 @@ function getDefaultDeviceName() {
 }
 
 let ws = null;
+let lastPongAt = 0; // último "pong" del servidor, para detectar conexiones muertas (ver startPing)
 let userId = null;
 let currentGroup = null;
 let isRecording = false;
@@ -803,11 +804,16 @@ function connectWebSocket(token) {
     ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${token}`);
     ws.onopen = () => {
         console.log("WebSocket conectado");
+        lastPongAt = Date.now(); // arranca "sana", da margen antes de sospechar que está muerta
         startPing();
     };
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
+            if (data.type === 'pong') {
+                lastPongAt = Date.now();
+                return;
+            }
             if (data.type === 'connection_success') {
                 historyMsgIds = new Set();
                 historyLoaded = false;
@@ -905,6 +911,19 @@ function connectWebSocket(token) {
 
 function startPing() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    // Si pasó mucho tiempo sin un "pong" del servidor, la conexión está muerta en los
+    // hechos (pasa sin aviso al perder señal, cambiar de wifi a datos, o cuando el
+    // servidor se reinicia por un despliegue) aunque el navegador todavía la marque
+    // como abierta -- sin esto, el cliente podía quedar "conectado" para siempre sin
+    // funcionar, mostrándose desconectado en la lista del resto sin darse cuenta.
+    // Forzar el cierre acá dispara la reconexión automática de ws.onclose.
+    if (lastPongAt && Date.now() - lastPongAt > 25000) {
+        console.warn('Sin respuesta del servidor hace rato: forzando reconexión...');
+        ws.close();
+        return;
+    }
+
     ws.send(JSON.stringify({ type: 'ping' }));
     // Also request fresh user list on each ping
     ws.send(JSON.stringify({ type: 'refresh_users' }));
