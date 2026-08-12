@@ -666,7 +666,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
 
         # Confirmación de conexión exitosa
         await websocket.send_json({"type": "connection_success", "message": "Conectado"})
-        
+
+        # Si ya era miembro de un canal (persistido en la sesión), se lo reintegra
+        # directamente al reconectar -- no hace falta pedirle de nuevo el nombre ni la
+        # contraseña del canal cada vez, la contraseña ya se validó la primera vez que
+        # entró y el token/sesión identifica que es la misma persona.
+        if users[token]["group_id"]:
+            await websocket.send_json({"type": "group_joined", "group_id": users[token]["group_id"]})
+
         # Enviar historial al usuario
         history = get_history()
         for msg in history:
