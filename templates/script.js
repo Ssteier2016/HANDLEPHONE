@@ -117,6 +117,7 @@ function openMonitorScreen() {
     }
     if (!monitorActive) autoJoinMonitorRoom();
     showMonitorScreen();
+    unmuteBlockedTiles(); // tocar el botón también es un gesto válido para desbloquear audio
 }
 
 function showMonitorScreen() {
@@ -151,6 +152,8 @@ function closeMonitorMode() {
     monitorFocusUserId = null;
 
     document.getElementById('monitor-off-hint')?.classList.add('hidden');
+    monitorAudioBlockedTiles.clear();
+    updateMonitorAudioBlockedHint();
     const roster = document.getElementById('monitor-roster');
     if (roster) roster.innerHTML = '';
     document.getElementById('monitor-screen')?.classList.add('hidden');
@@ -167,6 +170,10 @@ function closeMonitorMode() {
 // necesidad de recrearlas (los transceivers quedan siempre en sendrecv, así que
 // reemplazar el track no requiere renegociar).
 async function toggleMonitorMedia() {
+    // Cualquier toque en la pantalla es también la oportunidad más confiable de
+    // reactivar audio remoto que el navegador haya bloqueado (ver unmuteBlockedTiles).
+    unmuteBlockedTiles();
+
     if (monitorMediaOn) {
         monitorMediaOn = false;
         if (monitorLocalStream) {
@@ -180,7 +187,13 @@ async function toggleMonitorMedia() {
         updateMonitorTile('self', null, true);
     } else {
         try {
-            const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            // echoCancellation/noiseSuppression explícitos: sin esto, algunos
+            // navegadores/dispositivos dejan que el micrófono capte el propio audio
+            // que sale por el parlante del teléfono (resuena la propia voz).
+            const newStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
             monitorLocalStream = newStream;
             newStream.getTracks().forEach(track => {
                 monitorPeerConnections.forEach(pc => replaceMonitorSenderTrack(pc, track.kind, track));
@@ -382,7 +395,7 @@ function createMonitorPeerConnection(remoteUserId, skipTransceivers = false) {
         if (!tile.stream) tile.stream = new MediaStream();
         tile.stream.addTrack(event.track);
         tile.video.srcObject = tile.stream;
-        playMonitorTileVideo(tile);
+        playMonitorTileVideo(tile, remoteUserId);
     };
 
     pc.onconnectionstatechange = () => {
@@ -416,32 +429,46 @@ function updateMonitorTile(userId, stream, isSelf) {
         monitorTiles.set(userId, tile);
     }
     tile.video.srcObject = stream || null;
-    if (stream) playMonitorTileVideo(tile);
+    if (stream) playMonitorTileVideo(tile, userId);
 }
 
 // En navegadores móviles, un <video> con audio (no silenciado) no arranca solo aunque
 // tenga autoplay -- se bloquea sin un gesto del usuario reciente, y se queda en negro
 // aunque el track ya esté llegando (por eso funcionaba en la compu pero no en el
-// celular). Si el navegador lo bloquea, se reproduce mudo (eso sí está siempre
-// permitido) y se reactiva el audio en el próximo toque, con el mismo patrón que ya se
-// usa para desbloquear el AudioContext del walkie-talkie.
-function playMonitorTileVideo(tile) {
+// celular). Esto pasa todavía más seguido ahora que la pantalla se puede abrir sola
+// (ver recomputeMonitorFocus) sin que haya un toque reciente de por medio. Si el
+// navegador lo bloquea, se reproduce mudo (eso sí está siempre permitido) para no
+// perder la imagen, se muestra un aviso, y el audio se reactiva con el próximo toque
+// en la pantalla (ver unmuteBlockedTiles, llamado desde toggleMonitorMedia) -- así
+// queda claro qué hacer en vez de depender de un toque cualquiera sin avisar nada.
+const monitorAudioBlockedTiles = new Set(); // ids con audio muteado por bloqueo de autoplay
+
+function playMonitorTileVideo(tile, userId) {
     const playPromise = tile.video.play();
     if (playPromise === undefined) return;
     playPromise.catch(() => {
         if (tile.isSelf || tile.video.muted) return;
         tile.video.muted = true;
+        monitorAudioBlockedTiles.add(userId);
+        updateMonitorAudioBlockedHint();
         tile.video.play().catch(err => {
             console.warn('No se pudo reproducir el video de Cámara Familiar:', err);
         });
-        const unmute = () => {
-            tile.video.muted = false;
-            document.removeEventListener('click', unmute);
-            document.removeEventListener('touchstart', unmute);
-        };
-        document.addEventListener('click', unmute);
-        document.addEventListener('touchstart', unmute);
     });
+}
+
+function unmuteBlockedTiles() {
+    if (monitorAudioBlockedTiles.size === 0) return;
+    monitorAudioBlockedTiles.forEach(userId => {
+        const tile = monitorTiles.get(userId);
+        if (tile) tile.video.muted = false;
+    });
+    monitorAudioBlockedTiles.clear();
+    updateMonitorAudioBlockedHint();
+}
+
+function updateMonitorAudioBlockedHint() {
+    document.getElementById('monitor-audio-blocked-hint')?.classList.toggle('hidden', monitorAudioBlockedTiles.size === 0);
 }
 
 function setMonitorCameraOnState(userId, cameraOn, isSelf) {
@@ -497,6 +524,7 @@ function removeMonitorPeer(userId) {
         monitorTiles.delete(userId);
     }
     monitorFocusHistory = monitorFocusHistory.filter(id => id !== userId);
+    if (monitorAudioBlockedTiles.delete(userId)) updateMonitorAudioBlockedHint();
     recomputeMonitorFocus();
     renderMonitorRoster();
 }
