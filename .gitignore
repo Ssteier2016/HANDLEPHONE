@@ -1,3 +1,6 @@
+# Secrets
+.env
+
 # Local SQLite database
 chat_history.db
 chat.db
