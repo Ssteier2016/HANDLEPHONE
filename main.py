@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextlib
 import json
 import os
 import time
@@ -28,6 +29,38 @@ logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno
 load_dotenv()
+
+# Render (plan gratis) no tiene disco persistente: el archivo chat_history.db se borra
+# en cada despliegue/reinicio del servicio, así que sesiones, mensajes y canales
+# desaparecían solos cada vez que se subía una actualización. Si hay una base Postgres
+# conectada (DATABASE_URL, ya provista por Render), se usa esa -- sobrevive a los
+# despliegues porque es un servicio aparte. Sin esa variable (desarrollo local) se sigue
+# usando SQLite como antes.
+DATABASE_URL = os.getenv("DATABASE_URL")
+USE_POSTGRES = bool(DATABASE_URL)
+
+if USE_POSTGRES:
+    import psycopg2
+
+@contextlib.contextmanager
+def db_connection():
+    """Reemplaza los `with sqlite3.connect(...) as conn` de antes: misma forma de uso
+    (commit automático al salir sin error), pero además cierra siempre la conexión --
+    Postgres en el plan gratis tiene un límite bajo de conexiones simultáneas, y el
+    patrón anterior nunca las cerraba explícitamente."""
+    conn = psycopg2.connect(DATABASE_URL) if USE_POSTGRES else sqlite3.connect("chat_history.db")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def q(sql: str) -> str:
+    """Traduce los placeholders '?' de SQLite a '%s' de Postgres cuando corresponde."""
+    return sql.replace("?", "%s") if USE_POSTGRES else sql
 
 # Inicializar FastAPI
 app = FastAPI()
@@ -150,29 +183,32 @@ async def health_check():
 async def get_service_worker():
     return FileResponse("handlysw.js", media_type="application/javascript")
 
-# Inicializar base de datos SQLite
+# Inicializar base de datos (Postgres en producción, SQLite en desarrollo local)
 def init_db():
     try:
-        with sqlite3.connect("chat_history.db") as conn:
+        id_column = "id SERIAL PRIMARY KEY" if USE_POSTGRES else "id INTEGER PRIMARY KEY"
+        with db_connection() as conn:
             c = conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS messages 
-                         (id INTEGER PRIMARY KEY, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
-            
-            # Dynamically add duration column if it doesn't exist
-            try:
-                c.execute("ALTER TABLE messages ADD COLUMN duration INTEGER")
-            except sqlite3.OperationalError:
-                pass # Already exists
-                
-            c.execute('''CREATE TABLE IF NOT EXISTS sessions 
-                         (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT, 
+            c.execute(f'''CREATE TABLE IF NOT EXISTS messages
+                         ({id_column}, user_id TEXT, audio TEXT, text TEXT, timestamp TEXT, date TEXT)''')
+
+            if USE_POSTGRES:
+                c.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS duration INTEGER")
+            else:
+                # Dynamically add duration column if it doesn't exist
+                try:
+                    c.execute("ALTER TABLE messages ADD COLUMN duration INTEGER")
+                except sqlite3.OperationalError:
+                    pass # Already exists
+
+            c.execute('''CREATE TABLE IF NOT EXISTS sessions
+                         (token TEXT PRIMARY KEY, user_id TEXT, name TEXT, function TEXT, group_id TEXT,
                           muted_users TEXT, last_active TIMESTAMP)''')
             c.execute('''CREATE TABLE IF NOT EXISTS users
                          (surname TEXT PRIMARY KEY, employee_id TEXT, sector TEXT, password TEXT)''')
             c.execute('''CREATE TABLE IF NOT EXISTS channels
                          (name TEXT PRIMARY KEY, password_hash TEXT, created_at TEXT)''')
-            conn.commit()
-        logger.info("Base de datos chat_history.db inicializada correctamente")
+        logger.info(f"Base de datos inicializada correctamente ({'Postgres' if USE_POSTGRES else 'SQLite'})")
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
 
@@ -185,11 +221,11 @@ groups: Dict[str, List[str]] = {}
 # una por grupo. Mapea group_id -> { token: camera_on }.
 monitor_rooms: Dict[str, Dict[str, bool]] = {}
 
-# Persistence helper for valid tokens (SQLite fallback)
+# Persistence helper for valid tokens
 def load_all_valid_tokens() -> Set[str]:
     tokens = set()
     try:
-        with sqlite3.connect("chat_history.db") as conn:
+        with db_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT token FROM sessions")
             for row in c.fetchall():
@@ -211,24 +247,22 @@ async def register_user(request: RegisterRequest):
     employee_id = str(10000 + (hash_val % 90000))  # Legajo de 5 dígitos determinista
     sector = "Operador"
 
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT employee_id, password FROM users WHERE surname = ?", (surname,))
+        c.execute(q("SELECT employee_id, password FROM users WHERE surname = ?"), (surname,))
         user_exists = c.fetchone()
-        
+
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         if user_exists:
             # Sobrescribir contraseña y actualizar información
-            c.execute("UPDATE users SET sector = ?, password = ? WHERE surname = ?",
+            c.execute(q("UPDATE users SET sector = ?, password = ? WHERE surname = ?"),
                       (sector, hashed_password, surname))
-            conn.commit()
             logger.info(f"Contraseña actualizada/recuperada para: {surname}")
             return {"message": "Contraseña actualizada exitosamente"}
         else:
             # Registrar nuevo usuario
-            c.execute("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)",
+            c.execute(q("INSERT INTO users (surname, employee_id, sector, password) VALUES (?, ?, ?, ?)"),
                       (surname, employee_id, sector, hashed_password))
-            conn.commit()
             logger.info(f"Usuario registrado: {surname} (Legajo: {employee_id}, Sector: {sector})")
             return {"message": "Registro exitoso"}
 
@@ -262,9 +296,9 @@ async def login_user(request: LoginRequest):
     surname = request.surname
     password = request.password
 
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT surname, employee_id, sector, password FROM users WHERE surname = ?",
+        c.execute(q("SELECT surname, employee_id, sector, password FROM users WHERE surname = ?"),
                   (surname,))
         user = c.fetchone()
 
@@ -293,18 +327,32 @@ async def login_user(request: LoginRequest):
 def save_session(token: str, user_id: str, name: str, function: str, group_id: Optional[str] = None, muted_users: Optional[Set[str]] = None):
     muted_users_str = json.dumps(list(muted_users or set()))
     last_active = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute('''INSERT OR REPLACE INTO sessions 
-                     (token, user_id, name, function, group_id, muted_users, last_active) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                  (token, user_id, name, function, group_id, muted_users_str, last_active))
-        conn.commit()
+        if USE_POSTGRES:
+            # "INSERT OR REPLACE" es sintaxis propia de SQLite; en Postgres el
+            # equivalente es un upsert con ON CONFLICT.
+            c.execute('''INSERT INTO sessions
+                         (token, user_id, name, function, group_id, muted_users, last_active)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s)
+                         ON CONFLICT (token) DO UPDATE SET
+                             user_id = EXCLUDED.user_id,
+                             name = EXCLUDED.name,
+                             function = EXCLUDED.function,
+                             group_id = EXCLUDED.group_id,
+                             muted_users = EXCLUDED.muted_users,
+                             last_active = EXCLUDED.last_active''',
+                      (token, user_id, name, function, group_id, muted_users_str, last_active))
+        else:
+            c.execute('''INSERT OR REPLACE INTO sessions
+                         (token, user_id, name, function, group_id, muted_users, last_active)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                      (token, user_id, name, function, group_id, muted_users_str, last_active))
 
 def load_session(token: str) -> Optional[Dict]:
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?",
+        c.execute(q("SELECT user_id, name, function, group_id, muted_users, last_active FROM sessions WHERE token = ?"),
                   (token,))
         row = c.fetchone()
     if row:
@@ -324,22 +372,29 @@ def load_session(token: str) -> Optional[Dict]:
     return None
 
 def delete_session(token: str):
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("DELETE FROM sessions WHERE token = ?", (token,))
-        conn.commit()
+        c.execute(q("DELETE FROM sessions WHERE token = ?"), (token,))
 
 def save_message(user_id: str, audio_data: str, text: str, timestamp: str, duration: Optional[int] = None) -> int:
     date = datetime.utcnow().strftime("%Y-%m-%d")
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date, duration) VALUES (?, ?, ?, ?, ?, ?)",
-                  (user_id, audio_data, text, timestamp, date, duration))
-        conn.commit()
-        return c.lastrowid
+        if USE_POSTGRES:
+            # psycopg2 no tiene cursor.lastrowid (eso es propio de sqlite3);
+            # en Postgres se pide el id insertado con RETURNING.
+            c.execute(
+                "INSERT INTO messages (user_id, audio, text, timestamp, date, duration) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                (user_id, audio_data, text, timestamp, date, duration)
+            )
+            return c.fetchone()[0]
+        else:
+            c.execute("INSERT INTO messages (user_id, audio, text, timestamp, date, duration) VALUES (?, ?, ?, ?, ?, ?)",
+                      (user_id, audio_data, text, timestamp, date, duration))
+            return c.lastrowid
 
 def get_history() -> List[Dict]:
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
         c.execute("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages ORDER BY date, timestamp")
         rows = c.fetchall()
@@ -347,9 +402,9 @@ def get_history() -> List[Dict]:
 
 def get_history_since(msg_id: int) -> List[Dict]:
     """Get messages with id > msg_id (for missed-message recovery)."""
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages WHERE id > ? ORDER BY id", (msg_id,))
+        c.execute(q("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages WHERE id > ? ORDER BY id"), (msg_id,))
         rows = c.fetchall()
     return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
 
@@ -493,11 +548,10 @@ async def clear_messages():
                 start_time += timedelta(days=1)
             await asyncio.sleep((start_time - now).total_seconds())
             
-            with sqlite3.connect("chat_history.db") as conn:
+            with db_connection() as conn:
                 c = conn.cursor()
                 expiration_time = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-                c.execute("DELETE FROM messages WHERE date < ?", (expiration_time,))
-                conn.commit()
+                c.execute(q("DELETE FROM messages WHERE date < ?"), (expiration_time,))
                 logger.info(f"Mensajes anteriores a 24 horas eliminados.")
         except Exception as e:
             logger.error(f"Error al limpiar mensajes: {e}")
@@ -792,17 +846,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "message": "Poné un nombre de canal y una contraseña."
                     })
                 else:
-                    with sqlite3.connect("chat_history.db") as conn:
+                    with db_connection() as conn:
                         c = conn.cursor()
-                        c.execute("SELECT name FROM channels WHERE name = ? COLLATE NOCASE", (input_name,))
+                        c.execute(q("SELECT name FROM channels WHERE LOWER(name) = LOWER(?)"), (input_name,))
                         already_exists = c.fetchone()
                         if not already_exists:
                             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             c.execute(
-                                "INSERT INTO channels (name, password_hash, created_at) VALUES (?, ?, ?)",
+                                q("INSERT INTO channels (name, password_hash, created_at) VALUES (?, ?, ?)"),
                                 (input_name, password_hash, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
                             )
-                            conn.commit()
                     if already_exists:
                         await websocket.send_json({
                             "type": "group_error",
@@ -822,9 +875,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "message": "Poné un nombre de canal y una contraseña."
                     })
                 else:
-                    with sqlite3.connect("chat_history.db") as conn:
+                    with db_connection() as conn:
                         c = conn.cursor()
-                        c.execute("SELECT name, password_hash FROM channels WHERE name = ? COLLATE NOCASE", (input_name,))
+                        c.execute(q("SELECT name, password_hash FROM channels WHERE LOWER(name) = LOWER(?)"), (input_name,))
                         row = c.fetchone()
                     if not row:
                         await websocket.send_json({
@@ -973,9 +1026,9 @@ async def get_history_since_endpoint(msg_id: int):
 # Lista los canales/grupos existentes (nunca expone la contraseña)
 @app.get("/api/groups")
 async def list_groups():
-    with sqlite3.connect("chat_history.db") as conn:
+    with db_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT name FROM channels ORDER BY name COLLATE NOCASE")
+        c.execute("SELECT name FROM channels ORDER BY LOWER(name)")
         names = [row[0] for row in c.fetchall()]
 
     result = []
@@ -997,7 +1050,7 @@ async def startup_event():
 
         # Pre-cargar sesiones registradas en DB al diccionario de usuarios activo en memoria
         try:
-            with sqlite3.connect("chat_history.db") as conn:
+            with db_connection() as conn:
                 c = conn.cursor()
                 c.execute("SELECT token, user_id, name, function, group_id, muted_users FROM sessions")
                 for row in c.fetchall():
