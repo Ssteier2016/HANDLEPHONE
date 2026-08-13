@@ -1589,10 +1589,24 @@ async function toggleGroupsList() {
 }
 
 function leaveGroup() {
-    if (currentGroup && ws && ws.readyState === WebSocket.OPEN) {
+    if (!currentGroup) return;
+    const groupBeingLeft = currentGroup;
+
+    // Salir es una decisión local del usuario: la cámara/micrófono se apagan acá mismo
+    // en el momento, sin esperar a que el servidor confirme por WebSocket. Si se
+    // esperaba esa confirmación y la conexión estaba débil justo en ese momento, el
+    // testigo de cámara/mic del teléfono podía quedar prendido indefinidamente aunque
+    // la persona ya hubiera "salido" del canal en la pantalla.
+    if (monitorActive) closeMonitorMode();
+    currentGroup = null;
+    document.getElementById('group-screen').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    updateSwipeHint();
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             type: 'leave_group',
-            group_id: currentGroup,
+            group_id: groupBeingLeft,
             sessionToken: localStorage.getItem('sessionToken')
         }));
     }
