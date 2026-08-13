@@ -548,6 +548,21 @@ async def clear_messages():
         except Exception as e:
             logger.error(f"Error al limpiar mensajes: {e}")
 
+# Empuja la lista de usuarios conectados a todo el mundo cada pocos segundos, sin
+# depender de que cada cliente pida el refresco por su cuenta (ver 'refresh_users').
+# En el celular que está en segundo plano o con la pantalla apagada, el navegador puede
+# frenar sus propios timers (el ping/refresh_users periódico del cliente) durante un
+# buen rato -- este loop del lado del servidor asegura que, apenas ese cliente vuelva a
+# primer plano y su socket despierte, el resto ya lo vea activo sin esperar a que su
+# propio ping se dispare de nuevo.
+async def periodic_broadcast_users():
+    while True:
+        try:
+            await asyncio.sleep(6)
+            await broadcast_users()
+        except Exception as e:
+            logger.error(f"Error en broadcast periódico de usuarios: {e}")
+
 # Limpiar sesiones expiradas
 async def clean_expired_sessions():
     while True:
@@ -1078,6 +1093,7 @@ async def startup_event():
         asyncio.create_task(clear_messages())
         asyncio.create_task(process_audio_queue())
         asyncio.create_task(clean_expired_sessions())
+        asyncio.create_task(periodic_broadcast_users())
         logger.info("Tareas en segundo plano programadas exitosamente.")
     except Exception as e:
         logger.error(f"Error grave en el inicio de FastAPI: {e}")
