@@ -86,14 +86,12 @@ let monitorMediaOn = false;
 const monitorPeerConnections = new Map(); // user_id remoto -> RTCPeerConnection
 const monitorPendingIce = new Map();      // user_id remoto -> ICE candidates en espera
 const monitorTiles = new Map();           // 'self' o user_id remoto -> { video, cameraOn, isSelf }
-let monitorFocusHistory = [];             // user_ids remotos, más reciente primero
-let monitorFocusUserId = null;            // 'self', un user_id remoto, o null (todo apagado)
 
 // Apenas se entra a un grupo, esto conecta a su sala de Cámara Familiar en segundo
 // plano, SIN pedir permiso de cámara/mic a nadie ni mostrar nada todavía. Así, si
 // alguien ya tiene la cámara prendida, se puede ver de inmediato sin tener que tocar
 // ningún botón -- la pantalla completa se muestra sola apenas hay una cámara remota
-// activa (ver recomputeMonitorFocus). Prender la propia cámara sigue siendo aparte y
+// activa (ver recomputeMonitorGrid). Prender la propia cámara sigue siendo aparte y
 // opcional (ver toggleMonitorMedia).
 function autoJoinMonitorRoom() {
     if (monitorActive) return;
@@ -147,10 +145,12 @@ function closeMonitorMode() {
     }
 
     const tilesContainer = document.getElementById('monitor-tiles-container');
-    if (tilesContainer) tilesContainer.innerHTML = '';
+    if (tilesContainer) {
+        tilesContainer.innerHTML = '';
+        tilesContainer.style.gridTemplateColumns = '';
+        tilesContainer.style.gridTemplateRows = '';
+    }
     monitorTiles.clear();
-    monitorFocusHistory = [];
-    monitorFocusUserId = null;
 
     document.getElementById('monitor-off-hint')?.classList.add('hidden');
     monitorAudioBlockedTiles.clear();
@@ -422,7 +422,7 @@ function updateMonitorTile(userId, stream, isSelf) {
         video.autoplay = true;
         video.playsInline = true;
         video.muted = isSelf; // nunca reproducir mi propio audio de vuelta
-        video.className = 'absolute inset-0 w-full h-full object-cover';
+        video.className = 'w-full h-full object-cover';
         video.style.display = 'none';
         if (isSelf) video.style.transform = 'scaleX(-1)'; // espejo, para que se reconozca a sí misma
         document.getElementById('monitor-tiles-container')?.appendChild(video);
@@ -437,7 +437,7 @@ function updateMonitorTile(userId, stream, isSelf) {
 // tenga autoplay -- se bloquea sin un gesto del usuario reciente, y se queda en negro
 // aunque el track ya esté llegando (por eso funcionaba en la compu pero no en el
 // celular). Esto pasa todavía más seguido ahora que la pantalla se puede abrir sola
-// (ver recomputeMonitorFocus) sin que haya un toque reciente de por medio. Si el
+// (ver recomputeMonitorGrid) sin que haya un toque reciente de por medio. Si el
 // navegador lo bloquea, se reproduce mudo (eso sí está siempre permitido) para no
 // perder la imagen, se muestra un aviso, y el audio se reactiva con el próximo toque
 // en la pantalla (ver unmuteBlockedTiles, llamado desde toggleMonitorMedia) -- así
@@ -479,34 +479,39 @@ function setMonitorCameraOnState(userId, cameraOn, isSelf) {
     const tile = monitorTiles.get(userId);
     tile.cameraOn = cameraOn;
 
-    if (!isSelf) {
-        monitorFocusHistory = monitorFocusHistory.filter(id => id !== userId);
-        if (cameraOn) monitorFocusHistory.unshift(userId);
-    }
-
-    recomputeMonitorFocus();
+    recomputeMonitorGrid();
     renderMonitorRoster();
 }
 
-// Prioridad de qué se ve grande: la cámara remota más recientemente activada;
-// si ninguna está prendida, la propia (así se sabe que está "en vivo"); si no, negro.
-function recomputeMonitorFocus() {
-    const remoteFocus = monitorFocusHistory.find(id => monitorTiles.get(id)?.cameraOn);
-    const nextFocus = remoteFocus || (monitorMediaOn ? 'self' : null);
-
-    if (nextFocus === monitorFocusUserId) return;
-    monitorFocusUserId = nextFocus;
-
+// Pantalla dividida: se muestran TODAS las cámaras prendidas al mismo tiempo, en una
+// grilla que se acomoda sola según cuántas estén activas (1 = pantalla completa, 2 = a
+// la mitad, 3-4 = cuadrantes, etc.) -- mezcla de cámara de seguridad (se prende sola,
+// nadie tiene que atender una llamada) con una grilla estilo Zoom cuando hay más de una
+// cámara encendida a la vez.
+function recomputeMonitorGrid() {
+    const activeIds = [];
     monitorTiles.forEach((tile, id) => {
-        tile.video.style.display = (id === nextFocus) ? 'block' : 'none';
+        if (tile.cameraOn) activeIds.push(id);
     });
 
-    document.getElementById('monitor-off-hint')?.classList.toggle('hidden', nextFocus !== null);
+    monitorTiles.forEach((tile, id) => {
+        tile.video.style.display = activeIds.includes(id) ? 'block' : 'none';
+    });
 
-    // Como una cámara de seguridad de verdad: si el nuevo foco es la cámara de otra
-    // persona (no la propia), se muestra la pantalla sola, sin que nadie tenga que
-    // tocar "Activar Cámara Familiar" primero.
-    if (remoteFocus) {
+    const container = document.getElementById('monitor-tiles-container');
+    if (container) {
+        const cols = Math.max(1, Math.ceil(Math.sqrt(activeIds.length || 1)));
+        const rows = Math.max(1, Math.ceil((activeIds.length || 1) / cols));
+        container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    }
+
+    document.getElementById('monitor-off-hint')?.classList.toggle('hidden', activeIds.length > 0);
+
+    // Como una cámara de seguridad de verdad: si hay al menos una cámara remota
+    // prendida, se muestra la pantalla sola, sin que nadie tenga que tocar "Activar
+    // Cámara Familiar" primero.
+    if (activeIds.some(id => id !== 'self')) {
         showMonitorScreen();
     }
 }
@@ -524,9 +529,8 @@ function removeMonitorPeer(userId) {
         tile.video.remove();
         monitorTiles.delete(userId);
     }
-    monitorFocusHistory = monitorFocusHistory.filter(id => id !== userId);
     if (monitorAudioBlockedTiles.delete(userId)) updateMonitorAudioBlockedHint();
-    recomputeMonitorFocus();
+    recomputeMonitorGrid();
     renderMonitorRoster();
 }
 
