@@ -1,4 +1,4 @@
-const CACHE_NAME = 'handyhandle-cache-v30';
+const CACHE_NAME = 'handyhandle-cache-v31';
 const MESSAGE_QUEUE = 'handyhandle-message-queue';
 const SYNC_TAG = 'sync-messages';
 const MAX_MESSAGE_AGE = 24 * 60 * 60 * 1000;
