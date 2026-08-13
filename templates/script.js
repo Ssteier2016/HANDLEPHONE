@@ -819,18 +819,9 @@ function connectWebSocket(token) {
                 historyLoaded = false;
             } else if (data.type === 'history_end') {
                 historyLoaded = true;
-                console.log(`Historial cargado (${historyMsgIds.size} mensajes). Auto-play activado.`);
-                
-                // Auto-play missed messages since last session
-                fetchAndPlayMissedAudios();
-                
+                console.log(`Historial cargado (${historyMsgIds.size} mensajes). Auto-play activado solo para lo que llegue de acá en más.`);
             } else if (data.type === 'message' || data.type === 'group_message' || data.type === 'direct_message') {
                 displayMessage(data);
-
-                // Track last received message ID for missed-message recovery
-                if (data.id) {
-                    localStorage.setItem('lastReceivedMsgId', String(data.id));
-                }
 
                 // Determine if this is our own message
                 const myToken = localStorage.getItem('sessionToken');
@@ -995,54 +986,6 @@ function playAudioAndWait(audioData, sender, groupId) {
             reject(e);
         }
     });
-}
-
-// ─── MISSED MESSAGES RECOVERY ─────────────────────────────────────────────────
-// Fetches and auto-plays audio messages that were missed while offline
-async function fetchAndPlayMissedAudios() {
-    try {
-        const lastId = localStorage.getItem('lastReceivedMsgId');
-        if (!lastId) return; // First time connecting, no missed messages
-
-        const token = localStorage.getItem('sessionToken') || '';
-        const response = await fetch(`/api/history/since/${lastId}?token=${encodeURIComponent(token)}`);
-        if (!response.ok) return;
-
-        const missed = await response.json();
-        if (!missed || missed.length === 0) return;
-
-        const myToken = localStorage.getItem('sessionToken');
-        console.log(`Reproduciendo ${missed.length} audios perdidos...`);
-
-        for (const msg of missed) {
-            // Track the ID
-            localStorage.setItem('lastReceivedMsgId', String(msg.id));
-
-            // Display in chat
-            const parts = msg.user_id ? msg.user_id.split('_') : ['Desconocido', 'Operador'];
-            displayMessage({
-                id: msg.id,
-                type: 'message',
-                sender: parts[0] || 'Desconocido',
-                sender_id: msg.user_id,
-                function: parts[1] || 'Operador',
-                text: msg.text,
-                timestamp: msg.timestamp,
-                duration: msg.duration,
-                audio: msg.audio
-            });
-
-            // Auto-play if it's not our own audio
-            if (msg.audio) {
-                const senderToken = btoa(`10000_${parts[0]}_${parts[1] || 'Operador'}`);
-                if (senderToken !== myToken) {
-                    enqueueAudio(msg.audio, parts[0], null);
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Error al recuperar audios perdidos:", err);
-    }
 }
 
 function displayUserProfile() {

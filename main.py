@@ -400,14 +400,6 @@ def get_history() -> List[Dict]:
         rows = c.fetchall()
     return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
 
-def get_history_since(msg_id: int) -> List[Dict]:
-    """Get messages with id > msg_id (for missed-message recovery)."""
-    with db_connection() as conn:
-        c = conn.cursor()
-        c.execute(q("SELECT id, user_id, audio, text, timestamp, date, duration FROM messages WHERE id > ? ORDER BY id"), (msg_id,))
-        rows = c.fetchall()
-    return [{"id": row[0], "user_id": row[1], "audio": row[2], "text": row[3], "timestamp": row[4], "date": row[5], "duration": row[6]} for row in rows]
-
 # Transcribir audio a texto (Google Speech Recognition con fallback sf)
 async def transcribe_audio(audio_data: str) -> str:
     try:
@@ -728,28 +720,38 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         if users[token]["group_id"]:
             await websocket.send_json({"type": "group_joined", "group_id": users[token]["group_id"]})
 
-        # Enviar historial al usuario
-        history = get_history()
-        for msg in history:
-            # Re-formatear del almacenamiento
-            # msg['user_id'] es 'surname_sector'
-            parts = msg['user_id'].split('_')
-            snd = parts[0] if len(parts) > 0 else 'Unknown'
-            fn = parts[1] if len(parts) > 1 else 'Rampa'
-            sender_id = f"{snd}_{fn}"
-            await websocket.send_json({
-                "type": "message",
-                "id": msg["id"],
-                "sender": snd,
-                "sender_id": sender_id,
-                "function": fn,
-                "text": msg["text"],
-                "timestamp": msg["timestamp"],
-                "audio": msg["audio"]
-            })
-        
-        # Señal para que el frontend sepa que terminó el historial y active el auto-play
-        await websocket.send_json({"type": "history_end"})
+        # Enviar historial al usuario en segundo plano: si esto se hiciera con await acá
+        # mismo, el mensaje de Cámara Familiar (monitor_join) que el cliente ya mandó
+        # apenas se conecta quedaba sin poder procesarse hasta que terminara de bajar TODO
+        # el historial del día (con audio incluido) por este mismo socket -- eso era la
+        # causa de la demora al conectar la Cámara Familiar entre dos dispositivos reales.
+        # Corriéndolo aparte, el bucle de abajo puede empezar a leer y reenviar señalización
+        # WebRTC de inmediato, en paralelo con el historial que sigue bajando.
+        async def send_history():
+            try:
+                history = get_history()
+                for msg in history:
+                    # Re-formatear del almacenamiento
+                    # msg['user_id'] es 'surname_sector'
+                    parts = msg['user_id'].split('_')
+                    snd = parts[0] if len(parts) > 0 else 'Unknown'
+                    fn = parts[1] if len(parts) > 1 else 'Rampa'
+                    sender_id = f"{snd}_{fn}"
+                    await websocket.send_json({
+                        "type": "message",
+                        "id": msg["id"],
+                        "sender": snd,
+                        "sender_id": sender_id,
+                        "function": fn,
+                        "text": msg["text"],
+                        "timestamp": msg["timestamp"],
+                        "audio": msg["audio"]
+                    })
+                await websocket.send_json({"type": "history_end"})
+            except Exception:
+                pass  # conexión ya cerrada u otro error de envío: no hay nada más que hacer
+
+        asyncio.create_task(send_history())
 
         await broadcast_users()
 
@@ -1018,10 +1020,6 @@ async def get_history_endpoint():
 @app.get("/api/history")
 async def get_api_history_endpoint():
     return get_history()
-
-@app.get("/api/history/since/{msg_id}")
-async def get_history_since_endpoint(msg_id: int):
-    return get_history_since(msg_id)
 
 # Lista los canales/grupos existentes (nunca expone la contraseña)
 @app.get("/api/groups")
