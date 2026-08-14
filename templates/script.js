@@ -483,11 +483,11 @@ function setMonitorCameraOnState(userId, cameraOn, isSelf) {
     renderMonitorRoster();
 }
 
-// Pantalla dividida: se muestran TODAS las cámaras prendidas al mismo tiempo, en una
-// grilla que se acomoda sola según cuántas estén activas (1 = pantalla completa, 2 = a
-// la mitad, 3-4 = cuadrantes, etc.) -- mezcla de cámara de seguridad (se prende sola,
-// nadie tiene que atender una llamada) con una grilla estilo Zoom cuando hay más de una
-// cámara encendida a la vez.
+// Pantalla dividida: se muestran TODAS las cámaras prendidas al mismo tiempo, apiladas
+// en franjas horizontales (una sola columna, una fila por cámara activa -- 1 = pantalla
+// completa, 2 = mitad de arriba y mitad de abajo, 3 = tres franjas paralelas, etc.) --
+// mezcla de cámara de seguridad (se prende sola, nadie tiene que atender una llamada)
+// con una grilla estilo Zoom cuando hay más de una cámara encendida a la vez.
 function recomputeMonitorGrid() {
     const activeIds = [];
     monitorTiles.forEach((tile, id) => {
@@ -500,9 +500,8 @@ function recomputeMonitorGrid() {
 
     const container = document.getElementById('monitor-tiles-container');
     if (container) {
-        const cols = Math.max(1, Math.ceil(Math.sqrt(activeIds.length || 1)));
-        const rows = Math.max(1, Math.ceil((activeIds.length || 1) / cols));
-        container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        const rows = Math.max(1, activeIds.length);
+        container.style.gridTemplateColumns = '1fr';
         container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     }
 
