@@ -158,6 +158,9 @@ function closeMonitorMode() {
     const roster = document.getElementById('monitor-roster');
     if (roster) roster.innerHTML = '';
     document.getElementById('monitor-screen')?.classList.add('hidden');
+    document.getElementById('monitor-mic-btn')?.classList.add('hidden');
+    document.getElementById('monitor-shrink-self-btn')?.classList.add('hidden');
+    monitorSelfMinimized = false;
 
     monitorActive = false;
     monitorMediaOn = false;
@@ -483,36 +486,107 @@ function setMonitorCameraOnState(userId, cameraOn, isSelf) {
     renderMonitorRoster();
 }
 
-// Pantalla dividida: se muestran TODAS las cámaras prendidas al mismo tiempo, apiladas
-// en franjas horizontales (una sola columna, una fila por cámara activa -- 1 = pantalla
-// completa, 2 = mitad de arriba y mitad de abajo, 3 = tres franjas paralelas, etc.) --
-// mezcla de cámara de seguridad (se prende sola, nadie tiene que atender una llamada)
-// con una grilla estilo Zoom cuando hay más de una cámara encendida a la vez.
+// Filas/columnas según cuántas cámaras están activas a la vez: 1 = pantalla completa,
+// 2-3 = franjas horizontales apiladas (una sola columna), 4 = cuadrantes (2x2, divide
+// tanto horizontal como vertical). Más de 4 sigue el mismo criterio de cuadrícula.
+function computeMonitorGridDims(n) {
+    if (n <= 1) return { cols: 1, rows: 1 };
+    if (n <= 3) return { cols: 1, rows: n };
+    if (n === 4) return { cols: 2, rows: 2 };
+    const cols = Math.ceil(Math.sqrt(n));
+    return { cols, rows: Math.ceil(n / cols) };
+}
+
+// Achica la propia cámara a una miniatura flotante (picture-in-picture) para dejarle
+// más pantalla a la del otro miembro conectado. Solo tiene sentido si mi cámara está
+// prendida junto con la de al menos otro miembro (ver recomputeMonitorGrid).
+let monitorSelfMinimized = false;
+
+function toggleMonitorSelfMinimized() {
+    monitorSelfMinimized = !monitorSelfMinimized;
+    recomputeMonitorGrid();
+}
+
+// Pantalla dividida: se muestran TODAS las cámaras prendidas al mismo tiempo (salvo la
+// propia si se achicó a miniatura), en una grilla que se acomoda sola según cuántas
+// estén activas -- mezcla de cámara de seguridad (se prende sola, nadie tiene que
+// atender una llamada) con una grilla estilo Zoom cuando hay más de una cámara
+// encendida a la vez.
 function recomputeMonitorGrid() {
     const activeIds = [];
     monitorTiles.forEach((tile, id) => {
         if (tile.cameraOn) activeIds.push(id);
     });
+    const remoteActiveIds = activeIds.filter(id => id !== 'self');
+    const selfAsPip = monitorSelfMinimized && activeIds.includes('self') && remoteActiveIds.length > 0;
+    const gridIds = selfAsPip ? remoteActiveIds : activeIds;
 
     monitorTiles.forEach((tile, id) => {
         tile.video.style.display = activeIds.includes(id) ? 'block' : 'none';
+        if (id === 'self' && selfAsPip) {
+            Object.assign(tile.video.style, {
+                position: 'absolute', top: '64px', right: '12px',
+                width: '32%', height: '22%', zIndex: '30',
+                borderRadius: '12px', border: '2px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.5)'
+            });
+        } else if (id === 'self') {
+            Object.assign(tile.video.style, {
+                position: '', top: '', right: '', width: '', height: '',
+                zIndex: '', borderRadius: '', border: '', boxShadow: ''
+            });
+        }
     });
 
     const container = document.getElementById('monitor-tiles-container');
     if (container) {
-        const rows = Math.max(1, activeIds.length);
-        container.style.gridTemplateColumns = '1fr';
+        const { cols, rows } = computeMonitorGridDims(gridIds.length);
+        container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     }
 
     document.getElementById('monitor-off-hint')?.classList.toggle('hidden', activeIds.length > 0);
 
+    // Los controles de micrófono y achicar solo tienen sentido con la propia cámara
+    // prendida junto con la de al menos otro miembro más.
+    const showExtraControls = monitorMediaOn && remoteActiveIds.length > 0;
+    document.getElementById('monitor-mic-btn')?.classList.toggle('hidden', !showExtraControls);
+    document.getElementById('monitor-shrink-self-btn')?.classList.toggle('hidden', !showExtraControls);
+    if (!showExtraControls) monitorSelfMinimized = false;
+    updateMonitorMicButtonIcon();
+    updateMonitorShrinkButtonIcon();
+
     // Como una cámara de seguridad de verdad: si hay al menos una cámara remota
     // prendida, se muestra la pantalla sola, sin que nadie tenga que tocar "Activar
     // Cámara Familiar" primero.
-    if (activeIds.some(id => id !== 'self')) {
+    if (remoteActiveIds.length > 0) {
         showMonitorScreen();
     }
+}
+
+// Silencia/reactiva solo el micrófono (sin apagar la cámara) -- separado del toque
+// global de la pantalla, que prende/apaga cámara y mic juntos.
+function toggleMonitorMic() {
+    const audioTrack = monitorLocalStream?.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.enabled = !audioTrack.enabled;
+    updateMonitorMicButtonIcon();
+}
+
+function updateMonitorMicButtonIcon() {
+    const btn = document.getElementById('monitor-mic-btn');
+    if (!btn) return;
+    const audioTrack = monitorLocalStream?.getAudioTracks()[0];
+    const muted = audioTrack ? !audioTrack.enabled : false;
+    btn.textContent = muted ? '🔇' : '🎤';
+    btn.setAttribute('aria-label', muted ? 'Activar micrófono' : 'Silenciar micrófono');
+}
+
+function updateMonitorShrinkButtonIcon() {
+    const btn = document.getElementById('monitor-shrink-self-btn');
+    if (!btn) return;
+    btn.textContent = monitorSelfMinimized ? '⤢' : '⤡';
+    btn.setAttribute('aria-label', monitorSelfMinimized ? 'Agrandar mi cámara' : 'Achicar mi cámara');
 }
 
 function removeMonitorPeer(userId) {
@@ -2254,6 +2328,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('monitor-exit-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         hideMonitorScreen();
+    });
+    document.getElementById('monitor-mic-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMonitorMic();
+    });
+    document.getElementById('monitor-shrink-self-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMonitorSelfMinimized();
     });
 
     // Liberar la cámara/micrófono si la página se cierra en medio de la Cámara Familiar
